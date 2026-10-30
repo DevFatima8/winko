@@ -1,0 +1,2226 @@
+@import "tailwindcss";
+
+/* ===== winkox theme: "Midnight Emerald" — dark teal base, neon lime/cyan accents, amber highlights ===== */
+:root {
+  --wx-bg: #050b0f;
+  --wx-bg-2: #0a151b;
+  --wx-card: #0d1b22;
+  --wx-card-2: #12252e;
+  --wx-border: #1c3a45;
+  --wx-primary: #00e5a0;
+  /* neon mint */
+  --wx-primary-2: #00c2ff;
+  /* cyan */
+  --wx-gold: #ffb020;
+  --wx-gold-2: #ff7a00;
+  --wx-text: #f2fbf7;
+  --wx-muted: #8fb3bd;
+  --wx-dim: #4f7280;
+  --wx-green: #22c55e;
+  --wx-red: #ff4d6d;
+}
+
+.wx-typography :is(button, input, select, textarea):not(.game-surface *, .wx-game *) {
+  font-family: inherit;
+}
+
+button,
+a.btn-gold,
+a.btn-outline,
+a.btn-violet {
+  white-space: nowrap;
+  text-align: center;
+}
+
+:is(button, a.btn-gold, a.btn-outline, a.btn-violet):not(.game-surface *, .wx-game *) {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+/* Shared ambient motion layer, mounted once by the root layout. */
+.wx-particles {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 1;
+}
+
+.wx-particles-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.wx-particles-layer canvas {
+  display: block;
+  height: 100%;
+  width: 100%;
+  mix-blend-mode: screen;
+}
+
+.wx-heart-particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.wx-heart-particle {
+  position: absolute;
+  top: var(--heart-top);
+  left: var(--heart-left);
+  color: #ff4d7d;
+  font-size: var(--heart-size);
+  line-height: 1;
+  text-shadow: 0 0 8px rgba(255, 63, 114, .9), 0 0 18px rgba(255, 176, 32, .45);
+  animation: wx-heart-float 8s ease-in-out var(--heart-delay) infinite;
+}
+
+@keyframes wx-heart-float {
+
+  0%,
+  100% {
+    transform: translate3d(0, 12px, 0) rotate(-8deg);
+    opacity: .3;
+  }
+
+  50% {
+    transform: translate3d(14px, -34px, 0) rotate(12deg);
+    opacity: 1;
+  }
+}
+
+html.light .wx-particles {
+  opacity: .92;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wx-particles {
+    opacity: .35;
+  }
+}
+
+
+/* page background: deep teal with neon glows + subtle grid */
+.wx-bg {
+  background-color: var(--wx-bg);
+  background-image:
+    radial-gradient(900px 500px at 10% -10%, rgba(0, 229, 160, 0.16), transparent 60%),
+    radial-gradient(800px 450px at 95% 0%, rgba(0, 194, 255, 0.14), transparent 60%),
+    radial-gradient(700px 500px at 50% 110%, rgba(255, 176, 32, 0.08), transparent 60%),
+    linear-gradient(rgba(255, 255, 255, .025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, .025) 1px, transparent 1px);
+  background-size: auto, auto, auto, 28px 28px, 28px 28px;
+  background-attachment: fixed, fixed, fixed, scroll, scroll;
+}
+
+.wx-card {
+  background: linear-gradient(160deg, var(--wx-card) 0%, var(--wx-bg-2) 100%);
+  border: 1px solid var(--wx-border);
+}
+
+.wx-glass {
+  background: rgba(13, 27, 34, 0.75);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(0, 229, 160, 0.18);
+}
+
+/* Page-change entrance. No fill-mode, so no transform lingers and fixed children stay unaffected. */
+.wx-page-enter {
+  animation: wx-page-in .38s cubic-bezier(.22, 1, .36, 1);
+}
+
+@keyframes wx-page-in {
+  from { opacity: 0; translate: 0 14px; scale: .985; }
+  to { opacity: 1; translate: 0 0; scale: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wx-page-enter { animation: none; }
+}
+
+.wx-wordmark { display: inline-flex; align-items: baseline; text-transform: uppercase; letter-spacing: .16em; font-style: normal; font-weight: 800; }
+.wx-wordmark-a {
+  background: linear-gradient(180deg, #ffffff 0%, #e8e4f5 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.wx-wordmark-x {
+  margin-left: .12em; padding-left: .14em; border-left: 1px solid rgba(255,184,0,.45);
+  background: linear-gradient(180deg, #ffd45a 0%, #e69a00 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.wx-dot {
+  min-height: 0 !important;
+  padding: 0 !important;
+  scale: 1 !important;
+  filter: none !important;
+}
+
+/* Compact buttons on phones; games excluded. */
+@media (max-width: 767px) {
+  :is(.btn-gold, .btn-violet, .btn-outline):not(.game-surface *, .wx-game *) {
+    font-size: 11px !important;
+    line-height: 1.2 !important;
+    padding: 5px 10px !important;
+    min-height: 0 !important;
+    height: auto !important;
+    min-width: 0 !important;
+    letter-spacing: 0 !important;
+  }
+  :is(.btn-gold, .btn-violet, .btn-outline).wx-wbtn:not(.game-surface *, .wx-game *) {
+    padding: 6px 4px !important;
+    font-size: 10px !important;
+    gap: 3px !important;
+    white-space: nowrap !important;
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+  }
+  .wx-wbtn svg { width: 11px !important; height: 11px !important; }
+}
+/* Half-width wallet card on small phones: no room for icons, keep the label on one clean line. */
+@media (max-width: 639px) {
+  .wx-wbtn svg { display: none !important; }
+  :is(.btn-gold, .btn-violet, .btn-outline).wx-wbtn:not(.game-surface *, .wx-game *) { padding: 7px 2px !important; font-size: 9px !important; letter-spacing: 0 !important; text-align: center; }
+}
+@media (max-width: 767px) {
+  button.btn-gold:not(.game-surface *, .wx-game *),
+  button.btn-violet:not(.game-surface *, .wx-game *),
+  button.btn-outline:not(.game-surface *, .wx-game *) {
+    min-height: 32px !important;
+  }
+  :is(.btn-gold, .btn-violet, .btn-outline):not(.game-surface *, .wx-game *) svg {
+    width: 12px;
+    height: 12px;
+  }
+  /* Other text buttons (forms, wallet, presets): shrink tall/large ones without touching icon-only buttons. */
+  button:not(.btn-gold, .btn-violet, .btn-outline, .wx-dot, .wx-lang > button, :has(> svg:only-child)):not(.game-surface *, .wx-game *) {
+    font-size: 12px;
+    min-height: 34px !important;
+    padding-top: 5px;
+    padding-bottom: 5px;
+  }
+}
+
+/* Footer social buttons: outlined, no filled background; brand colour appears on hover. */
+.wx-social {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; min-height: 0 !important; padding: 0 !important;
+  border-radius: 10px; border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.03);
+  color: #e9e4fb; transition: color .2s, border-color .2s, background-color .2s, translate .2s;
+}
+.wx-social:hover { background: rgba(255,255,255,.07); translate: 0 -2px; }
+.wx-social svg { width: 18px; height: 18px; }
+
+/* Compact EN / اردو segmented switch: keep it a tidy pill inside drawers and sidebars. */
+.wx-lang { display: inline-flex; flex-shrink: 0; align-items: center; padding: 2px; gap: 2px; }
+.wx-lang > button {
+  min-height: 0 !important; height: 24px !important; min-width: 36px !important;
+  padding: 0 8px !important; font-size: 10px !important; line-height: 1 !important;
+  border-radius: 9999px !important; scale: 1 !important; filter: none !important;
+  display: inline-flex; align-items: center; justify-content: center; white-space: nowrap;
+  box-shadow: none !important; border: 0 !important; background-image: none;
+}
+.wx-lang > button.wx-lang-on {
+  background-image: linear-gradient(135deg, #ff3b6b, #a855f7 55%, #3b82f6) !important; color: #fff !important;
+}
+.wx-lang > button::before, .wx-lang > button::after { display: none !important; }
+
+/* buttons */
+/* Site-wide button feel. Uses individual `scale` so existing transforms are untouched; games are excluded. */
+:where(button, a.btn-gold, a.btn-violet, a.btn-outline, [role="button"]):not(:disabled):not(.wx-game *, .game-surface *) {
+  cursor: pointer;
+  transition-property: scale, filter, box-shadow, background-color, border-color, color, opacity, transform;
+  transition-duration: .18s;
+  transition-timing-function: cubic-bezier(.34, 1.56, .64, 1);
+}
+
+@media (hover: hover) {
+  :where(button, a.btn-gold, a.btn-violet, a.btn-outline, [role="button"]):not(:disabled):not(.wx-game *, .game-surface *):hover {
+    scale: 1.035;
+    filter: brightness(1.12);
+  }
+}
+
+:where(button, a.btn-gold, a.btn-violet, a.btn-outline, [role="button"]):not(:disabled):not(.wx-game *, .game-surface *):active {
+  scale: .94;
+  filter: brightness(.95);
+}
+
+:where(button, a.btn-gold, a.btn-violet, a.btn-outline, [role="button"]):not(.wx-game *, .game-surface *):focus-visible {
+  outline: 2px solid #ffc933;
+  outline-offset: 2px;
+}
+
+.wx-ripple {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 201, 51, .55) 0%, rgba(244, 63, 94, .3) 45%, transparent 70%);
+  transform: scale(0);
+  animation: wx-ripple .6s ease-out forwards;
+}
+
+@keyframes wx-ripple {
+  to { transform: scale(1); opacity: 0; }
+}
+
+/* Scoped away from game areas: several game stylesheets define their own global .btn-gold. */
+.btn-gold:not(.game-surface *, .wx-game *) {
+  background:
+    linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, .28) 50%, transparent 65%) 0 0 / 250% 100% no-repeat,
+    linear-gradient(135deg, #e11d48 0%, #7c1d6f 45%, #1d4ed8 100%) 0 0 / 100% 100%;
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: .02em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .45);
+  border-radius: 999px;
+  border: 0;
+  box-shadow:
+    inset 0 0 0 1.5px #ffc933,
+    inset 0 1px 0 rgba(255, 255, 255, .35),
+    0 8px 22px rgba(225, 29, 72, 0.28),
+    0 4px 14px rgba(29, 78, 216, 0.3);
+  transition: transform .18s ease, filter .18s ease, box-shadow .18s ease;
+  animation: wx-btn-shine 3.6s ease-in-out infinite;
+}
+
+.btn-gold:hover:not(:disabled):not(.game-surface *, .wx-game *) {
+  filter: brightness(1.12) saturate(1.1);
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 0 0 1.5px #ffd966,
+    inset 0 1px 0 rgba(255, 255, 255, .4),
+    0 10px 26px rgba(225, 29, 72, 0.4),
+    0 6px 18px rgba(29, 78, 216, 0.4);
+}
+
+.btn-gold:active:not(:disabled):not(.game-surface *, .wx-game *) {
+  transform: scale(.97);
+}
+
+@keyframes wx-btn-shine {
+  0% { background-position: 130% 0, 0 0; }
+  55%, 100% { background-position: -60% 0, 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-gold:not(.game-surface *, .wx-game *) { animation: none; }
+}
+
+.btn-violet {
+  background:
+    linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, .25) 50%, transparent 65%) 0 0 / 250% 100% no-repeat,
+    linear-gradient(135deg, #7c3aed 0%, #db2777 55%, #f97316 100%);
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: .02em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  border: 0;
+  box-shadow:
+    inset 0 0 0 1.5px rgba(255, 255, 255, .55),
+    inset 0 1px 0 rgba(255, 255, 255, .35),
+    0 8px 22px rgba(219, 39, 119, 0.3),
+    0 4px 14px rgba(124, 58, 237, 0.3);
+  transition: transform .18s ease, filter .18s ease;
+  animation: wx-btn-shine 4.2s ease-in-out infinite;
+}
+
+.btn-violet:hover {
+  filter: brightness(1.12) saturate(1.1);
+  transform: translateY(-1px);
+}
+
+.btn-violet:active {
+  transform: scale(.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-violet { animation: none; }
+}
+
+.btn-outline {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.18), rgba(219, 39, 119, 0.14));
+  border: 1px solid rgba(244, 114, 182, 0.55);
+  color: #fff;
+  font-weight: 700;
+  transition: transform .18s ease, background .18s ease, box-shadow .18s ease;
+}
+
+.btn-outline:hover {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.32), rgba(219, 39, 119, 0.26));
+  box-shadow: 0 6px 18px rgba(219, 39, 119, 0.25);
+  transform: translateY(-1px);
+}
+
+/* text */
+.text-gold-grad {
+  background: linear-gradient(180deg, #fff1c2 0%, #ffb020 55%, #ff7a00 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.text-violet-grad {
+  background: linear-gradient(90deg, #ffd166 0%, #f472b6 55%, #a78bfa 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.glow-gold {
+  text-shadow: 0 0 18px rgba(255, 176, 32, 0.55), 0 2px 0 rgba(120, 70, 0, 0.6);
+}
+
+/* animated neon line */
+@keyframes wx-shine {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+.wx-shine {
+  background: linear-gradient(90deg, #00e5a0, #00c2ff, #ffb020, #00e5a0);
+  background-size: 200% 100%;
+  animation: wx-shine 6s linear infinite;
+}
+
+/* hover */
+.wx-hover {
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+}
+
+.wx-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 34px rgba(0, 229, 160, 0.22);
+  border-color: rgba(0, 194, 255, 0.7);
+}
+
+/* Limbo's compact space-flight playfield. */
+.limbo-stage {
+  background:
+    radial-gradient(circle at 50% 58%, rgba(93, 103, 111, .18), transparent 22%),
+    radial-gradient(circle at 18% 22%, rgba(255, 255, 255, .08) 0 1px, transparent 2px),
+    radial-gradient(circle at 78% 30%, rgba(255, 255, 255, .12) 0 1px, transparent 2px),
+    linear-gradient(180deg, #111315 0%, #1b1e22 62%, #0f1113 100%);
+  isolation: isolate;
+}
+
+.limbo-stage::after {
+  position: absolute;
+  inset: 58% 0 0;
+  z-index: -1;
+  background: linear-gradient(180deg, rgba(71, 76, 81, .18), rgba(8, 9, 10, .8));
+  clip-path: polygon(0 36%, 12% 20%, 24% 38%, 39% 7%, 53% 32%, 67% 11%, 82% 35%, 100% 19%, 100% 100%, 0 100%);
+  content: "";
+}
+
+.limbo-moon {
+  position: absolute;
+  z-index: -1;
+  border-radius: 999px;
+  background: rgba(218, 225, 228, .12);
+  box-shadow: 0 0 30px rgba(215, 225, 230, .08);
+}
+
+.limbo-moon-one {
+  top: 17%;
+  left: 13%;
+  width: 74px;
+  height: 74px;
+}
+
+.limbo-moon-two {
+  right: 15%;
+  bottom: 27%;
+  width: 36px;
+  height: 36px;
+  background: rgba(218, 225, 228, .2);
+}
+
+.limbo-mountains {
+  position: absolute;
+  right: 7%;
+  bottom: 20%;
+  left: 7%;
+  z-index: -1;
+  height: 23%;
+  background: #292d31;
+  clip-path: polygon(0 100%, 9% 52%, 18% 72%, 28% 20%, 38% 65%, 49% 42%, 59% 78%, 73% 28%, 84% 68%, 94% 45%, 100% 73%, 100% 100%);
+  opacity: .85;
+}
+
+.limbo-rocket {
+  position: absolute;
+  top: 43%;
+  left: 50%;
+  z-index: 1;
+  width: clamp(42px, 7vw, 68px);
+  aspect-ratio: .58;
+  transform: translate(-50%, -50%) rotate(3deg);
+  border: 2px solid #d9e4e7;
+  border-radius: 55% 55% 35% 35%;
+  background: linear-gradient(90deg, #b8c4c9, #f6faf9 48%, #aebbc0);
+  box-shadow: 0 0 24px rgba(255, 255, 255, .18);
+}
+
+.limbo-rocket::before,
+.limbo-rocket::after {
+  position: absolute;
+  bottom: 9%;
+  width: 42%;
+  height: 26%;
+  background: #58d12d;
+  content: "";
+}
+
+.limbo-rocket::before {
+  left: -30%;
+  clip-path: polygon(100% 0, 100% 100%, 0 100%, 48% 0);
+}
+
+.limbo-rocket::after {
+  right: -30%;
+  clip-path: polygon(0 0, 100% 100%, 0 100%);
+}
+
+.limbo-rocket-window {
+  position: absolute;
+  top: 19%;
+  left: 50%;
+  width: 38%;
+  aspect-ratio: 1;
+  transform: translateX(-50%);
+  border: 3px solid #4e5960;
+  border-radius: 50%;
+  background: #15202a;
+  box-shadow: inset 0 0 0 3px #92a0a7, 0 0 10px rgba(0, 209, 255, .25);
+}
+
+.limbo-rocket-flame {
+  position: absolute;
+  bottom: -31%;
+  left: 50%;
+  width: 30%;
+  height: 36%;
+  transform: translateX(-50%);
+  background: linear-gradient(#fff4b0, #ff9f1c 45%, transparent);
+  clip-path: polygon(50% 100%, 0 0, 100% 0);
+  filter: drop-shadow(0 0 8px #ff9f1c);
+}
+
+/* legacy purple palette → remap to new theme (used across components) */
+.text-\[\#b8a7e6\] {
+  color: #b9b0d6 !important;
+}
+
+.text-\[\#c4b5fd\] {
+  color: #ffffff !important;
+}
+
+.text-\[\#e9ddff\] {
+  color: #f3ecff !important;
+}
+
+.text-\[\#6f5fa3\] {
+  color: var(--wx-dim) !important;
+}
+
+.text-\[\#ffb800\] {
+  color: var(--wx-gold) !important;
+}
+
+.text-\[\#ffe0a3\] {
+  color: #ffe1a8 !important;
+}
+
+.text-\[\#f0abfc\] {
+  color: #f9a8d4 !important;
+}
+
+.border-\[\#3a2470\] {
+  border-color: var(--wx-border) !important;
+}
+
+.border-\[\#3a2470\]\/70,
+.border-\[\#3a2470\]\/60,
+.border-\[\#3a2470\]\/50 {
+  border-color: rgba(28, 58, 69, .6) !important;
+}
+
+.divide-\[\#3a2470\]\/50> :not([hidden])~ :not([hidden]) {
+  border-color: rgba(28, 58, 69, .6) !important;
+}
+
+.ring-\[\#3a2470\] {
+  --tw-ring-color: var(--wx-border) !important;
+}
+
+.bg-\[\#140c2a\],
+.bg-\[\#140c2a\]\/95,
+.bg-\[\#140c2a\]\/90 {
+  background-color: rgba(10, 21, 27, .96) !important;
+}
+
+.bg-\[\#1b1038\] {
+  background-color: var(--wx-card) !important;
+}
+
+.bg-\[\#0b0716\],
+.bg-\[\#0b0716\]\/85 {
+  background-color: rgba(5, 11, 15, .9) !important;
+}
+
+.bg-\[\#241546\] {
+  background-color: var(--wx-card-2) !important;
+}
+
+.from-\[\#8b5cf6\] {
+  --tw-gradient-from: #00e5a0 !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+.to-\[\#d946ef\] {
+  --tw-gradient-to: #00c2ff !important;
+}
+
+.via-\[\#d946ef\] {
+  --tw-gradient-via: #00c2ff !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to) !important;
+}
+
+.from-\[\#8b5cf6\]\/30 {
+  --tw-gradient-from: rgba(0, 229, 160, .25) !important;
+}
+
+.to-\[\#d946ef\]\/30 {
+  --tw-gradient-to: rgba(0, 194, 255, .25) !important;
+}
+
+.bg-\[\#8b5cf6\]\/10,
+.bg-\[\#8b5cf6\]\/15,
+.bg-\[\#8b5cf6\]\/20 {
+  background-color: rgba(0, 229, 160, .12) !important;
+}
+
+.bg-\[\#d946ef\]\/20 {
+  background-color: rgba(0, 194, 255, .2) !important;
+}
+
+.border-\[\#8b5cf6\]\/60 {
+  border-color: rgba(0, 229, 160, .5) !important;
+}
+
+.from-\[\#3b0764\] {
+  --tw-gradient-from: #063d33 !important;
+}
+
+.via-\[\#6d28d9\] {
+  --tw-gradient-via: #0d6b5c !important;
+}
+
+.to-\[\#c026d3\] {
+  --tw-gradient-to: #00a3b8 !important;
+}
+
+.via-\[\#1b1038\] {
+  --tw-gradient-via: var(--wx-card) !important;
+}
+
+.to-\[\#0b0716\] {
+  --tw-gradient-to: var(--wx-bg) !important;
+}
+
+.from-\[\#2e1065\],
+.via-\[\#2e1065\]\/80 {
+  --tw-gradient-from: #04261f !important;
+  --tw-gradient-via: rgba(4, 38, 31, .85) !important;
+}
+
+.border-\[\#ffb800\]\/40,
+.border-\[\#ffb800\]\/50,
+.border-\[\#ffb800\]\/60 {
+  border-color: rgba(255, 176, 32, .5) !important;
+}
+
+.bg-\[\#ffb800\]\/10,
+.bg-\[\#ffb800\]\/15 {
+  background-color: rgba(255, 176, 32, .12) !important;
+}
+
+.ring-\[\#ffb800\],
+.ring-\[\#ffb800\]\/40 {
+  --tw-ring-color: var(--wx-gold) !important;
+}
+
+.accent-\[\#d946ef\] {
+  accent-color: #00e5a0 !important;
+}
+
+.focus\:border-\[\#d946ef\]:focus {
+  border-color: #00e5a0 !important;
+}
+
+.text-\[\#ff3b5c\],
+.hover\:text-\[\#ff3b5c\]:hover {
+  color: var(--wx-red) !important;
+}
+
+.bg-\[\#ff3b5c\] {
+  background-color: var(--wx-red) !important;
+}
+
+.hover\:border-\[\#ff3b5c\]:hover {
+  border-color: var(--wx-red) !important;
+}
+
+/* scrollbars */
+*::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(0, 229, 160, 0.4);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ===== Urdu (RTL) ===== */
+
+.lang-ur {
+  --ur-lh: 1.9;
+}
+
+.lang-ur h1,
+.lang-ur h2,
+.lang-ur h3,
+.lang-ur p,
+.lang-ur li,
+.lang-ur button,
+.lang-ur a,
+.lang-ur span,
+.lang-ur label,
+.lang-ur td,
+.lang-ur th {
+  line-height: var(--ur-lh);
+}
+
+.lang-ur .uppercase {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.lang-ur .tracking-widest,
+.lang-ur .tracking-wider,
+.lang-ur .tracking-\[0\.15em\] {
+  letter-spacing: 0;
+}
+
+.lang-ur .italic {
+  font-style: normal;
+}
+
+/* keep numbers/latin brand readable */
+.lang-ur .tabular-nums,
+.lang-ur .font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* =====================================================================
+   LIGHT MODE — html.light overrides every dark utility used in the app
+   ===================================================================== */
+html.light {
+  --wx-bg: #f3f6f9;
+  --wx-bg-2: #ffffff;
+  --wx-card: #ffffff;
+  --wx-card-2: #eef2f6;
+  --wx-border: #d5dde6;
+  --wx-text: #0f172a;
+  --wx-muted: #475569;
+  --wx-dim: #64748b;
+  color-scheme: light;
+}
+
+html.light body {
+  color: var(--wx-text);
+}
+
+html.light .wx-bg {
+  background-color: var(--wx-bg);
+  background-image:
+    radial-gradient(900px 500px at 10% -10%, rgba(0, 180, 130, 0.14), transparent 60%),
+    radial-gradient(800px 450px at 95% 0%, rgba(0, 160, 220, 0.12), transparent 60%),
+    radial-gradient(700px 500px at 50% 110%, rgba(255, 176, 32, 0.10), transparent 60%),
+    linear-gradient(rgba(15, 23, 42, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, .035) 1px, transparent 1px);
+}
+
+html.light .wx-card {
+  background: #ffffff;
+  border: 1px solid var(--wx-border);
+  box-shadow: 0 6px 20px rgba(15, 23, 42, .06);
+}
+
+html.light .wx-glass {
+  background: rgba(255, 255, 255, .85);
+  border: 1px solid var(--wx-border);
+}
+
+html.light .wx-hover:hover {
+  box-shadow: 0 14px 34px rgba(0, 150, 120, 0.18);
+  border-color: #0aa88a;
+}
+
+/* buttons */
+html.light .btn-violet {
+  background: linear-gradient(135deg, #059669 0%, #0284c7 100%);
+  color: #ffffff;
+  box-shadow: 0 8px 22px rgba(5, 150, 105, 0.28);
+}
+
+html.light .btn-gold {
+  background: linear-gradient(180deg, #ffcc4d 0%, #ffb020 50%, #f97316 100%);
+  color: #1f1200;
+  box-shadow: 0 8px 22px rgba(249, 115, 22, 0.28);
+}
+
+html.light .btn-outline {
+  background: #ffffff;
+  border: 1.5px solid #059669;
+  color: #065f46;
+}
+
+html.light .btn-outline:hover {
+  background: #ecfdf5;
+}
+
+html.light .text-violet-grad {
+  background: linear-gradient(90deg, #047857 0%, #0369a1 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+html.light .text-gold-grad {
+  background: linear-gradient(180deg, #d97706 0%, #c2410c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+html.light .glow-gold {
+  text-shadow: none;
+}
+
+/* --- generic text --- */
+html.light .text-white {
+  color: #0f172a !important;
+}
+
+html.light .text-white\/80,
+html.light .text-white\/60,
+html.light .text-white\/50,
+html.light .text-white\/85,
+html.light .text-white\/70 {
+  color: rgba(15, 23, 42, .65) !important;
+}
+
+html.light .text-slate-100,
+html.light .text-slate-200,
+html.light .text-slate-300 {
+  color: #1e293b !important;
+}
+
+html.light .text-slate-400 {
+  color: #475569 !important;
+}
+
+html.light .text-slate-500 {
+  color: #64748b !important;
+}
+
+html.light .text-slate-600 {
+  color: #64748b !important;
+}
+
+html.light .placeholder\:text-slate-600::placeholder,
+html.light .placeholder\:text-slate-500::placeholder {
+  color: #94a3b8 !important;
+}
+
+html.light .text-\[\#b8a7e6\] {
+  color: #475569 !important;
+}
+
+html.light .text-\[\#e9ddff\] {
+  color: #1e293b !important;
+}
+
+html.light .text-\[\#6f5fa3\] {
+  color: #64748b !important;
+}
+
+html.light .text-\[\#c4b5fd\] {
+  color: #047857 !important;
+}
+
+html.light .text-\[\#f0abfc\] {
+  color: #0369a1 !important;
+}
+
+html.light .text-\[\#ffb800\] {
+  color: #b45309 !important;
+}
+
+html.light .text-\[\#ffe0a3\] {
+  color: #92400e !important;
+}
+
+html.light .text-\[\#ffe9a3\] {
+  color: #92400e !important;
+}
+
+html.light .text-\[\#8fd3ff\] {
+  color: #0369a1 !important;
+}
+
+html.light .text-\[\#7ee2a0\] {
+  color: #047857 !important;
+}
+
+html.light .text-emerald-300,
+html.light .text-emerald-400 {
+  color: #047857 !important;
+}
+
+html.light .text-red-300,
+html.light .text-red-400 {
+  color: #b91c1c !important;
+}
+
+html.light .text-yellow-400,
+html.light .text-yellow-300 {
+  color: #b45309 !important;
+}
+
+html.light .text-orange-400 {
+  color: #c2410c !important;
+}
+
+html.light .text-sky-300 {
+  color: #0369a1 !important;
+}
+
+html.light .text-amber-200,
+html.light .text-amber-300 {
+  color: #b45309 !important;
+}
+
+html.light .text-red-200 {
+  color: #b91c1c !important;
+}
+
+/* --- surfaces --- */
+html.light .bg-black\/20,
+html.light .bg-black\/30,
+html.light .bg-black\/40 {
+  background-color: #f1f5f9 !important;
+}
+
+html.light .bg-black\/50,
+html.light .bg-black\/60 {
+  background-color: rgba(15, 23, 42, .75) !important;
+  color: #fff;
+}
+
+html.light .bg-black\/70 {
+  background-color: rgba(15, 23, 42, .45) !important;
+}
+
+/* Google Play / App Store badges: white surface in light mode instead of solid black */
+html.light button.store-badge {
+  background-color: #ffffff !important;
+  border: 1px solid #d5dde6;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, .08);
+}
+
+html.light button.store-badge,
+html.light button.store-badge * {
+  color: #0f172a !important;
+}
+
+html.light .bg-slate-950,
+html.light .bg-slate-900,
+html.light .bg-slate-900\/60,
+html.light .bg-slate-900\/95 {
+  background-color: #ffffff !important;
+}
+
+html.light .bg-slate-800,
+html.light .bg-slate-800\/50 {
+  background-color: #e2e8f0 !important;
+}
+
+html.light .bg-slate-700,
+html.light .bg-slate-700\/40 {
+  background-color: #cbd5e1 !important;
+}
+
+html.light .hover\:bg-slate-800:hover,
+html.light .hover\:bg-slate-700:hover {
+  background-color: #e2e8f0 !important;
+}
+
+html.light .bg-\[\#140c2a\],
+html.light .bg-\[\#140c2a\]\/95,
+html.light .bg-\[\#140c2a\]\/90 {
+  background-color: rgba(255, 255, 255, .97) !important;
+}
+
+html.light .bg-\[\#1b1038\],
+html.light .bg-\[\#0d1a4d\] {
+  background-color: #ffffff !important;
+}
+
+html.light .bg-\[\#0b0716\],
+html.light .bg-\[\#0b0716\]\/85 {
+  background-color: rgba(255, 255, 255, .92) !important;
+}
+
+html.light .bg-\[\#241546\] {
+  background-color: #e2e8f0 !important;
+}
+
+html.light .bg-\[\#8b5cf6\]\/10,
+html.light .bg-\[\#8b5cf6\]\/15,
+html.light .bg-\[\#8b5cf6\]\/20,
+html.light .hover\:bg-\[\#8b5cf6\]\/10:hover,
+html.light .hover\:bg-\[\#8b5cf6\]\/20:hover {
+  background-color: rgba(5, 150, 105, .10) !important;
+}
+
+html.light .bg-\[\#d946ef\]\/20 {
+  background-color: rgba(2, 132, 199, .12) !important;
+}
+
+html.light .bg-\[\#ffb800\]\/10,
+html.light .bg-\[\#ffb800\]\/15,
+html.light .bg-\[\#ffb800\]\/20 {
+  background-color: #fef3c7 !important;
+}
+
+html.light .bg-\[\#ffb800\]\/20+*,
+html.light .bg-yellow-400\/10,
+html.light .bg-yellow-500\/15 {
+  background-color: #fef3c7 !important;
+}
+
+html.light .bg-emerald-500\/10,
+html.light .bg-emerald-500\/15,
+html.light .bg-emerald-500\/20 {
+  background-color: #d1fae5 !important;
+}
+
+html.light .bg-red-500\/10,
+html.light .bg-red-500\/15,
+html.light .bg-red-500\/20 {
+  background-color: #fee2e2 !important;
+}
+
+html.light .bg-sky-500\/15 {
+  background-color: #e0f2fe !important;
+}
+
+html.light .bg-white\/20,
+html.light .bg-white\/15,
+html.light .bg-white\/30 {
+  background-color: rgba(15, 23, 42, .08) !important;
+}
+
+html.light .from-\[\#8b5cf6\]\/30 {
+  --tw-gradient-from: rgba(5, 150, 105, .15) !important;
+}
+
+html.light .to-\[\#d946ef\]\/30 {
+  --tw-gradient-to: rgba(2, 132, 199, .15) !important;
+}
+
+html.light .from-\[\#8b5cf6\] {
+  --tw-gradient-from: #059669 !important;
+}
+
+html.light .to-\[\#d946ef\] {
+  --tw-gradient-to: #0284c7 !important;
+}
+
+html.light .via-\[\#d946ef\] {
+  --tw-gradient-via: #0284c7 !important;
+}
+
+html.light .from-\[\#3b0764\] {
+  --tw-gradient-from: #047857 !important;
+}
+
+html.light .via-\[\#6d28d9\] {
+  --tw-gradient-via: #0e7490 !important;
+}
+
+html.light .to-\[\#c026d3\] {
+  --tw-gradient-to: #0284c7 !important;
+}
+
+html.light .via-\[\#1b1038\] {
+  --tw-gradient-via: #ffffff !important;
+}
+
+html.light .to-\[\#0b0716\] {
+  --tw-gradient-to: #e2e8f0 !important;
+}
+
+html.light .from-\[\#0d1a4d\] {
+  --tw-gradient-from: #e2e8f0 !important;
+}
+
+html.light .to-\[\#1b2a66\] {
+  --tw-gradient-to: #f8fafc !important;
+}
+
+/* --- borders / rings / dividers --- */
+html.light .border-\[\#3a2470\],
+html.light .border-\[\#3a2470\]\/70,
+html.light .border-\[\#3a2470\]\/60,
+html.light .border-\[\#3a2470\]\/50 {
+  border-color: var(--wx-border) !important;
+}
+
+html.light .divide-\[\#3a2470\]\/50> :not([hidden])~ :not([hidden]),
+html.light .divide-slate-800> :not([hidden])~ :not([hidden]) {
+  border-color: #e2e8f0 !important;
+}
+
+html.light .border-slate-800,
+html.light .border-slate-700 {
+  border-color: var(--wx-border) !important;
+}
+
+html.light .ring-\[\#3a2470\] {
+  --tw-ring-color: var(--wx-border) !important;
+}
+
+html.light .ring-\[\#0b0716\] {
+  --tw-ring-color: #ffffff !important;
+}
+
+html.light .ring-white\/10,
+html.light .ring-white\/15 {
+  --tw-ring-color: rgba(15, 23, 42, .15) !important;
+}
+
+html.light .border-white {
+  border-color: #0f172a !important;
+}
+
+html.light .border-\[\#8b5cf6\]\/60 {
+  border-color: rgba(5, 150, 105, .5) !important;
+}
+
+html.light .focus\:border-\[\#d946ef\]:focus,
+html.light .focus\:border-yellow-400:focus {
+  border-color: #059669 !important;
+}
+
+html.light .accent-\[\#d946ef\] {
+  accent-color: #059669 !important;
+}
+
+html.light .hover\:text-white:hover {
+  color: #0f172a !important;
+}
+
+html.light .hover\:text-\[\#ffb800\]:hover {
+  color: #b45309 !important;
+}
+
+/* header shimmer + nav */
+html.light header {
+  box-shadow: 0 2px 12px rgba(15, 23, 42, .06);
+}
+
+html.light .wx-shine {
+  opacity: .9;
+}
+
+/* inputs */
+html.light input,
+html.light select,
+html.light textarea {
+  color: #0f172a;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: #94a3b8;
+}
+
+html.light input[type="range"] {
+  accent-color: #059669;
+}
+
+/* --- GAME SURFACE = dark island inside light mode: cancel every light override --- */
+html.light .game-surface {
+  color: #f1f5f9;
+}
+
+html.light .game-surface .text-white {
+  color: #ffffff !important;
+}
+
+html.light .game-surface .text-white\/80,
+html.light .game-surface .text-white\/85 {
+  color: rgba(255, 255, 255, .85) !important;
+}
+
+html.light .game-surface .text-white\/70 {
+  color: rgba(255, 255, 255, .7) !important;
+}
+
+html.light .game-surface .text-white\/60,
+html.light .game-surface .text-white\/50 {
+  color: rgba(255, 255, 255, .6) !important;
+}
+
+html.light .game-surface .text-slate-100,
+html.light .game-surface .text-slate-200 {
+  color: #e2e8f0 !important;
+}
+
+html.light .game-surface .text-slate-300 {
+  color: #cbd5e1 !important;
+}
+
+html.light .game-surface .text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+html.light .game-surface .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+html.light .game-surface .text-slate-600 {
+  color: #64748b !important;
+}
+
+html.light .game-surface .text-slate-950 {
+  color: #0f172a !important;
+}
+
+html.light .game-surface .text-\[\#e9ddff\] {
+  color: #e2e8f0 !important;
+}
+
+html.light .game-surface .text-\[\#6f5fa3\] {
+  color: #94a3b8 !important;
+}
+
+html.light .game-surface .text-\[\#c4b5fd\] {
+  color: #7dffd8 !important;
+}
+
+html.light .game-surface .text-\[\#ffb800\] {
+  color: #ffb020 !important;
+}
+
+html.light .game-surface .text-\[\#ffe0a3\] {
+  color: #ffe1a8 !important;
+}
+
+html.light .game-surface .text-yellow-400 {
+  color: #facc15 !important;
+}
+
+html.light .game-surface .text-yellow-300 {
+  color: #fde047 !important;
+}
+
+html.light .game-surface .text-emerald-400 {
+  color: #34d399 !important;
+}
+
+html.light .game-surface .text-emerald-300 {
+  color: #6ee7b7 !important;
+}
+
+html.light .game-surface .text-red-400 {
+  color: #f87171 !important;
+}
+
+html.light .game-surface .text-red-300 {
+  color: #fca5a5 !important;
+}
+
+html.light .game-surface .text-red-200 {
+  color: #fecaca !important;
+}
+
+html.light .game-surface .text-sky-300 {
+  color: #7dd3fc !important;
+}
+
+html.light .game-surface .text-amber-300,
+html.light .game-surface .text-amber-200 {
+  color: #fcd34d !important;
+}
+
+html.light .game-surface .text-orange-400 {
+  color: #fb923c !important;
+}
+
+html.light .game-surface .placeholder\:text-slate-600::placeholder,
+html.light .game-surface .placeholder\:text-slate-500::placeholder {
+  color: #64748b !important;
+}
+
+html.light .game-surface .hover\:text-white:hover {
+  color: #fff !important;
+}
+
+html.light .game-surface .hover\:text-\[\#ffb800\]:hover {
+  color: #ffb020 !important;
+}
+
+/* surfaces back to dark */
+html.light .game-surface .bg-black\/20 {
+  background-color: rgba(0, 0, 0, .2) !important;
+}
+
+html.light .game-surface .bg-black\/30 {
+  background-color: rgba(0, 0, 0, .3) !important;
+}
+
+html.light .game-surface .bg-black\/40 {
+  background-color: rgba(0, 0, 0, .4) !important;
+}
+
+html.light .game-surface .bg-black\/50 {
+  background-color: rgba(0, 0, 0, .5) !important;
+}
+
+html.light .game-surface .bg-black\/60 {
+  background-color: rgba(0, 0, 0, .6) !important;
+}
+
+html.light .game-surface .bg-black\/70 {
+  background-color: rgba(0, 0, 0, .7) !important;
+}
+
+html.light .game-surface .bg-slate-950 {
+  background-color: #020617 !important;
+}
+
+html.light .game-surface .bg-slate-900,
+html.light .game-surface .bg-slate-900\/60,
+html.light .game-surface .bg-slate-900\/95,
+html.light .game-surface .bg-slate-900\/90 {
+  background-color: #0f172a !important;
+}
+
+html.light .game-surface .bg-slate-800,
+html.light .game-surface .bg-slate-800\/50 {
+  background-color: #1e293b !important;
+}
+
+html.light .game-surface .bg-slate-700,
+html.light .game-surface .bg-slate-700\/40 {
+  background-color: #334155 !important;
+}
+
+html.light .game-surface .hover\:bg-slate-800:hover {
+  background-color: #1e293b !important;
+}
+
+html.light .game-surface .hover\:bg-slate-700:hover {
+  background-color: #334155 !important;
+}
+
+html.light .game-surface .bg-\[\#140c2a\],
+html.light .game-surface .bg-\[\#140c2a\]\/95,
+html.light .game-surface .bg-\[\#1b1038\],
+html.light .game-surface .bg-\[\#0d1a4d\] {
+  background-color: #0d1b22 !important;
+}
+
+html.light .game-surface .bg-\[\#0b0716\],
+html.light .game-surface .bg-\[\#0b0716\]\/85 {
+  background-color: #050b0f !important;
+}
+
+html.light .game-surface .bg-\[\#241546\] {
+  background-color: #12252e !important;
+}
+
+html.light .game-surface .bg-\[\#8b5cf6\]\/10,
+html.light .game-surface .bg-\[\#8b5cf6\]\/15,
+html.light .game-surface .bg-\[\#8b5cf6\]\/20 {
+  background-color: rgba(0, 229, 160, .12) !important;
+}
+
+html.light .game-surface .bg-\[\#d946ef\]\/20 {
+  background-color: rgba(0, 194, 255, .2) !important;
+}
+
+html.light .game-surface .bg-\[\#ffb800\]\/10,
+html.light .game-surface .bg-\[\#ffb800\]\/15 {
+  background-color: rgba(255, 176, 32, .12) !important;
+}
+
+html.light .game-surface .bg-emerald-500\/10,
+html.light .game-surface .bg-emerald-500\/15 {
+  background-color: rgba(16, 185, 129, .15) !important;
+}
+
+html.light .game-surface .bg-emerald-500\/20 {
+  background-color: rgba(16, 185, 129, .2) !important;
+}
+
+html.light .game-surface .bg-red-500\/10,
+html.light .game-surface .bg-red-500\/15 {
+  background-color: rgba(239, 68, 68, .15) !important;
+}
+
+html.light .game-surface .bg-red-500\/20 {
+  background-color: rgba(239, 68, 68, .2) !important;
+}
+
+html.light .game-surface .bg-sky-500\/15 {
+  background-color: rgba(14, 165, 233, .15) !important;
+}
+
+html.light .game-surface .bg-yellow-400\/10,
+html.light .game-surface .bg-yellow-500\/15 {
+  background-color: rgba(250, 204, 21, .12) !important;
+}
+
+html.light .game-surface .bg-white\/20 {
+  background-color: rgba(255, 255, 255, .2) !important;
+}
+
+html.light .game-surface .bg-white\/15 {
+  background-color: rgba(255, 255, 255, .15) !important;
+}
+
+html.light .game-surface .bg-white\/30 {
+  background-color: rgba(255, 255, 255, .3) !important;
+}
+
+html.light .game-surface .border-slate-800 {
+  border-color: #1e293b !important;
+}
+
+html.light .game-surface .border-slate-700 {
+  border-color: #334155 !important;
+}
+
+html.light .game-surface .border-\[\#3a2470\],
+html.light .game-surface .border-\[\#3a2470\]\/50,
+html.light .game-surface .border-\[\#3a2470\]\/60 {
+  border-color: #1c3a45 !important;
+}
+
+html.light .game-surface .divide-\[\#3a2470\]\/50> :not([hidden])~ :not([hidden]),
+html.light .game-surface .divide-slate-800> :not([hidden])~ :not([hidden]) {
+  border-color: #1e293b !important;
+}
+
+html.light .game-surface .ring-\[\#3a2470\] {
+  --tw-ring-color: #1c3a45 !important;
+}
+
+html.light .game-surface .ring-white\/10,
+html.light .game-surface .ring-white\/15 {
+  --tw-ring-color: rgba(255, 255, 255, .15) !important;
+}
+
+html.light .game-surface .border-white {
+  border-color: #fff !important;
+}
+
+html.light .game-surface .focus\:border-\[\#d946ef\]:focus,
+html.light .game-surface .focus\:border-yellow-400:focus {
+  border-color: #facc15 !important;
+}
+
+html.light .game-surface .btn-outline {
+  background: rgba(0, 229, 160, .08);
+  border-color: rgba(0, 229, 160, .55);
+  color: #e6fff6;
+}
+
+html.light .game-surface .btn-violet {
+  background: linear-gradient(135deg, #00e5a0 0%, #00c2ff 100%);
+  color: #032019 !important;
+}
+
+html.light .game-surface .btn-violet * {
+  color: #032019 !important;
+}
+
+html.light .game-surface .btn-gold {
+  background: linear-gradient(180deg, #ffd166 0%, #ffb020 50%, #ff7a00 100%);
+}
+
+html.light .game-surface .wx-card {
+  background: linear-gradient(160deg, #0d1b22 0%, #0a151b 100%);
+  border-color: #1c3a45;
+  box-shadow: none;
+}
+
+html.light .game-surface .text-gold-grad {
+  background: linear-gradient(180deg, #fff1c2 0%, #ffb020 55%, #ff7a00 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+html.light .game-surface .glow-gold {
+  text-shadow: 0 0 18px rgba(255, 176, 32, .55);
+}
+
+html.light .game-surface input,
+html.light .game-surface select,
+html.light .game-surface textarea {
+  color: #fff;
+}
+
+html.light .game-surface input::placeholder {
+  color: #64748b;
+}
+
+html.light .game-surface .from-\[\#8b5cf6\] {
+  --tw-gradient-from: #00e5a0 !important;
+}
+
+html.light .game-surface .to-\[\#d946ef\] {
+  --tw-gradient-to: #00c2ff !important;
+}
+
+html.light .game-surface .via-\[\#d946ef\] {
+  --tw-gradient-via: #00c2ff !important;
+}
+
+html.light .game-surface .from-\[\#8b5cf6\]\/30 {
+  --tw-gradient-from: rgba(0, 229, 160, .25) !important;
+}
+
+html.light .game-surface .to-\[\#d946ef\]\/30 {
+  --tw-gradient-to: rgba(0, 194, 255, .25) !important;
+}
+
+/* "How to play" box below games should follow light theme → it is outside .game-surface already */
+
+/* text drawn over images/gradients must stay white in light mode */
+html.light .on-image,
+html.light .on-image .text-white,
+html.light .on-image span,
+html.light .on-image p,
+html.light .on-image h2,
+html.light .on-image div {
+  color: #fff;
+}
+
+html.light .on-image .text-white {
+  color: #fff !important;
+}
+
+html.light .on-image .text-\[\#b8a7e6\],
+html.light .on-image .text-\[\#e9ddff\] {
+  color: rgba(255, 255, 255, .85) !important;
+}
+
+html.light .on-image .text-white\/80,
+html.light .on-image .text-white\/85 {
+  color: rgba(255, 255, 255, .85) !important;
+}
+
+html.light .on-image .bg-black\/30,
+html.light .on-image .bg-black\/40,
+html.light .on-image .bg-black\/50,
+html.light .on-image .bg-black\/60 {
+  background-color: rgba(0, 0, 0, .45) !important;
+  color: #fff;
+}
+
+html.light .on-image .text-gold-grad {
+  background: linear-gradient(180deg, #fff1c2 0%, #ffb020 55%, #ff7a00 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+html.light .on-image .glow-gold {
+  text-shadow: 0 0 18px rgba(255, 176, 32, .55), 0 2px 0 rgba(120, 70, 0, .6);
+}
+
+html.light .on-image .btn-gold,
+html.light .on-image .btn-gold * {
+  color: #1f1200 !important;
+}
+
+html.light .on-image .btn-violet,
+html.light .on-image .btn-violet * {
+  color: #fff !important;
+}
+
+
+/* sidebar / panels scrollbar (thin, visible on hover) */
+.wx-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 92, 246, .45) transparent;
+}
+
+.wx-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.wx-scroll::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, .45);
+  border-radius: 999px;
+}
+
+.wx-scroll:hover::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, .75);
+}
+
+/* tables never break layout on small screens */
+table {
+  min-width: max-content;
+}
+
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* prevent long words / IDs from overflowing cards */
+.wx-card,
+.rounded-2xl,
+.rounded-3xl {
+  overflow-wrap: anywhere;
+}
+
+/* safe areas for notch phones */
+@supports (padding: env(safe-area-inset-left)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* very small phones: tighten paddings */
+@media (max-width: 360px) {
+  .p-5 {
+    padding: 0.9rem !important;
+  }
+
+  .px-4 {
+    padding-left: .75rem !important;
+    padding-right: .75rem !important;
+  }
+
+  .gap-4 {
+    gap: .6rem !important;
+  }
+
+  .text-5xl {
+    font-size: 2rem !important;
+  }
+}
+
+/* ultra-wide: cap content widths so it doesn't stretch endlessly */
+@media (min-width: 1920px) {
+  main>.mx-auto {
+    max-width: 1800px;
+  }
+}
+
+/* ===== Drawer / side menu theme ===== */
+.wx-drawer-panel {
+  background: linear-gradient(180deg, #140c2a 0%, #0c0720 100%);
+  border-color: #3a2470;
+  color: #e9ddff;
+}
+
+.wx-drawer-panel .wx-scroll::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, .5);
+}
+
+.wx-drawer-overlay {
+  background: rgba(5, 1, 15, .58);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  transition-property: opacity, backdrop-filter;
+}
+
+@keyframes wxDrawerItemIn {
+  from {
+    opacity: 0;
+    transform: translate3d(-12px, 8px, 0) scale(.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.wx-drawer-item {
+  animation: wxDrawerItemIn .34s cubic-bezier(.22, 1, .36, 1) both;
+  animation-delay: calc(var(--drawer-index, 0) * 45ms + 90ms);
+}
+
+html.light .wx-drawer-panel {
+  background-color: #ffffff !important;
+  background-image: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%) !important;
+  border-color: #d5dde6;
+  color: #0f172a;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, .25);
+}
+
+html.light .wx-drawer-overlay {
+  background: rgba(15, 23, 42, .34);
+}
+
+/* panel text colors */
+html.light .wx-drawer-panel {
+  color: #0f172a;
+}
+
+html.light .wx-drawer-panel .text-\[\#e9ddff\],
+html.light .wx-drawer-panel .text-white {
+  color: #0f172a !important;
+}
+
+html.light .wx-drawer-panel .text-\[\#c4b5fd\] {
+  color: #6d28d9 !important;
+}
+
+html.light .wx-drawer-panel .text-slate-300,
+html.light .wx-drawer-panel .text-slate-400,
+html.light .wx-drawer-panel .text-\[\#b8a7e6\] {
+  color: #475569 !important;
+}
+
+html.light .wx-drawer-panel .text-gold-grad {
+  color: #b45309 !important;
+  -webkit-text-fill-color: #b45309;
+}
+
+html.light .wx-drawer-panel .text-\[\#b8a7e6\] {
+  color: #475569 !important;
+}
+
+/* panel inner rows / chips */
+html.light .wx-drawer-panel .bg-black\/30,
+html.light .wx-drawer-panel .bg-\[\#241546\]\/0 {
+  background-color: #eef2f7 !important;
+}
+
+html.light .wx-drawer-panel .hover\:bg-\[\#241546\]:hover {
+  background-color: #ede9fe !important;
+}
+
+html.light .wx-drawer-panel .border-white\/10,
+html.light .wx-drawer-panel .border-\[\#3a2470\] {
+  border-color: #d5dde6 !important;
+}
+
+html.light .wx-drawer-panel .bg-white\/5 {
+  background-color: #e2e8f0 !important;
+}
+
+html.light .wx-drawer-panel .bg-white\/5:hover {
+  background-color: #cbd5e1 !important;
+}
+
+/* drawer row tokens (dark default) */
+.wx-rowtext {
+  color: #e9ddff;
+}
+
+.wx-rowicon {
+  color: #c4b5fd;
+}
+
+.hover\:wx-row:hover {
+  background-color: #241546;
+}
+
+.wx-drawer-border {
+  border-color: #3a2470;
+}
+
+html.light .wx-rowtext {
+  color: #1e293b !important;
+}
+
+html.light .wx-rowicon {
+  color: #6d28d9 !important;
+}
+
+html.light .hover\:wx-row:hover {
+  background-color: #ede9fe !important;
+}
+
+html.light .wx-drawer-border {
+  border-color: #d5dde6 !important;
+}
+
+/* lobby drawer language/theme chips */
+html.light .wx-drawer-panel .wx-chip {
+  background-color: #eef2f7 !important;
+  color: #334155 !important;
+}
+
+/* Top Winners — seamless top→bottom marquee (content duplicated; scrolls exactly one list height) */
+@keyframes wxWinners {
+  0% {
+    transform: translateY(-50%);
+  }
+
+  100% {
+    transform: translateY(0%);
+  }
+}
+
+.wx-winners-clip {
+  contain: layout paint;
+}
+
+.wx-winners {
+  animation: wxWinners 22s linear infinite;
+  will-change: transform;
+}
+
+.wx-winners:hover {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wx-drawer-item {
+    animation: none;
+  }
+
+  .wx-winners {
+    animation: none;
+  }
+}
+
+/* Top Winners card follows the active theme. */
+html.light .wx-winners-card {
+  background: #fff !important;
+  border-color: #d5dde6 !important;
+  color: #0f172a !important;
+}
+
+html.light .wx-winners-card .text-white,
+html.light .wx-winners-card .text-white\/90,
+html.light .wx-winners-card .text-slate-200,
+html.light .wx-winners-card [class*="text-slate-200"],
+html.light .wx-winners-card [class*="text-white"] {
+  color: #0f172a !important;
+}
+
+html.light .wx-winners-card .text-\[#b8a7e6\],
+html.light .wx-winners-card [class*="text-\[#b8a7e6\]"] {
+  color: #64748b !important;
+}
+
+html.light .wx-winners-card .text-amber-300 {
+  color: #b45309 !important;
+}
+
+html.light .wx-winners-card .text-slate-900,
+html.light .wx-winners-card .text-slate-800,
+html.light .wx-winners-card .text-slate-700 {
+  color: #0f172a !important;
+}
+
+html.light .wx-winners-card [style*="rgba(255,255,255,.03)"] {
+  background: rgba(15, 23, 42, .04) !important;
+}
+
+html.light .wx-winners-card .bg-slate-50 {
+  background-color: #f8fafc !important;
+}
+
+html.light .wx-winners-card .bg-slate-200 {
+  background-color: #e2e8f0 !important;
+}
+
+html.light .wx-winners-card .bg-white {
+  background-color: #fff !important;
+}
+
+html.light .wx-winners-card .border-slate-200,
+html.light .wx-winners-card .border-slate-300 {
+  border-color: #d5dde6 !important;
+}
+
+html.light .wx-winners-card .bg-rose-500.text-white,
+html.light .wx-winners-card .bg-gradient-to-br.text-white {
+  color: #fff !important;
+}
+
+/* Promo overlays stay dark in light mode, so their close controls need white contrast. */
+html.light .wx-promo-overlay .text-white {
+  color: #fff !important;
+}
+
+html.light .wx-promo-overlay .border-white {
+  border-color: rgba(255, 255, 255, .9) !important;
+}
+
+html.light .wx-promo-overlay .border-white\/80 {
+  border-color: rgba(255, 255, 255, .9) !important;
+}
+
+/* The app uses html.light for the light theme; dark mode is the default. */
+html:not(.light) .wx-winners-card {
+  background: #0b0716 !important;
+  border-color: #3a2470 !important;
+  color: #fff !important;
+}
+
+html:not(.light) .wx-winners-card .bg-slate-50,
+html:not(.light) .wx-winners-card .bg-white {
+  background-color: #0b0716 !important;
+}
+
+html:not(.light) .wx-winners-card .bg-slate-200 {
+  background-color: #140c2a !important;
+}
+
+html:not(.light) .wx-winners-card .border-slate-200,
+html:not(.light) .wx-winners-card .border-slate-300 {
+  border-color: #3a2470 !important;
+}
+
+html:not(.light) .wx-winners-card .text-slate-900,
+html:not(.light) .wx-winners-card .text-slate-800,
+html:not(.light) .wx-winners-card .text-slate-700 {
+  color: #fff !important;
+}
+
+html:not(.light) .wx-winners-card .text-slate-500,
+html:not(.light) .wx-winners-card .text-slate-400 {
+  color: #b8a7e6 !important;
+}
+
+/* ============================================================
+   MOBILE SCROLL — bulletproof
+   The DOCUMENT (html) is always the only vertical scroll container.
+   No wrapper/sidebar/section is allowed to set a fixed viewport height
+   or its own overflow on phones (the side drawer is the single exception).
+   ============================================================ */
+html {
+  min-height: 100%;
+  height: auto;
+  width: 100%;
+  overflow-x: clip;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: auto;
+  scroll-behavior: auto;
+}
+
+body {
+  min-height: 100dvh;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
+/* the client/admin shells must NOT create their own scroll context */
+.wx-shell-root,
+.wx-lobby,
+.wx-main {
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+/* fixed bottom navigation leaves room for content */
+@media (max-width: 767px) {
+  button,
+  a.btn-gold,
+  a.btn-outline,
+  a.btn-violet {
+    white-space: normal;
+    line-height: 1.25;
+  }
+
+  /* fixed-attachment gradients and blur on sticky bars force a full repaint on every scroll frame on phones */
+  .wx-bg {
+    background-attachment: scroll;
+  }
+
+  .backdrop-blur,
+  .wx-glass {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .wx-main {
+    padding-bottom: 96px !important;
+  }
+
+  /* desktop sticky sidebar hidden on phones (drawer used instead) */
+  .wx-sidebar-desktop {
+    display: none !important;
+  }
+
+  /* never let a canvas / game board swallow vertical touches */
+  canvas {
+    touch-action: pan-y !important;
+  }
+
+  /* drawer (menu) keeps its OWN scroll, everything behind stays put while open */
+  .wx-drawer-overlay {
+    position: fixed;
+    inset: 0;
+  }
+
+  .wx-drawer-panel {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    height: 100dvh !important;
+    max-height: 100dvh;
+    background: linear-gradient(180deg, #140c2a 0%, #0c0720 100%) !important;
+  }
+
+  .wx-drawer-panel>div,
+  .wx-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  body.drawer-open {
+    overflow: hidden !important;
+  }
+
+  /* popups/modals taller than the screen must scroll inside themselves */
+  .game-surface {
+    max-height: 92dvh;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .wx-promo-overlay {
+    align-items: flex-start;
+    padding: max(1rem, env(safe-area-inset-top)) .75rem max(1rem, env(safe-area-inset-bottom));
+  }
+
+  .wx-promo-overlay > div {
+    max-height: calc(100dvh - 2rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Desktop keeps the sticky full-height sidebar shell */
+@media (min-width: 768px) {
+  .wx-shell-root {
+    min-height: 100dvh;
+  }
+
+  .wx-sidebar-desktop {
+    position: sticky;
+    top: 0;
+    height: 100dvh;
+  }
+}
+/* ===== DICE GAME STYLES ===== */
+@theme {
+  --color-ink: #0a0f16;
+  --color-panel: #111a26;
+  --color-panel2: #0d1521;
+  --color-line: #1e2c3d;
+  --color-line2: #2b3d54;
+  --color-text: #e8eef6;
+  --color-mut: #7e93a9;
+  --color-win: #2fd975;
+  --color-loss: #f4455f;
+}
+
+.dice-range {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  margin: 0;
+}
+.dice-range:focus {
+  outline: none;
+}
+.dice-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 42px;
+  border-radius: 7px;
+  background: #eef4fb;
+  border: 4px solid #0a0f16;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35), 0 4px 14px rgba(0, 0, 0, 0.6);
+}
+.dice-range::-moz-range-thumb {
+  width: 16px;
+  height: 42px;
+  border-radius: 7px;
+  background: #eef4fb;
+  border: 4px solid #0a0f16;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35), 0 4px 14px rgba(0, 0, 0, 0.6);
+}
+.dice-range::-moz-range-track {
+  background: transparent;
+}
+
+@keyframes float-up { from { opacity: 1; transform: translate(-50%, 0); } to { opacity: 0; transform: translate(-50%, -36px); } }
+.float-up { animation: float-up 1.4s ease-out forwards; }
+@keyframes chip-in { from { opacity: 0; transform: translateX(-10px) scale(0.85); } to { opacity: 1; transform: none; } }
+.chip-in { animation: chip-in 0.25s ease-out; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+.toast-in { animation: toast-in 0.2s ease-out; }
+@keyframes bigwin { 0% { opacity: 0; transform: scale(0.55); } 18% { opacity: 1; transform: scale(1.06); } 34% { transform: scale(1); } 78% { opacity: 1; } 100% { opacity: 0; transform: scale(1.1); } }
+.bigwin-anim { animation: bigwin 1.7s ease-out forwards; }
+
+/* ===== DREAM CATCHER STYLES ===== */
+.studio-stage {
+  position: relative;
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(126, 62, 220, 0.55) 0%, rgba(20, 8, 44, 0) 60%),
+    radial-gradient(70% 50% at 12% 20%, rgba(41, 197, 214, 0.22) 0%, rgba(7, 4, 15, 0) 65%),
+    radial-gradient(70% 50% at 88% 22%, rgba(244, 197, 66, 0.16) 0%, rgba(7, 4, 15, 0) 65%),
+    linear-gradient(180deg, #170c31 0%, #0b0619 45%, #07040f 100%);
+}
+.studio-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.045) 0 2px, rgba(255, 255, 255, 0) 2px 26px),
+    repeating-linear-gradient(65deg, rgba(255, 255, 255, 0.03) 0 2px, rgba(255, 255, 255, 0) 2px 34px);
+  mix-blend-mode: screen;
+  opacity: 0.5;
+}
+.studio-floor {
+  background:
+    radial-gradient(60% 100% at 50% 0%, rgba(244, 197, 66, 0.16) 0%, rgba(7, 4, 15, 0) 70%),
+    linear-gradient(180deg, #1b1030 0%, #0c0718 100%);
+}
+.panel {
+  background: linear-gradient(180deg, rgba(38, 22, 71, 0.92) 0%, rgba(17, 10, 34, 0.94) 100%);
+  border: 1px solid rgba(178, 140, 255, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 18px 40px -22px rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(6px);
+}
+.panel-flat {
+  background: rgba(12, 7, 26, 0.72);
+  border: 1px solid rgba(178, 140, 255, 0.16);
+}
+.gold-text {
+  background: linear-gradient(180deg, #fff6d6 0%, #f4c542 45%, #a86e10 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.gold-rule {
+  background: linear-gradient(90deg, rgba(244, 197, 66, 0) 0%, rgba(244, 197, 66, 0.85) 50%, rgba(244, 197, 66, 0) 100%);
+}
+.wheel-led { animation: led-chase 1.6s ease-in-out infinite; }
+@keyframes led-chase { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+.pointer-kick { animation: pointer-kick 160ms ease-out; transform-origin: 50% 0%; }
+@keyframes pointer-kick { 0% { transform: translateY(0) rotate(0deg); } 40% { transform: translateY(4px) rotate(-5deg); } 100% { transform: translateY(0) rotate(0deg); } }
+.segment-win { animation: segment-win 1.1s ease-in-out infinite; }
+@keyframes segment-win { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.85; } }
+.wheel-halo { animation: halo-breathe 5s ease-in-out infinite; }
+@keyframes halo-breathe { 0%, 100% { opacity: 0.45; transform: scale(1); } 50% { opacity: 0.8; transform: scale(1.04); } }
+.banner-in { animation: banner-in 420ms cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+@keyframes banner-in { 0% { opacity: 0; transform: translateY(18px) scale(0.9); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+.chip-pop { animation: chip-pop 220ms cubic-bezier(0.2, 1.6, 0.4, 1) both; }
+@keyframes chip-pop { 0% { transform: translateY(-14px) scale(0.6); opacity: 0; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
+.tile-live { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 0 26px 4px var(--tile-glow, rgba(244, 197, 66, 0.6)); }
+.confetti-piece { position: absolute; top: -12px; width: 8px; height: 14px; border-radius: 2px; animation: confetti-fall linear forwards; }
+@keyframes confetti-fall { 0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; } 100% { transform: translateY(110vh) rotate(720deg); opacity: 0.1; } }
+.shimmer::after { content: ""; position: absolute; inset: 0; background: linear-gradient(105deg, rgba(255, 255, 255, 0) 35%, rgba(255, 255, 255, 0.35) 50%, rgba(255, 255, 255, 0) 65%); transform: translateX(-120%); animation: shimmer-sweep 2.6s ease-in-out infinite; pointer-events: none; }
+@keyframes shimmer-sweep { 0% { transform: translateX(-120%); } 60%, 100% { transform: translateX(120%); } }
+.spin-btn-glow { box-shadow: 0 0 0 1px rgba(255, 236, 180, 0.6), 0 10px 30px -8px rgba(244, 197, 66, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.55); }
+.thin-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.thin-scroll::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.04); border-radius: 999px; }
+.thin-scroll::-webkit-scrollbar-thumb { background: rgba(178, 140, 255, 0.35); border-radius: 999px; }
+
+@keyframes pop {
+  0% { transform: translate(-50%, -50%) scale(0.2); opacity: 0; }
+  70% { transform: translate(-50%, -50%) scale(1.15); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+.pop { animation: pop 0.5s ease-out both; }
+
+@keyframes cardDeal {
+  0% {
+    transform: translateY(-30px) rotate(-8deg) scale(0.9);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-card-deal {
+  animation: cardDeal 0.45s ease-out both;
+}
+
+@keyframes modalPop {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-pop {
+  animation: modalPop 0.3s ease-out both;
+}
+
+/* Scroll performance: no always-on repaint animations; fixed backgrounds/blend only on desktop pointers. */
+.btn-gold:not(.game-surface *, .wx-game *), .btn-violet:not(.game-surface *, .wx-game *), .btn-outline:not(.game-surface *, .wx-game *) { animation: none !important; }
+@media (hover: hover) and (pointer: fine) {
+  .btn-gold:hover:not(.game-surface *, .wx-game *) { animation: wx-btn-shine 1.2s ease-in-out 1 !important; }
+  .btn-violet:hover:not(.game-surface *, .wx-game *) { animation: wx-btn-shine 1.2s ease-in-out 1 !important; }
+}
+@media (pointer: coarse), (max-width: 1023px) {
+  .wx-bg { background-attachment: scroll !important; }
+  .wx-particles { display: none !important; }
+  .wx-ripple { will-change: auto; }
+}
+.wx-particles-layer canvas { mix-blend-mode: normal; }
+
+/* Smooth scrolling on every device: fixed backgrounds, live blur and the particle canvas force full repaints each scroll frame. */
+.wx-bg { background-attachment: scroll !important; }
+.backdrop-blur, .wx-glass, [class*='backdrop-blur'] { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+.wx-particles { display: none !important; }

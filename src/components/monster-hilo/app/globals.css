@@ -1,0 +1,11 @@
+/* Scoped Monster HiLo game specific animations */
+@keyframes mh-shuffle {
+  0% { transform: translateY(0) rotate(0); }
+  45% { transform: translateY(-10px) rotate(6deg); }
+  100% { transform: translateY(0) rotate(0); }
+}
+
+@keyframes mh-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}

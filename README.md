@@ -1,0 +1,370 @@
+# winkox
+
+winkox is a Next.js gaming and earning platform with a player lobby, original games, wallet flows, referrals, notifications, support chat, and a role-based admin panel.
+
+## Requirements
+
+- Node.js 20 or newer
+- npm
+- MySQL 8+ or a compatible MySQL/MariaDB server for server-side data
+
+## Install and run
+
+```bash
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000`.
+
+Other commands:
+
+```bash
+npm run typecheck
+npm run lint
+npm run build
+npm run start
+```
+
+## Player quick-bet amounts
+
+Players can open **Customize bet amounts** in their profile and save five distinct quick-bet values (10–50,000). New accounts start with Rs. 10, 20, 50, 100 and 200. Values are stored on the player account and used by the shared preset array consumed by game bet controls. Previously saved amounts below Rs. 10 fall back to these defaults. `npm run test:bet-presets` checks defaults, validation and per-player isolation.
+
+## Player wallet controls
+
+Player-facing games do not offer demo-balance resets, free-credit refills, arbitrary top-ups or balance-reset bonuses. Round restarts, bet selection, statistics-only resets and wallet viewing do not modify funds. Accepted wagers, confirmed winnings/cashouts, valid cancellations/refunds and existing deposit/withdrawal flows retain their original accounting; initial wallet fallbacks are unchanged.
+
+Run `node --test scripts/test-player-wallet-controls.mjs scripts/test-card-wallet-controls.mjs scripts/test-slot-wallet-controls.mjs` for control-removal and preserved-accounting regressions.
+
+## Disclosed 35% daily prize pools
+
+Catalog games use the same disclosed contract, with a **separate daily pool per game**, not one shared balance between games. This is a **different payout contract**, not a change to outcome probabilities: 35% of accepted, non-refunded stakes is the target pool, **including returned stake and profit**; the remaining 65% is retained by the platform. A successful result or cashout locks a provisional gross-return claim (including returned stake and game bonuses), without immediate wallet credit. After the Pakistan UTC+5 day ends and **all** its wagers finish, cryptographically sampled positive weights randomly divide the pool between successful wagers. Zero claims receive no allocation when successful claims exist. If no wager has a positive claim, all accepted stakes are used as weights, including no-win rounds. A sole bettor receives 35% of their eligible stake. Integer largest-remainder allocation and chronological fractional-paisa carry preserve the total budget. Unfinished interactive wagers can delay settlement indefinitely; later days wait for earlier unresolved days.
+
+All game entries mount their native engine directly without the shared pre-game rules, ratio, pool-ledger or consent popup. The shared wrapper still reports game-status and wallet synchronization errors and blocks unsupported wager integrations explicitly. Removing that presentation does not grant consent, activate a pool, alter server accounting or change payment methods. Existing server-side rules-version checks for pool-enabled wagers remain enforced. Teen Patti Royal chips select the displayed stake, which is charged once without an additional boot fee; folding produces a zero claim.
+
+Whole paisa uses deterministic largest-remainder allocation; fractional paisa carries forward per game. Refunds leave the pool. New-mode payouts have no additional house-share/WinHold deduction. Existing accepted legacy wagers retain their old payout and wallet behavior. Pending claims are labelled in-game and in player records; paid amounts appear only after transactional settlement. Pool rules and an explicit acknowledgement are required before new-mode bets; the server checks the rules version.
+
+**Deployment / activation:** the feature is **on by default when MySQL is configured**. Without MySQL, the app retains legacy local-wallet mode rather than requiring a transactional store. Every Node.js server instance starts an in-process scheduler (`src/instrumentation.ts` -> `src/lib/dailyPoolScheduler.ts`) that settles all game pools every minute whenever MySQL is configured, so no external cron is required. Set `DAILY_POOL_ENABLED=false` only to fall back to legacy per-round payouts for new bets. The optional `/api/cron/daily-pools` endpoint remains available for an external scheduler when `DAILY_POOL_CRON_SECRET` is set; do not put the secret in a `NEXT_PUBLIC_` variable.
+
+The scheduler advances abandoned flight reservations (including Aviator X's personal rooms), the twelve multiplayer tables and Dragon Tiger/Andar Bahar, then settles eligible pools. It does not force unfinished interactive wagers to lose. It is safe to retry after errors or downtime: room locks, wallet row locks, immutable wager IDs and settlement state prevent duplicate credit. One failing game does not prevent processing later games; failures are logged and retried on the next tick (the optional cron endpoint returns HTTP 503 with the failed game slugs). Authenticated status reads and game actions also attempt settlement. Monitor scheduler failures; a missing wallet/result or ledger mismatch rolls the transaction back with an explicit server error and requires operator review.
+
+`/api/player/daily-pool?game=<slug>` exposes only the signed-in player's latest 30 pool entries and actual wallet balance. Account reset/deletion is blocked while that account has unresolved pool wagers. History cleanup retains pending pool results/source records; pool audit ledgers are not part of ordinary history cleanup. Disabling new pool bets does not cancel existing pool obligations: keep the scheduler secret and schedule until all accepted wagers settle.
+
+Browser games must use an explicit accepted-wager lifecycle rather than arbitrary wallet deltas. The old balance-delta endpoint rejects new-mode payouts. Unsupported integrations are blocked explicitly instead of silently retaining legacy payouts; check the [browser coverage notes](docs/daily-pool-browser-coverage.md) before activation. Drain legacy browser sessions before enabling the new contract; do not switch an already debited legacy round to a new-pool claim.
+
+Run `npm run test:daily-pool` for mock-transaction accounting, all twelve multiplayer integrations, dedicated game/browser lifecycle checks, UTC+5 boundaries, carry, fallback allocation, >1,000 entries, claim/refund idempotency, rollback and legacy compatibility. No real-money wagers are made by these tests.
+
+### Card-game selection and Plinko prize cycles
+
+New wagers in the 25 card titles enumerated in `src/lib/cardGameRules.ts` use **instant wallet accounting**, independently of `DAILY_POOL_ENABLED`. Accepted stakes are debited by the server, and confirmed round winnings are credited transactionally; browser balance changes are not a substitute for server confirmation. `/api/player/daily-pool` reports pool mode disabled for these new card wagers while continuing to expose older pool entries. Existing accepted `poolVersion` wagers remain governed by their original deferred settlement contract and must not be paid twice or retroactively converted. Non-card game accounting and payment methods are unchanged. Run `node --test scripts/test-card-wallet-policy.mjs` for policy/API coverage.
+
+Server-cycle migration covers all 20 browser card titles in `SERVER_BROWSER_CARD_GAMES`: Poker, Poker Betting, Muflis, Best of Four, AK47, Red vs Black, Three Cards, Amar Akbar Anthony, Bollywood Casino, Faceoff, Hukam, Joker, Blackjack, Monster Hi-Lo, Rummy, Teen Patti, Teen Patti 999, Texas Hold'em, Three Card Poker and Casino War. Cards, validated moves, extra stakes and payouts are server-authoritative. Each completed cycle assigns ten winning slots to 100 distinct players; repeat players cannot draw another slot during that cycle. A fold, surrender or other player decision can forfeit a winning opportunity, so assigned slots do not guarantee ten actual profitable finishes for arbitrary play. Surrender can legitimately return part of a stake without being a profitable win.
+
+New Dragon Tiger, Andar Bahar, Baccarat, Speed Baccarat and 32 Cards wagers use player-specific rounds, not a common public result. Their server cycles assign ten winning opportunities per 100 distinct admitted players; repeat players do not draw again in an unfinished cycle. A new private round's gross return, including returned stake and any existing hold, is capped at 2x the accepted stake. Old already-accepted shared wagers retain their original cards, paytable and accounting contract; they must finish before that player switches to the personal table. Guest spectator rounds never reveal another player's private cards or wagers.
+
+For 32 Cards, the ten winning opportunities comprise eight EVEN and two ODD results, referring to the **final total of the winning hand**, not Player 8/9/10/11's base number. A main-player spot can win with either parity; an EVEN/ODD side spot can win only with its matching parity. If only incompatible winning slots remain, the server refuses that side bet before debiting funds; a compatible spot is needed to finish the cycle. This quota cannot make 100 EVEN-only bettors include two genuine ODD-bet winners.
+
+Baccarat, Speed Baccarat and 32 Cards lock the first selected spot for that personal round (including previously accepted queued rounds and after cancellation); repeated chips on the same spot remain supported. Covering multiple outcomes is rejected explicitly. Cancelled stakes are refunded once, but cancellation does not redraw the assigned slot; a cancelled winning opportunity can therefore leave fewer than ten actual paid wins. Exact ten-win tests assume admitted players finish their accepted rounds. The existing 2% hold is included in, not added above, the 2x gross cap. The pre-migration shared-room regression fixture remains separate from the real private-table integration tests in `scripts/test-private-card-tables.mjs`.
+
+Allocation-based browser tables require a selection that can produce both a genuine profitable win and a zero-return result. Fully covering every outcome or side-bet combinations that cannot satisfy both are explicitly rejected before consuming a cycle slot; players can undo or clear those bets. Existing bet controls remain visible. Interactive tables keep accepted wagers open between moves, validate every action under the game transaction lock, and restore their saved public state after reload. Client-supplied payouts and post-deal refund, stake-reduction or arbitrary extra-stake requests are rejected; only validated table moves can settle the wager or add a stake.
+
+Previously accepted pooled card wagers other than Poker retain their `TEN_WIN_POOL_GAMES` settlement rules. That selection targets 10 winning wagers per 100 accepted wagers, choosing from positive provisional claims when available. It can pay fewer if there are fewer eligible claims. It is not a ten-distinct-player outcome guarantee. Per-wager targets remain 1x-2x, subject to the available daily budget. New instant-accounting card wagers do not enter that settlement lottery. Native card layouts and dealing animations are unchanged.
+
+Poker uses a server-authoritative game-wide cycle instead of the former browser-side 35% random roll. Each completed cycle of 100 distinct players contains exactly ten winning slots and ninety no-win slots. Repeated players within the unfinished cycle receive no extra draw. Winner selection, the matching ten-card deal, the confirmed payout and the consumed slot commit together under the per-game transaction lock. Duplicate requests return the same deal, and failed transactions do not consume slots. The existing hand paytable and reveal timing remain unchanged. New wagers reject unverified client claims; previously accepted client-terminal wagers can still finish with their saved original result. Recovery resolves accepted new wagers on the server without placing another stake.
+
+Previously accepted Poker pool obligations still use `EXACT_CLAIM_POOL_GAMES`: daily settlement allocates their available pool against server-generated claims without a second winner-selection lottery. That old pool budget can still reduce individual payments; new instant wagers do not enter it. Run `node --test scripts/test-poker-player-outcomes.mjs scripts/test-browser-recovery.mjs` for complete 100-player cycles, matching card scores, wallet settlement, concurrency, retries, rollback, repeat-player restrictions and reload recovery.
+
+Run `node --test scripts/test-browser-card-outcomes.mjs scripts/test-card-remaining-deals.mjs scripts/test-interactive-cards.mjs scripts/test-card-wallet-policy.mjs scripts/test-browser-recovery.mjs` for the browser-card migration, validated interactive moves, covered-allocation rejection, wallet bypass prevention and accepted-wager recovery.
+
+### Roulette player cycles
+
+All five roulette titles (European Roulette, Auto Roulette, Lightning Roulette, Mini Roulette and Poker Roulette) now generate personal server-authoritative results with ten winning slots per completed cycle of 100 distinct admitted players. This is not a shared public wheel that denies payment to otherwise winning bets. Repeat players in an unfinished cycle do not receive another slot. A new round's **combined gross return is capped at 2x its total accepted stake**, including returned stake and any existing hold; base odds or lightning boosts cannot exceed that cap. Winning spots and the revealed number/cards agree with the confirmed payout. Compatible multi-spot allocations remain supported; covering all outcomes or preventing either a genuine profitable win or a zero-return result is explicitly rejected.
+
+New roulette wagers use instant accounting regardless of `DAILY_POOL_ENABLED`: acceptance debits the stake, and verified settlement credits the winnings once. Arbitrary roulette balance deltas and unverified new client terminal claims are rejected. Existing accepted shared/pool wagers retain their original cards/wheel, paytable and deferred contract. Auto and Lightning Roulette finish old shared obligations before opening the player's personal table; guests cannot see another player's personal number, bets or history. Personal live rounds select a slot only after betting closes, and fully cancelled rounds consume none. Duplicate requests and database rollback cannot debit, credit or consume a slot twice.
+
+Run `node --test scripts/test-browser-roulette-outcomes.mjs scripts/test-private-roulettes.mjs scripts/test-multiplayer-wheels.mjs scripts/test-card-wallet-policy.mjs scripts/test-browser-recovery.mjs` for all five roulette 100-player cycles, wheel/payout agreement, multi-spot caps, privacy, cancellation, queued bets, rollback, repeat-player restrictions, immutable recovery and old shared/pool-wager compatibility.
+
+### Continuous card and roulette rounds
+
+Three Card Poker accepts custom whole-rupee chips from Rs.10 upward, subject to available funds and wallet precision, without a Rs.1,000 table limit. Ante and optional Pair Plus can be added or cleared before dealing. Play becomes available after an Ante hand is dealt and debits exactly the Ante amount once; it is not an independent pre-deal wager. Dealt hands still reject unverified stake changes. The Play spot and footer button use the same verified action.
+
+Texas Hold'em submits the chosen custom opening stake unchanged and validates it against the freshly fetched wallet, not a stale input maximum. The house matches high-value opening stakes rather than limiting them to its old Rs.100,000 stack. Raise-to amounts are validated explicitly; invalid or unaffordable raises are refused instead of silently reduced or increased. Calls and both sides' raises reconcile with the pot. New hands retain the ten-winning-slot cycle per 100 distinct admitted players and cap the combined gross return at twice the total actually accepted stake (opening bet plus later calls/raises); result frames, logs and wallet credit use that same capped return. Already dealt hands without the new cap marker retain their original contract. Run `node --test scripts/test-texas-holdem-ui.mjs scripts/test-browser-card-autoplay.mjs scripts/test-interactive-cards.mjs` for exact custom/crore wagers, two complete 100-player cycles, repeated players, raise accounting and replay-safe capped settlement.
+
+Thai Hi-Lo uses server-verified dice for all five sides, with ten winning results per completed 100-distinct-player cycle. Repeated players cannot draw another winning slot within the same cycle; spectator rounds draw none. Each new winning wager returns 2x its accepted stake (including the original stake), including Triple. New wagers debit/credit the wallet immediately regardless of the daily-pool flag; previously accepted pooled wagers retain their original contract. The selected side is saved before acceptance for recovery, and only the confirmed server dice are revealed. Mobile headers keep the title separate from the wallet/actions, and the full-width custom amount field preserves the entered amount without clamping it to a stale balance. Run `node --test scripts/test-thai-hi-lo.mjs scripts/test-live-other-tables.mjs scripts/test-browser-recovery.mjs` for quota, accounting, replay and continuous-round regressions.
+
+All 25 card titles and five roulette titles run successive rounds while the table is open, including when no player places a stake. Browser-only spectator deals and spins are presentation-only: they do not call wager-resolution endpoints, debit or credit a wallet, create personal wager results or consume player win-cycle slots. Accepted interactive hands suspend spectator previews until their valid actions finish. Dragon Tiger and Andar Bahar also generate independent unwagered server deals instead of leaving their cards empty. Live tables advance from server deadlines and catch up when accessed.
+
+New card and roulette bets are accepted only in the current open betting window. Once dealing/spinning starts, next-round bets and early reservations are blocked in both UI and server transport; another wager must wait until the following round opens. Compatible repeated chips during an open window and explicit auto-bet controls remain available. Previously accepted queued wagers still finish or refund under their original contract; rounds never implicitly replay a manual stake.
+
+Run `node --test scripts/test-browser-card-autoplay.mjs scripts/test-live-wheel-rounds.mjs scripts/test-live-other-tables.mjs scripts/test-live-card-rounds.mjs scripts/test-private-card-tables.mjs scripts/test-private-roulettes.mjs scripts/test-multiplayer-client.mjs scripts/test-game-entry-notice.mjs` for unwagered cycles, active-wager isolation, closed-round guards, preserved accounting and direct game entry without a rules popup.
+
+### Slot player cycles and payout limits
+
+Lucky 777, Treasure Bowl, Fortune Ox, Fortune Gems, Fortune Toucan, Gates of Olympus, Diao Chan and Hotline now join Super Fruits and Sweet Bonanza in using server-authoritative results: ten positive-return opportunities per completed cycle of 100 distinct admitted players, per game. Repeat players cannot draw another winning slot within an unfinished cycle. Results, consumed slots and verified wallet settlement commit transactionally; rejected bets, retries and rolled-back transactions cannot create extra wins.
+
+New slot wagers debit on acceptance and credit confirmed returns directly, regardless of `DAILY_POOL_ENABLED`. Each paid wager's **combined gross return, including bonus/free spins, returned stake and any hold, is at most 2x the stake**: Rs.100,000 cannot create a new Rs.400,000 return. Base paytable values do not override the paid-wager cap. Super Fruits keeps its five cherry, three lemon and two orange allocation; Sweet Bonanza keeps its 1.2x/1.4x/1.6x returns. A positive return at or below 1x is not profit. Old accepted client-terminal and pool wagers retain their original completion and deferred settlement contracts; deposits and withdrawals are unchanged.
+
+Run `node --test scripts/test-slot-player-outcomes.mjs scripts/test-slot777.mjs scripts/test-fruit-player-outcomes.mjs scripts/test-browser-slot-engines.mjs scripts/test-browser-recovery.mjs scripts/test-card-wallet-policy.mjs` for complete distinct-player cycles, result/payout agreement, combined limits, replay/rollback, wallet accounting and legacy recovery.
+
+Plinko's server cycle assigns ten positive-return slots per 100 distinct players: two at 0.2x, five at 1.3x and three at 0.9x. The other ninety slots return 0x; repeating a player within an unfinished cycle does not draw another slot. Returns below 1x are partial stake returns, not profit. Risk/row settings do not change this distribution. The board extends to a clearly marked **25x scale marker with a 0% payout chance**, not a payable prize. The maximum payable bucket is 1.3x. Pending claims remain subject to the existing pool budget; non-pool mode samples the same prize proportions probabilistically, without guaranteeing a fixed 100-player cycle.
+
+The updated Plinko cycle uses a separate `plinko:prizes-v2` identity, leaving old accepted wager/replay records and the old cycle untouched. Mock-transaction tests run two complete 100-player cycles, retries and settlement, and verify the 10/100 daily selection for the other 24 listed card games. Run `node --test scripts/test-plinko-multipliers.mjs scripts/test-daily-pool.mjs`.
+
+## Crash-game page lifecycle
+
+Crash Bonus, Crash Cricket and Crash Goal stop local animation frames and sound when leaving the game. Hidden tabs suspend their local animation loops and silence audio; returning catches up from the existing round timestamps rather than pausing or cancelling an accepted wager. Cricket's continuous flight sound is released on navigation and restarts only when the game is visible and in flight. Server-side wagers and settlement are unchanged. Run `node --test scripts/test-crash-page-lifecycle.mjs` for lifecycle regression checks.
+
+## Environment configuration
+
+Create a local `.env` file. Do not commit it.
+
+```env
+MYSQL_HOST=
+MYSQL_PORT=3306
+MYSQL_DATABASE=winkox
+MYSQL_USER=winkox_user
+MYSQL_PASSWORD=replace-with-your-password
+MYSQL_SSL=false
+NEXTAUTH_SECRET=replace-with-a-random-secret-at-least-32-characters
+
+SUPER_ADMIN_NAME=Super Admin
+SUPER_ADMIN_ID=WX-ADM-0001
+SUPER_ADMIN_USERNAME=superadmin
+SUPER_ADMIN_PHONE=03000000000
+SUPER_ADMIN_PASSWORD=replace-with-a-strong-password
+SUPER_ADMIN_DEPOSIT_LIMIT=0
+```
+
+`MYSQL_HOST`, `MYSQL_DATABASE`, `MYSQL_USER`, and `MYSQL_PASSWORD` must point to a reachable database. For hosted MySQL, replace `127.0.0.1` with the database host supplied by the hosting provider and use the provider's SSL requirement.
+
+All application data is stored in MySQL. Browser-side database access and LocalDB fallback are disabled. Configure a reachable MySQL database before running the app; missing or unreachable MySQL configuration causes data operations to fail rather than writing to a local store.
+
+## Database setup
+
+The application creates its JSON-backed tables on first server connection. To test the configured MySQL connection and ensure the tables manually, run:
+
+```bash
+node scripts/test-mysql.mjs
+```
+
+The script requires the same `MYSQL_*` variables as the application and does not create a database; create the database and user first.
+
+Financial transactions replace a failed connection at most once while checking the connection, setting isolation, or starting the transaction, before acquiring the game lock or running any wallet work. Connection failures after that point, including a lost commit response, are surfaced without replay to avoid duplicate payouts. Run `node --test scripts/test-multiplayer-store.mjs` for these boundaries; persistent connection resets still require a reachable database.
+
+Live chat uses the `supportthreads` and `supportmessages` JSON-document tables. The application creates them on startup; to create them manually, run [scripts/live-chat-schema.sql](scripts/live-chat-schema.sql) against the selected database. Users must sign in again after deploying the authenticated chat update so the server can issue a secure session cookie.
+
+The schema reference for Hostinger deployments is in [scripts/hostinger-schema.sql](scripts/hostinger-schema.sql). The runtime model abstraction is in [src/lib/db-model.ts](src/lib/db-model.ts), with MySQL connection handling in [src/lib/mysql.ts](src/lib/mysql.ts).
+
+## Gregmorn provider games
+
+The Gregmorn seamless-wallet integration defaults to the Stage hosts from the OpenAPI specification (`https://office-api-dev.helcenac.com` for login/catalogue and `https://client-api-dev.helcenac.com` for game launch). After Stage acceptance, configure `GREGMORN_OFFICE_API_URL=https://office-api.gregmorn.org` and `GREGMORN_CLIENT_API_URL=https://client-api.gregmorn.org` for Production. Configure `GREGMORN_API_LOGIN`, `GREGMORN_API_PASSWORD`, and `GREGMORN_HMAC_SECRET` as server-only environment variables; never expose them as `NEXT_PUBLIC_*`, commit credentials, or use the sample credentials in the OpenAPI document. Set `GREGMORN_CURRENCY`, `GREGMORN_LANGUAGE`, `GREGMORN_EXIT_URL`, and register the HTTPS `GREGMORN_CALLBACK_URL` per currency in the Gregmorn BackOffice. The callback endpoint is `/api/gregmorn/wallet`.
+
+Launch errors display a safe support code identifying the failing stage or provider rejection class (for example `signature_rejected`, `wallet_callback_rejected`, or `session_registration`). Server logs include the stage. Raw provider rejection messages, request signatures and game-session URLs are not returned in error responses. A successful launch does not prove that signed wallet callbacks can reach the deployed HTTPS endpoint.
+
+Provider games appear in the public lobby and All Games page when the provider enables them for the configured currency; launching requires an active player account. Launch uses the signed-in player's unique display ID. The callback verifies the raw-body HMAC-SHA256 signature, maps the session to the local wallet, applies debit/credit atomically in MySQL, rejects insufficient funds, and makes writeBet/rollback callbacks idempotent by provider transaction ID. Missing API credentials or signing secrets fail closed; no sample credentials, fake wallet, or cached wallet balance is used. Confirm the provider's Stage/test credentials, signing secret, PKR currency, and callback source IPs before enabling the integration. Provider-game outcomes are generated by Gregmorn and credited through its signed callbacks, so the platform's local game win-cycle/multiplier policies do not govern those external outcomes. Do not send real-money wagers until a callback-check test confirms the provider reaches this endpoint successfully.
+
+### Provider-only panel
+
+The panel shows every enabled game returned by the provider catalogue, from every provider, including multiple providers' versions of the same title. The earlier screenshot-name selection remains available in [src/lib/gregmornSelection.ts](src/lib/gregmornSelection.ts) but is not applied. Admins can still switch individual games off or mark them Hot.
+
+Lobby, All Games and admin game/restriction lists display a responsive twelve-card skeleton while their catalogue request is pending. Individual thumbnails retain their own image-loading and unavailable-image states. Skeleton animation respects reduced-motion preferences.
+
+The lobby uses the original two-row horizontal game slider with swipe/scroll and previous/next arrows. Admin-selected Hot Games come first, followed by the remaining provider games; the heading changes to All Games as the player scrolls into the latter. Approaching the rendered end appends more cards automatically without a Load More button. All Games and admin lists retain their explicit Load More controls.
+
+The panel now displays only Gregmorn games. Local engine files, assets, saved game settings and historical wagers remain intact. `LOCAL_GAMES_CONNECTED` in [src/lib/gameAvailability.ts](src/lib/gameAvailability.ts) is false: both local game URL entrypoints redirect to All Games, and new local wagers are rejected by the balance, dedicated and multiplayer APIs. Existing cancellation, resolution, cashout and scheduled settlement paths remain in place; no old wagers or wallet balances are reset.
+
+Admins use the existing Games page to switch API games on/off and choose Hot Games. Player restrictions also use the current API catalogue. Settings are stored under case-sensitive provider-ID-derived `gregmorn-` slugs in the existing games collection, separately from local settings. Provider-disabled entries cannot be re-enabled by local settings. The original Mini Games, Cards, Live Casino, Sports, Slots, Fishing and Lottery category cards and images remain in the lobby and All Games, alongside All/Hot selection. All Games supports provider selection, search and incremental rendering. No category labels are guessed for provider games because the catalogue supplies a provider, not a game category: selecting a category other than All/Hot explicitly explains this limitation and shows the enabled provider catalogue until category assignments are available.
+
+Provider games use the same `users.balance` funded by existing deposit approvals and used by withdrawals; no separate transfer wallet or new payment method is added. Each accepted `writeBet` callback records its stake/credit atomically in the existing game results table for player history and admin reports. Retries do not duplicate records. Rollbacks zero the refunded stake in reporting. These records count provider financial transactions, which may be separate bet and payout callbacks rather than one row per round. Disabling/restricting a provider game prevents launches and new positive-stake callbacks but still permits existing callback replays, win-only credits and refunds.
+
+Run `node --test scripts/test-provider-panel.mjs scripts/test-gregmorn.mjs scripts/test-multiplayer-store.mjs` for provider catalogue controls, launch restrictions, wallet reporting/replay protection and local-game disconnection regressions. Restoring local play later requires deliberately restoring its catalogue surfaces and removing the gate; changing this flag alone does not replace the provider-only UI.
+
+## Live table rounds
+
+Live crash, racing, wheel, roulette and autonomous card-table rounds continue animating and restart while the player watches. Watching a round is not a wager: it must not deduct or credit a wallet, create personal win/loss records, increment personal session statistics, or open a personal game-over dialog. Public round results may still appear.
+
+Card and roulette tables reject new bets after the current betting window closes; the player must wait until the following round opens. Their previously accepted queues remain supported. Other local-engine games retain an uncharged next-round queue, cancellation and wallet revalidation before activation. Other shared multiplayer games reserve accepted queued wagers on the server and support cancellation/refunds before the relevant round starts. Active-round settlements use a separate snapshot so changing an existing next-round queue cannot change the current result. Existing payout rates and explicitly enabled auto-bet controls are retained; a manual bet does not implicitly repeat.
+
+Aviator's countdown is independent of bets: placing or cancelling a bet neither starts, resets nor pauses the flight timer. Its state polling allows only one request at a time, times out after 15 seconds, cancels on unmount, and reports a connection interruption while retaining the last state. Unchanged wallet values do not repeatedly trigger session refreshes. Personal interactive games such as Chicken Road, Chicken Dash and Mines retain their player-controlled rounds.
+
+Aviator applies a committed bet receipt to its panel and balance immediately, without waiting for the slower history/state refresh. A read started before confirmation cannot erase that reservation. Its bet requests opt into next-flight queuing if the countdown closes while the request is processing; duplicate panel reservations are still rejected and the wallet is charged only for an accepted wager. The next-round countdown follows the confirmed crash time, pause and betting-window duration even when a full-state read is delayed. Aviator X retains its existing submission behavior.
+
+Aviator alone uses an original Three.js/WebGL2 presentation: a shaded red 3D plane, perspective forest, road, river, bridges and textured city buildings, large multiplier and crash/countdown labels, two side-by-side betting panels and a scrollable real-bet table. Its compact header follows the other games (lobby arrow, game name, balance, deposit, sound and menu). Game, Results and Rules tabs retain access to personal history, top wins, round history, presets and auto controls. Persistent instanced meshes do not switch types during flight; landscape segments recycle only behind the camera and beyond the distant fog. Motion is frame-rate independent and the world is not rebuilt on bets, polls, countdowns, crashes or sound changes. Rendering resources are released on unmount. WebGL startup/context failures display an explicit warning without changing bets. The scene follows the shared clock but never chooses a result. Aviator X retains its existing graph, three panels and presentation. No reference-video artwork or recorded betting data is bundled.
+
+Run `npm run test:aviator-ui` for scenic controls, spectator labels, real history, 3D world continuity, frame-rate-independent motion, geometry cleanup and shared Aviator accounting regressions.
+
+Framed games use their own headers, without an additional shared title or wallet bar. The shared game surface has a bounded viewport height and scrollable overflow, keeping Chicken Road 2/Chicken Dash controls visible and Blast Off's flight deck nonzero on desktop and mobile. Aviator reserves desktop space for betting controls while retaining its mobile scene sizing. Auto Roulette maps default and profile-customized chip amounts to its existing color palette instead of requiring an exact denomination match. Run `node --test scripts/test-game-frame.mjs scripts/test-multiplayer-wheels.mjs scripts/test-multiplayer-dice-crash.mjs` for frame, chip and live-round regressions.
+
+The Aviator history strip keeps a History toggle without a round-ID block; sound is controlled only from the game header. The continuous landscape contains fixed woodland and denser waterfront districts, varied building heights, balconies, rooftop equipment and promenade lighting. These are original procedural visuals, not an exact reproduction of the reference game's artwork.
+
+Run `npm run test:live-rounds` for spectator cycling, next-round isolation, cancellation, funding revalidation, no implicit replay, duplicate-action guards, and unmount cleanup. Tests run actual component logic with virtual clocks, animation doubles, and in-memory wallets/models; they do not place real-money bets or modify production player data.
+
+Blackjack's opening cards are staggered by 650ms, with 1.1 seconds to review each dealer reveal. Its result message waits until the reveal and result-review sequence finishes; wallet settlement is not delayed by the animation. Andar Bahar deals one card every 900ms, including long hands, and its shared round deadline includes the full dealing animation. These presentation timings do not change cards, winners or payouts. Run `node --test scripts/test-blackjack-timing.mjs scripts/test-card-dealing.mjs scripts/test-live-card-rounds.mjs` for timing and shared-table regressions.
+
+### Shared multiplayer tables
+
+Aviator, Dream Catcher, Football Studio, Sic Bo, Blast Off, 9 Wickets Live, 7 Up 7 Down and Tai Xiu use shared server rounds. Everyone watching the same shared table sees the same round number, deadlines and outcome; opening or reloading does not create another round. Dragon Tiger, Andar Bahar, Baccarat, Speed Baccarat, 32 Cards, Auto Roulette and Lightning Roulette instead use the personal server tables described above for new wagers; their previously accepted shared wagers keep the original contract. Aviator X and unlisted games retain their existing behavior.
+
+Live betting activity contains only accepted real player wagers, showing the masked username, betting option and amount. Empty tables explicitly say no bets have been placed. Guests can spectate but cannot wager. No bots, generated bettor names or synthetic winning feeds are added.
+
+The visible countdown is the betting window: accepted wagers reserve the stake immediately, remain cancellable before zero, and lock when the countdown reaches zero. There is no early half-second cutoff. The game then runs automatically even with no wagers. Card and roulette submissions received after zero are refused until the following window opens; other tables retain their explicit next-round reservations. Network-delayed requests with an outdated round target are rejected rather than silently charged to a different round.
+
+The twelve newly migrated tables use `GET/POST /api/multiplayer/[game]`; Aviator and the two original card tables retain their existing endpoints. MySQL transactions and per-room row locks coordinate workers, reserve/refund funds and settle actual wagers together with their records. The new persistence tables are `multiplayerlocks`, `multiplayerrooms` and `multiplayerrequests`; runtime initialization creates them without requiring a running development server to restart. A database error leaves the last displayed state visible with a connection warning rather than falling back to a local financial result.
+
+Shared-round lookups compare typed JSON scalar values on both MySQL and MariaDB, with numeric round ordering (so round 10 follows round 9). This keeps the existing flight/countdown anchored across polls instead of recreating round 1.
+
+Shared-table outcomes are selected once on the server and are not rerolled to suit an individual player's betting side. Their clients animate the shared outcome using server deadlines; crash points stay private until the crash. Existing payout rates, win-share deductions and explicit auto-bet settings remain applicable to those shared contracts. New personal card and roulette wagers instead follow the matching outcomes, winner cycles and return caps documented above.
+
+Agent account resets/deletions also remove the selected players' multiplayer wagers and owned request receipts in the same transaction, so removed accounts cannot leave an unsettled room blocked. Selective game-history cleanup removes only eligible settled wagers, retaining pending wagers, other players' data, shared public results and wallet balances.
+
+Polling is single-flight with a 15-second timeout, aborts on unmount and only broadcasts changed server balances. Mutations have a 20-second timeout; after an uncertain response, check the accepted wager before submitting again. Rounds advance from server deadlines when accessed, including settlement of reserved bets after viewers leave; this does not require a permanent timer process on the hosting server.
+
+Run `npm run test:multiplayer` for shared multi-player outcomes, real activity/privacy, server-time animation, N+1 queues, refunds, request replay, financial rollback, spectator isolation and client cleanup. These automated tests use mock transactions and virtual browser clocks, not real-money wagers.
+
+## Chicken Dash presentation
+
+Chicken Road 2 has its own original shaded white chicken with large yellow eyes, red comb, rounded wing and orange feet. Breathing/blinking use the animation clock; alternating feet, wing lift and squash follow the existing hop progress without changing lane timing, traffic, collisions or settlement. Chicken Dash and the existing Chicken Road 2 death artwork remain unchanged. `npm run test:chicken-traffic` also covers the Chicken Road 2 visual pose and canvas-state balance.
+
+Chicken Dash uses blue-grey asphalt, stationary dashed lane markings, grassy verges, blue crossing barriers and circular multiplier markers. A single side-facing chicken has time-based alternating legs, wing motion and a smooth hop; its existing collision/death artwork is retained. Decorative coin particles are hidden; existing bonus-bag calculations are retained. The camera retains the original 900-unit width basis on phones so more multiplier tiles are visible; multiplier values and level lengths are unchanged. The road fills the available scene height without stretching the chicken or vehicles, and traffic travels only from top to bottom. Stopped vehicles leave a clear gap before crossing barriers, accounting for each vehicle's height.
+
+New Chicken Dash rounds have a 35% chance of allowing profitable play. The other 65% crash no later than the first profitable cash-out tile or earliest bonus-bag tile, so early cash-out cannot turn a losing-band round into a profitable one. Cashing out before net payout exceeds the stake can still return less than the stake. Existing active rounds retain their saved crash lane; individual sessions are random, not guaranteed 35/65 batches.
+
+Shared game-result dialogs display "You lose" for losses. Close dismisses the result without leaving the current game; Play Again retains its existing restart behavior.
+
+The live Chicken Dash chicken has a fuller rounded body; collision/death artwork and existing pre-play scene animations are unchanged. When a crossing barrier appears, approaching or overlapping traffic is held behind it using the entire vehicle bounds and a minimum 14 CSS-pixel gap, including after viewport resizing; vehicles already fully past the barrier continue downward.
+
+Chicken Road 2 scales cars up on narrow canvas viewports (up to 1.5x), keeping their width within the lane; parked stop positions account for the scaled height and preserve at least 14 CSS pixels of barrier clearance. Its losing-round collision animation and outcome logic are unchanged.
+
+Both Chicken games clamp overlapping vehicles back to the upstream stop position when a safe-lane barrier appears, rather than freezing them on the chicken's side. Fully departed traffic continues off-screen, including in blocked Road 2 lanes. Stop positions are recalculated after resizing. Run `npm run test:chicken-traffic` to check whole-vehicle clearance across car types and mobile/desktop scales.
+
+Chicken Road 2 shares Chicken Dash's live chicken renderer (fuller body, animated legs/wings and smooth hopping), blue-grey road palette, grassy curbs, blue barriers and circular multiplier markers. Its canvas fills the stage height on mobile without stretching the artwork. Road 2 keeps its own identity, four difficulties, multiplier tables, vehicle types, server rules and existing death artwork; decorative coin particles are not displayed.
+
+Both Chicken games only restore an active round when the server returns an active wager. Safe-lane traffic remains visible as it brakes at barriers; game outcome rules remain server-controlled.
+
+## Lobby shortcuts and first-deposit bonus
+
+The lobby has individually dismissible WhatsApp Channel, referral Share and 5% Deposit floating shortcuts. The existing app-download shortcut remains and can also be dismissed. Dismissals are component state only: a full reload restores the icons, without clearing app-install detection. WhatsApp uses **Admin > Platform Settings > WhatsApp Channel** (an HTTPS `whatsapp.com/channel/...` link); an unconfigured channel displays an availability message rather than opening a placeholder support number. Signed-in players share their own referral URL using native sharing, with clipboard fallback; guests are sent to login. Deposit opens the existing deposit page.
+
+The lobby has a 44px avatar beside a stacked name, Credit Score and balance capsule; Deposit, Withdraw and More remain on the right. The balance capsule fits its contents, with refresh directly after the amount rather than pushed to the far edge. Long balances wrap rather than truncate. The three floating shortcuts sit below navigation and modal layers at 65% opacity, becoming fully opaque on hover or keyboard focus; Deposit has a reduced-motion-aware attention ring.
+
+The home leaderboard shows and edits only ranks 1–3, using the gold, silver and bronze artwork in `public/Top_3_Leaderboard_Ranks`. Live Wins stays above the category mosaic on desktop and immediately below Jackpot on mobile. It loads the latest 24 settled positive-payout wins across active games, with matching artwork and masked real player names, and refreshes every 30 seconds while visible. Unplayed games, losses, pending rounds, and games without a winning record have no cards. No sample names or amounts are generated; an empty feed shows "No recent wins yet."
+
+Live Wins cards use compact content-sized widths, larger game artwork, and separate username, game name, and amount lines. The feed scrolls automatically back and forth when it overflows, pauses during hover/focus or manual interaction, and respects reduced-motion preferences.
+
+Admin-selected Hot Games occupy complete two-row slider pages; unused positions are left empty instead of showing non-hot games. Remaining games follow horizontally. Native swiping uses proximity snapping, and previous/next controls move smoothly by one page (without animation when reduced motion is requested).
+
+The deposit page uses the website's shared background and button theme, gold payment selections, a square-cornered layout, supplied bank icons, preset amounts and a promotion disclosure. There is no extra Withdraw link beneath the deposit form. The four methods are Easypaisa, JazzCash, Raast and QR. Admin Payment Accounts supports a separate Raast account/ID/IBAN and optional QR upload, with the same referring-admin/shared-pool assignment rules. QR lets players choose among assigned accounts with an uploaded QR. Unconfigured methods remain unavailable rather than using another provider's account. Raast uses the existing manual proof and admin approval flow; withdrawals and external gateways still support only their existing providers. Bonus previews use actual first-deposit eligibility from the wallet endpoint and the same rounded 5% calculation as approval. Previews never credit money.
+
+Only the first approved deposit earns an extra 5%, rounded to two decimal places. For example, Rs.300 credits Rs.315. Pending/rejected requests do not earn a bonus. Players with any earlier approved deposits or recorded deposited total are not retroactively eligible. Existing referral commissions and VIP calculations continue to use the deposit principal, excluding this bonus.
+
+Deposit approval locks the user's wallet and pending request in one MySQL transaction, committing the approval, principal, bonus marker and congratulatory notification together. Repeated approvals cannot credit twice; simultaneous deposits for one player award at most one first-deposit bonus. Any failure before commit rolls back those writes. The transaction records `firstDepositBonus` and the user records `firstDepositBonusTransactionId`. The player receives a success notification and the existing congratulations popup (checked while the page is visible); wallet balance is refreshed when the popup arrives.
+
+Aviator and Aviator X support multipliers up to 10,000x, including random crash points above 50x. The existing 35/65 crash-generation bands and daily-pool rules are unchanged. Flight presentation ignores stale updates and displays the previous round's confirmed crash before resetting for a newer round.
+
+## Aviator flight rendering
+
+Aviator and Aviator X use separate player-scoped rounds. Without an accepted bet, the plane stays idle; the first successful bet starts the six-second countdown. Additional panels can join during that countdown; bets made during flight queue for that player's next round. Cancelling all current-round bets stops the countdown. Guests stay idle until login and betting. Existing pending shared-round bets are adopted into the player's first personal round, keeping their stakes and panel slots. The existing 35% high-multiplier / 65% low-multiplier crash distribution and payout formula are unchanged; actual wins still depend on cashing out before the crash. Player-scoped rounds are not globally capped, so another player's new round cannot evict an active round.
+
+Both games draw their flight with a continuous multiplier on each animation frame; only the displayed/betting multiplier is rounded to two decimals. Server-clock corrections are applied gradually using a monotonic animation clock, and stale polling responses are ignored. The canvas backing buffer is resized only when its dimensions change, avoiding periodic clears during flight. Both tables use a scalable side-view propeller biplane, preserving their existing theme colors and server-controlled betting/crash rules.
+
+## Authentication
+
+Player-facing sessions include a permanent random seven-digit `displayId` (1000000-9999999), generated using Node's cryptographic random generator. The `player_display_ids` MySQL table stores it in the unique `random_id` column; collisions are retried, and repeat/concurrent requests reuse the saved value. On first use after upgrading, the application adds this column and assigns existing sequential-ID players a random ID once, without deleting their old mapping. The database user must have permission to alter this table. Internal user IDs, login credentials, referrals, and wallet relations are unchanged. The player menu, profile, and profile details provide an ID copy button with success/failure feedback (clipboard access requires HTTPS or localhost); the lobby account card does not display the ID. The profile displays this numeric ID, a fixed presentation-only `Credit Score: 100` (not a risk/scoring system), and a Pakistan flag beside the PKR balance capsule. Refresh failures keep the displayed balance and show an explicit error.
+
+On first initialization, the configured `SUPER_ADMIN_*` values are used to create the super-admin account if it does not already exist. There are no guaranteed built-in demo client, agent, or sub-admin accounts.
+
+Players manage account security at `/player/profile/security`. Google Authenticator setup requires the current password and a valid time-based code; once linked, a fresh code protects updates through the Security Center API, not login. Login uses the account password without an authenticator-code field or TOTP check. Secrets are encrypted using `NEXTAUTH_SECRET`: keep this value stable and backed up, as changing it prevents existing authenticator secrets from being decrypted. Users should keep their authenticator/setup key safe; automated recovery codes are not provided.
+
+Security questions support setup, change, and answer verification, not password resets or an authenticator bypass. Phone/email changes save contact details without OTP verification and are labelled unverified. Third-party account linking is unavailable.
+
+## Reward Feedback
+
+The `/feedback` form accepts reward claims, complaints, suggestions, and general feedback. Signed-in submissions use the server session's player identity; guests must provide their name and phone. Feedback is saved for the existing `/admin/feedback` inbox, where authorized staff can mark it reviewed or resolved. Signed-in players can view their latest 100 submissions and their status through **My Feedback**; internal admin notes remain private.
+
+## Install as an app
+
+All player-facing download buttons install the same web app, not an App Store or Google Play package. On supported Chrome/Edge browsers, use the native install prompt. iPhone/iPad installation instructions are intentionally not displayed in the install dialog. On macOS Safari, use **File → Add to Dock**. The installed icon launches the standalone app; account and game features still require internet access. Installation requires browser confirmation and cannot be completed automatically by the website.
+
+On Android and desktop Chrome, Download opens Chrome's native confirmation directly when the browser makes installation available. The install event is captured before hydration so an early event is not lost. A new install offer clears any outdated saved installation status after uninstalling. Until Chrome offers installation (or after dismissing its prompt), the dialog shows browser-menu instructions instead of a non-working Install button. Deploy over HTTPS; plain HTTP on a phone's LAN address is not installable. Chrome controls prompt eligibility, including repeat offers after dismissal.
+
+The manifest keeps referral attribution on initial signup. The service worker is registered once globally in production; development unregisters it to avoid stale build assets. Only public image/font assets are cached: API/session responses and Next.js RSC payloads are never served from the app cache. Offline launches show an explicit reconnect screen.
+
+## Main areas
+
+- `/` — public lobby and games
+- `/events` — supplied event banners, separate from `/promo`, ordered with the first-deposit offer first
+- `/games/[slug]` — guest game pages
+- `/player` — authenticated player area
+- `/player/wallet` — deposits and withdrawals
+- `/player/team` — referrals and commissions
+- `/admin` — protected admin dashboard
+- `/admin/notifications` — platform broadcasts
+- `/api/health` — health check
+
+## Top-level Agent
+
+Admin navigation displays live pending-request badges for Deposits and Withdrawals, including desktop, compact sidebar and mobile menus. Counts include only `pending` requests (not approved/rejected), with Sub Admin counts restricted to the same referral team as the payments pages. One uncached aggregate request refreshes both badges every 5 seconds while the tab is visible, on focus/reconnect, and immediately after an in-panel approval/rejection. Approve/reject refreshes data without reloading the page. Zero badges disappear; loading and retry/stale-count indicators are explicit rather than reporting false zeroes on connection failures. The lightweight endpoint returns counts only and does not load transaction histories.
+
+The single top-level account uses the existing `owner` role (level 3), labelled **Agent** in the admin panel. It is separate from referral/player `agent` accounts. It inherits all Super Admin features and can manage Super Admin accounts and their existing saved passwords under **Admins / Staff**; password hashes and the Agent password are not returned by admin data APIs.
+
+Run `npm run provision:agent -- --check` against the intended MySQL database first, then `npm run provision:agent` to create the account. The command loads the normal Next.js environment configuration and takes optional `AGENT_USERNAME`, `AGENT_ADMIN_ID` (`WX-SYS-0001` format), and `AGENT_PASSWORD` (12+ characters). Without a configured password it generates a random initial password and prints it once. It refuses duplicates/conflicting accounts, never replaces an existing owner or password, and does not delete any data. Change the initial password under **My Account**. Deployment operators must run the same command against Hostinger's database to provision the account there.
+
+Only Agent can access **History Cleanup**, clear historical collections, reset one player's entire history/wallet, reset all players, or delete a player account with its associated records. Super Admin and Sub Admin cannot invoke these actions, including by direct server-action calls. Individual controls appear on a player's detail page. Destructive actions require the current Agent password and a typed confirmation.
+
+Both cleanup and player reset/deletion forms show inline missing-field, confirmation, server and connection errors rather than relying on browser validation bubbles or native confirmation dialogs. Successful resets refresh admin data; deleting a player navigates directly to the Users list without reloading the deleted detail record. Block/unblock controls on the Users list and player details show pending/error feedback, update the status badge immediately after database confirmation, and refresh the remaining details without a manual reload. Active-player reset/deletion prerequisites are shown explicitly; server errors report how many selected accounts still need blocking. Blocking and password checks remain enforced on the server.
+
+Full resets/deletions require MySQL and blocked target player accounts; take a database backup, block the target accounts and let ongoing requests finish first. A single MySQL transaction deletes results and per-game state, transactions, gateway sessions, win holds, related commissions, notifications, support/feedback and login/device-session history. Reset preserves login credentials, referrals, restrictions and account configuration but zeroes wallets, deposit/withdrawal totals and VIP progress; accounts remain blocked until explicitly unblocked. Related beneficiaries' commission counters are reduced, without altering their wallet funds. Account deletion also detaches its referrals. Staff accounts/sessions, games, payment accounts and platform settings are preserved. Destructive reset/deletion is audited and rolled back on failure. The older category cleanup remains a history-only operation and does not reset balances.
+
+**Selected history only:** Agent has a separate balance-preserving form on each player's detail page and under History Cleanup (all players). Choose all categories or any combination of games, deposits, withdrawals, commissions, login events, support chats, player notifications, gateway history and feedback. Choose all time, a whole-number quantity of days/weeks/months/years, or custom whole days (1–36500 total days), and either the most recent period or records older than that period. Weeks are 7 days, months 30 days and years 365 days. The range uses persisted record creation timestamps, includes the lower bound and excludes the upper bound. Support selection is based on the chat's creation time and deletes all its messages together. This transactional operation requires the Agent password and `DELETE SELECTED HISTORY`; it never deletes accounts or changes wallets, cumulative totals, VIP progress or staff data. Pending payments/bets, active game states, claimable win holds, live sessions and shared game rounds are intentionally preserved. Login cleanup removes login-event records, not current sessions or account profile fields. Unlike a full wallet reset, history-only cleanup does not require blocking players.
+
+Super Admin can create only Sub Admin accounts. Only Agent can create Super Admin accounts; invalid/forged staff roles are explicitly rejected by the server rather than silently downgraded.
+
+## Website presentation
+
+Game-result names resolve both database game IDs and game slugs, including older records from the unified balance API. Admin dashboard breakdowns, recent results, player history, and Live Wins support both reference formats without changing stored stakes, payouts, or outcomes.
+
+Game availability checks use the shared server-safe game catalog, not exports from the client-only game renderer. Client game pages use the same supported-slug list.
+
+The English website UI uses self-hosted Outfit through `next/font`; the existing Urdu font and game-specific typography remain in place. Event banners use a single column on phones, with a full-width first banner and two-column remaining banners on desktop. Promotion badges keep their labels on one line. Public game tiles display names inside the bottom of the artwork, without an external footer or crown; accessible labels and image alt text retain the game names. The lobby's two-row game slider has an 8px row gap.
+
+English website text uses bold Outfit (700), with extra-bold headings and buttons (800). Urdu typography and game-specific surfaces retain their existing weights. Black outlines are limited to game labels.
+
+Game labels appear over the bottom of the artwork in bold white with a black text outline, without a dark background strip or added image shading. Lobby names use up to 14px on phones and 18px from tablet widths; the narrower All Games tiles use up to 12px on phones and 16px from small-screen widths. Names stay on one line, reducing font size only when needed to fit the full name; sizing updates when the card resizes or fonts load.
+
+Lobby/profile Deposit, Withdraw, and More shortcuts share fixed icon/label alignment. Withdraw uses an emerald/teal accent distinct from Deposit and links directly to `/player/withdraw`.
+
+Game artwork is mapped by game slug in `src/lib/gameCatalog.ts` (`GAME_IMAGES`). All 70 supplied numbered `_1024x700.jpg` replacements in `public/games` are used by lobby cards, related promotions, and admin game restrictions. Game surfaces that reference the replaced artwork also use the new files; game routes and settings are unchanged.
+
+Lobby and All Games categories share the eight numbered PNGs in `public/lobby`, ordered All Games, Mini Games, Cards, Live Casino, Sports, Slots, Fishing, Lottery. The lobby retains the three-row desktop mosaic with the large All Games tile at the upper right; the lower-right area fits Slots, Fishing, and Lottery side by side. Phones retain a two-column mosaic with a full-width final Lottery tile. The jackpot stays in its original upper-left position with its existing counter, size, and no-amount artwork.
+
+Game-card launches from the lobby and `/games-all` save the source scroll position. Game Back and Game Over → Close return to that source; direct game links use the normal lobby fallback.
+
+Support chat opens from the existing header/menu support controls, without a floating chat launcher. Confirmed app installation (`appinstalled` or opening in standalone mode) is remembered in this browser's local storage; install buttons, menu entries, and the startup download promotion are then hidden, including on later browser visits. Dismissing or merely opening an install prompt does not mark the app installed. Browsers cannot reliably detect an older installation until the app is opened in standalone mode; clearing site data also clears the saved status.
+
+## Data and reset notes
+
+User accounts, game activity, wallet transactions, referral commissions, notifications, and settings are stored in MySQL. Browser storage is not used as an application database.
+
+Do not reset a shared or production database casually. Use an intentional backup and migration process instead of deleting tables manually.
+
+## Deployment
+
+Set all required `MYSQL_*` and `SUPER_ADMIN_*` variables in the hosting provider's environment settings, then deploy the Next.js application. Verify the database connection with the provider's host, port, credentials, database name, and SSL settings before testing login or signup.
+
+### Hostinger (Node.js hosting)
+
+Do not upload the raw project (without `node_modules`/`.next`) and rely on Hostinger to run `npm install` — its dynamic `mysql2` import is invisible to that flow and Hostinger will report the MySQL driver as missing. Instead, build a self-contained bundle locally and upload that:
+
+```bash
+npm install
+npm run build
+npm run package:hostinger
+```
+
+This produces a `deploy/` folder containing `server.js`, a pruned `node_modules` (with `mysql2` included), `.next/static`, and `public/`. Zip the **contents** of `deploy/` (not the project root) and upload/extract that on Hostinger. In hPanel's Node.js app settings:
+
+- Startup file: `server.js`
+- No `npm install` step needed — everything required is already inside `node_modules`
+- Set the same `MYSQL_*`/`SUPER_ADMIN_*` environment variables in hPanel (or keep the `.env` file, which is already copied into `deploy/`)
+
+Repeat `npm run build && npm run package:hostinger` and re-upload on every future deploy.

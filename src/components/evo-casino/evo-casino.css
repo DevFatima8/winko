@@ -1,0 +1,192 @@
+.evo-casino-container {
+  font-family: Georgia, 'Times New Roman', serif;
+  color: #e7d39d;
+  background: #050609;
+}
+.evo-casino-container button { cursor: pointer; font: inherit; }
+.evo-casino-container button:disabled { cursor: not-allowed; opacity: .52; }
+.evo-casino-container .page-shell { height: 100%; min-height: 0; display: flex; justify-content: center; background: #020306; overflow: hidden; }
+.evo-casino-container .game-stage { --wheel-size: min(85vw, 36vh, 420px); width: min(100%, 700px); height: 100%; max-height: 100%; overflow: hidden; position: relative; isolation: isolate; background: #080b11 url('/images/storm-studio.jpg') center center / cover no-repeat; box-shadow: 0 0 90px #000; }
+.evo-casino-container .studio-shade { position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 0%, #03070b11 46%, #080a0ccc 83%, #020304 100%), radial-gradient(circle at 50% 32%, transparent 20%, #0008 85%); pointer-events: none; }
+.evo-casino-container .top-line { position: absolute; z-index: 6; top: 8px; left: 12px; right: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; font-family: Arial, sans-serif; }
+.evo-casino-container .demo-badge { padding: 4px 7px; font-size: 10px; letter-spacing: 1.5px; border: 1px solid #9b8556; color: #c8b479; background: #080b10c9; border-radius: 4px; }
+.evo-casino-container .balance-display { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; padding: 3px 8px; text-shadow: 0 1px 5px black; background: #05070ab8; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); }
+.evo-casino-container .balance-display span { font-size: 8px; letter-spacing: 1.5px; color: #a6aab0; }
+.evo-casino-container .balance-display strong { color: #e6ce83; font-size: 14px; }
+.evo-casino-container .wheel-assembly { position: absolute; top: 1%; left: 50%; transform: translateX(-50%); width: var(--wheel-size); height: var(--wheel-size); filter: drop-shadow(0 2px 15px #000); }
+.evo-casino-container .wheel-outer { position: relative; width: 100%; height: 100%; border-radius: 50%; background: radial-gradient(circle, #062339 0 54%, #171d20 65%, #75501e 85%, #e0a846 92%, #20150a 96%); border: 3px solid #e4bd51; box-shadow: 0 0 3px 2px #fce681, 0 0 16px #b7771d, inset 0 0 18px 6px #d39634; }
+.evo-casino-container .wheel-outer::before { content: ''; position: absolute; inset: 2.7%; border-radius: 50%; border: 9px solid #a16c30; box-shadow: inset 0 0 7px #ebbc59, 0 0 6px #05080a; }
+.evo-casino-container .wheel-lights { position: absolute; z-index: 2; inset: 5%; border-radius: 50%; background: repeating-conic-gradient(from -9deg, #76502c 0deg 1deg, transparent 1deg 18deg); opacity: .6; pointer-events: none; }
+.evo-casino-container .wheel-face { position: absolute; inset: 9%; border-radius: 50%; overflow: hidden; border: 3px solid #17191a; box-shadow: 0 0 0 3px #8c6b30, inset 0 0 25px #000; transition: transform 4.7s cubic-bezier(.12,.65,.1,1); }
+.evo-casino-container .wheel-segments { position: absolute; inset: 0; border-radius: 50%; background: repeating-conic-gradient(from -9deg, #ad8b4e 0deg .65deg, transparent .65deg 18deg), repeating-conic-gradient(from -9deg, #163f56 0deg 18deg, #122e42 18deg 36deg); box-shadow: inset 0 0 44px #000; }
+.evo-casino-container .wheel-segments::after { content: ''; position: absolute; inset: 10%; border-radius: 50%; background: radial-gradient(circle, #0b1b2d 0%, #1048623b 48%, transparent 75%); }
+.evo-casino-container .wheel-dark-ring { position: absolute; inset: 0; border-radius: 50%; border: calc(var(--wheel-size) * .073) solid #090d0e; box-shadow: inset 0 0 4px #d2ae60, 0 0 7px #0a0b0d; }
+.evo-casino-container .wheel-number { position: absolute; z-index: 2; left: 50%; top: 50%; color: #b99b66; font: bold clamp(14px, 3vw, 26px) Georgia, serif; line-height: 1; text-shadow: 0 1px 4px black, 0 0 3px #e7bc6b; }
+.evo-casino-container .wheel-center-disc { position: absolute; width: 20%; aspect-ratio: 1; border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); border: 5px ridge #6b5846; background: radial-gradient(circle, #101c25 30%, #03090c 70%); box-shadow: 0 0 10px #000; }
+.evo-casino-container .wheel-pointer { position: absolute; z-index: 5; top: -2.5%; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 19px solid transparent; border-right: 19px solid transparent; border-top: 24px solid #e5b34c; filter: drop-shadow(0 2px 4px black); }
+.evo-casino-container .brand-mark { position: absolute; z-index: 4; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 42%; text-align: center; text-shadow: 2px 3px 2px #000, 0 0 12px #000; pointer-events: none; }
+.evo-casino-container .bolt { font: italic bold clamp(72px, 20vw, 142px) Georgia, serif; color: #f1c55f; line-height: .58; transform: rotate(15deg); text-shadow: 3px 0 #0fd6fa, -3px 3px #043d64, 0 0 12px #2daed0, 6px 7px 2px #000; }
+.evo-casino-container .brand-first { position: relative; display: inline-block; margin-top: 8%; padding: 2px 7px; color: #f0dfb9; background: linear-gradient(110deg, #0a121b, #291b14, #071017); border: 3px ridge #ab8d65; transform: rotate(-2deg); box-shadow: 0 3px 2px #000; font-size: clamp(19px, 5vw, 34px); font-weight: 900; letter-spacing: -2px; }
+.evo-casino-container .brand-second { color: #30d5ff; font-size: clamp(25px, 6vw, 42px); font-weight: 900; font-style: italic; line-height: .95; letter-spacing: -2px; -webkit-text-stroke: 1px #0a466d; text-shadow: 2px 3px #001726, 0 0 9px #00b7f5; }
+.evo-casino-container .game-hud { position: absolute; z-index: 7; left: 0; right: 0; bottom: 34px; display: flex; flex-direction: column; align-items: center; }
+.evo-casino-container .progress-area { width: 56%; height: 48px; position: relative; margin-bottom: 1px; }
+.evo-casino-container .progress-track { position: absolute; top: 12px; left: 0; right: 0; height: 11px; border: 2px solid #6f623a; background: #131516ba; box-shadow: 0 1px 3px black; border-radius: 6px; }
+.evo-casino-container .progress-fill { height: 100%; width: 25%; background: linear-gradient(#f4e82b,#bbac07); box-shadow: 0 0 5px yellow; border-radius: 4px; }
+.evo-casino-container .progress-active { animation: fill-track 4.7s linear forwards; }
+.evo-casino-container .spin-trigger { position: absolute; z-index: 2; left: 20%; top: 0; width: 62px; height: 40px; border: 2px solid #34d399; border-radius: 8px; color: #fff; background: linear-gradient(135deg, #10b981 0%, #059669 50%, #047857 100%); box-shadow: 0 2px 8px rgba(16,185,129,0.5); font: bold 12px Arial,sans-serif; letter-spacing: 1px; transition: all 0.15s ease; cursor: pointer; }
+.evo-casino-container .spin-trigger:hover:not(:disabled) { filter: brightness(1.2); transform: translateY(-2px) scale(1.04); box-shadow: 0 4px 14px rgba(16,185,129,0.7); }
+.evo-casino-container .spin-trigger:active:not(:disabled) { transform: translateY(0) scale(0.96); }
+.evo-casino-container .phase-message { position: absolute; top: 35px; left: 0; right: 0; text-align: center; font: bold 10px Arial,sans-serif; letter-spacing: 2px; color: #e6d6a2; text-shadow: 0 2px 4px black; }
+.evo-casino-container .phase-win { color: #ffe63c; }
+.evo-casino-container .table-wrap { display: grid; grid-template-columns: 13% 75% 12%; width: 83%; height: 216px; filter: drop-shadow(0 4px 8px black); }
+.evo-casino-container .side-bet { border: 2px solid #ac8945; clip-path: polygon(20% 0,100% 0,100% 100%,20% 100%,0 92%,0 8%); background: #1b2a3aef; color: #96ccce; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; font-size: 12px; }
+.evo-casino-container .leaf-symbol { font-size: 31px; color: #a1d2cf; transform: rotate(30deg); }
+.evo-casino-container .side-bet:hover, .evo-casino-container .outside-bet:hover, .evo-casino-container .number-cell:hover { filter: brightness(1.4); }
+.evo-casino-container .number-grid { display: grid; grid-template-columns: repeat(5,1fr); grid-template-rows: repeat(4,1fr); border-top: 2px solid #a88b53; border-bottom: 2px solid #a88b53; }
+.evo-casino-container .number-cell { position: relative; background: #050a0ce8; color: #d6bd89; border: 1px solid #8c764d; font: bold clamp(17px,3.4vw,27px) Georgia,serif; text-shadow: 0 0 4px #e7ca88; display: flex; align-items: center; justify-content: center; transition: background .18s; }
+.evo-casino-container .number-cell:hover { background: #172b30ee; }
+.evo-casino-container .winning-cell { background: #676018ed; box-shadow: inset 0 0 18px #efd828; }
+.evo-casino-container .placed-chip { position: absolute; z-index: 1; right: 0; bottom: 1px; width: 29px; height: 29px; border-radius: 50%; display: grid; place-items: center; color: #704523; font: bold 9px Arial,sans-serif; background: radial-gradient(circle, #fff1d3 0 43%, #cd8c54 46% 66%, #f7ddbd 70% 74%, #b77237 77%); box-shadow: 0 1px 3px black; }
+.evo-casino-container .outside-bets { display: grid; grid-template-rows: 1fr 1fr; }
+.evo-casino-container .outside-bet { position: relative; clip-path: polygon(0 0,80% 0,100% 13%,100% 87%,80% 100%,0 100%); border: 2px solid #af8e52; background: #0b1014e8; color: #d5bd85; font: bold 13px Georgia,serif; line-height: 1.2; }
+.evo-casino-container .outside-bet + .outside-bet { border-top: 1px solid #8a704b; }
+.evo-casino-container .outside-bet small { display: block; font: 8px Arial,sans-serif; margin-top: 4px; }
+.evo-casino-container .has-bet { background: #263e3b !important; }
+.evo-casino-container .chasers { width: 62%; height: 52px; margin-top: 9px; display: flex; position: relative; filter: drop-shadow(0 2px 3px #000); }
+.evo-casino-container .chaser { width: 50%; display: flex; align-items: center; text-align: left; padding: 0 12px; color: #e5cd95; border: 2px solid #a6824a; background: linear-gradient(110deg,#270f0b,#501b12 48%,#2a160f); clip-path: polygon(8% 0,100% 0,100% 100%,8% 100%,0 74%,0 26%); }
+.evo-casino-container .x-chaser { background: linear-gradient(110deg,#30261c,#2b251e,#171516); clip-path: polygon(0 0,92% 0,100% 25%,100% 75%,92% 100%,0 100%); }
+.evo-casino-container .chaser-selected { filter: brightness(1.65); }
+.evo-casino-container .chaser-icon { font-size: 33px; color: #a55135; margin-right: 7px; }
+.evo-casino-container .big-x { font: bold 40px Arial,sans-serif; color: #8c795e; margin-right: 8px; }
+.evo-casino-container .chaser-info { display: flex; flex-direction: column; gap: 6px; white-space: nowrap; }
+.evo-casino-container .chaser-info b { font: bold italic 14px Arial,sans-serif; }
+.evo-casino-container .chaser-info small { font: 11px Arial,sans-serif; color: #d2b68a; text-align: center; }
+.evo-casino-container .chaser-divider { z-index: 2; position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 40px; height: 29px; display: grid; place-items: center; color: #dbc781; background: #38251a; border: 2px solid #a48048; font-size: 23px; }
+.evo-casino-container .bottom-controls { width: 94%; height: 73px; display: flex; align-items: flex-end; justify-content: center; gap: 6px; padding-bottom: 3px; font-family: Arial,sans-serif; }
+.evo-casino-container .text-control { border: 0; background: transparent; color: #d9d9d9; font-size: 12px; padding: 0 2px 13px; }
+.evo-casino-container .undo-circle, .evo-casino-container .double-circle { flex: none; width: 48px; height: 48px; border: 1px solid #777; border-radius: 50%; color: #ddd; background: #181b20; font: 36px Arial,sans-serif; line-height: 1; }
+.evo-casino-container .double-circle { font-size: 19px; background: #818388; border-color: #d9d9d9; }
+.evo-casino-container .chip-row { display: flex; gap: 5px; align-items: center; padding-bottom: 0; }
+.evo-casino-container .chip { --chip-color: #a49b91; flex: none; width: 47px; height: 47px; padding: 4px; border-radius: 50%; border: 2px dashed #e1e2df; background: var(--chip-color); color: white; box-shadow: 0 2px 4px #000; transition: transform .2s, box-shadow .2s; }
+.evo-casino-container .chip:hover { transform: translateY(-4px); }
+.evo-casino-container .chip-selected { transform: translateY(-4px); box-shadow: 0 0 0 3px #debd51,0 0 0 5px #7a5b27,0 5px 9px #000; }
+.evo-casino-container .chip-inner { width: 100%; height: 100%; border: 1px solid #eee; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--chip-color), #222 14%); }
+.evo-casino-container .chip-inner span { font: bold 12px Arial,sans-serif; text-shadow: 0 1px 2px #333; }
+.evo-casino-container .chip-10 { --chip-color: #9b9fa4; }
+.evo-casino-container .chip-20 { --chip-color: #69abaa; }
+.evo-casino-container .chip-50 { --chip-color: #d49453; }
+.evo-casino-container .chip-100 { --chip-color: #777b80; }
+.evo-casino-container .chip-200 { --chip-color: #c959a6; }
+.evo-casino-container .chip-500 { --chip-color: #ba2c1f; }
+.evo-casino-container .chip-1000 { --chip-color: #28a94d; }
+.evo-casino-container .tiny-footer { position: absolute; z-index: 8; bottom: 9px; left: 4%; right: 4%; display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #a9a18c; font: 10px Arial,sans-serif; letter-spacing: .4px; }
+.evo-casino-container .tiny-footer button { border: 1px solid #68583a; background: #0b0d10; color: #bdab7f; font: 9px Arial,sans-serif; padding: 4px 6px; }
+@keyframes fill-track { from { width: 25%; } to { width: 100%; } }
+@media (max-width: 580px) {
+  .evo-casino-container .page-shell { height: 100%; min-height: 0; }
+  .evo-casino-container .game-stage { --wheel-size: min(80vw, 24vh, 180px); height: 100%; max-height: 100%; }
+  .evo-casino-container .top-line { left: 8px; right: 8px; top: 6px; }
+  .evo-casino-container .balance-display strong { font-size: 11px; }
+  .evo-casino-container .game-hud { bottom: 22px; }
+  .evo-casino-container .progress-area { width: 68%; height: 38px; margin-bottom: 0; }
+  .evo-casino-container .spin-trigger { width: 54px; height: 32px; font-size: 11px; top: 0; }
+  .evo-casino-container .phase-message { top: 26px; font-size: 8px; }
+  .evo-casino-container .table-wrap { width: 96%; height: clamp(120px, 24vh, 155px); grid-template-columns: 13% 75% 12%; }
+  .evo-casino-container .number-cell { font-size: clamp(13px, 2.8vh, 17px); }
+  .evo-casino-container .outside-bet { font-size: 9px; }
+  .evo-casino-container .placed-chip { width: 19px; height: 19px; font-size: 7px; }
+  .evo-casino-container .chasers { width: 84%; height: 34px; margin-top: 3px; }
+  .evo-casino-container .chaser { padding: 0 5px; }
+  .evo-casino-container .chaser-info b { font-size: 9px; }
+  .evo-casino-container .chaser-info small { font-size: 8px; }
+  .evo-casino-container .big-x { font-size: 20px; }
+  .evo-casino-container .chaser-icon { font-size: 18px; }
+  .evo-casino-container .bottom-controls { width: 98%; gap: 2px; height: 46px; padding-bottom: 1px; }
+  .evo-casino-container .chip-row { gap: 2px; }
+  .evo-casino-container .chip { width: clamp(26px, 7.2vw, 34px); height: clamp(26px, 7.2vw, 34px); padding: 2px; }
+  .evo-casino-container .chip-inner span { font-size: 8px; }
+  .evo-casino-container .undo-circle, .evo-casino-container .double-circle { width: clamp(26px, 7.2vw, 34px); height: clamp(26px, 7.2vw, 34px); font-size: 14px; }
+  .evo-casino-container .double-circle { font-size: 10px; }
+  .evo-casino-container .text-control { display: none; }
+  .evo-casino-container .tiny-footer { bottom: 2px; font-size: 7.5px; }
+}
+@media (max-width: 390px) { 
+  .evo-casino-container .text-control { display: none; } 
+  .evo-casino-container .bottom-controls { gap: 2px; } 
+}
+
+.evo-casino-container { min-width: 0; max-width: 100%; }
+.evo-casino-container .page-shell { min-width: 0; width: 100%; }
+/* Keep the wheel, betting controls, and footer in normal flow at every size. */
+.evo-casino-container .game-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+  max-width: 100%;
+  gap: 8px;
+  padding: 44px 12px 10px;
+  overflow-y: auto;
+  --wheel-size: min(34vw, 38vh, 380px);
+}
+.evo-casino-container .top-line {
+  position: relative;
+  inset: auto;
+  flex: none;
+}
+.evo-casino-container .wheel-assembly {
+  position: relative;
+  inset: auto;
+  transform: none;
+  align-self: center;
+  flex: none;
+}
+.evo-casino-container .wheel-number {
+  color: #fff;
+  font-size: clamp(16px, calc(var(--wheel-size) * .055), 26px);
+  text-shadow: 0 1px 2px #000, 0 0 5px #000, 0 0 8px #f3c85e;
+}
+.evo-casino-container .game-hud {
+  position: relative;
+  inset: auto;
+  flex: none;
+  min-width: 0;
+  width: 100%;
+}
+.evo-casino-container .table-wrap {
+  min-width: 0;
+  width: min(100%, 680px);
+  height: clamp(130px, 24vh, 216px);
+}
+.evo-casino-container .chasers { width: min(62%, 520px); }
+.evo-casino-container .bottom-controls {
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+  min-height: 60px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.evo-casino-container .tiny-footer {
+  min-width: 0;
+  position: relative;
+  inset: auto;
+  flex: none;
+  margin-top: auto;
+  flex-wrap: wrap;
+}
+@media (max-width: 580px) {
+  .evo-casino-container .game-stage {
+    padding: 40px 8px 8px;
+    --wheel-size: min(72vw, 28vh, 250px);
+  }
+  .evo-casino-container .wheel-assembly {
+    top: auto;
+    width: var(--wheel-size);
+    height: var(--wheel-size);
+  }
+  .evo-casino-container .game-hud { bottom: auto; }
+  .evo-casino-container .table-wrap { height: clamp(120px, 22vh, 155px); }
+  .evo-casino-container .bottom-controls { height: auto; min-height: 46px; }
+  .evo-casino-container .tiny-footer { bottom: auto; }
+}

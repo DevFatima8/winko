@@ -1,0 +1,68 @@
+@keyframes float-up {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -10px);
+  }
+  80% {
+    opacity: 1;
+    transform: translate(-50%, -24px);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -32px);
+  }
+}
+
+.float-up {
+  animation: float-up 1.2s ease-out forwards;
+}
+
+@media (max-width: 1023px) {
+  .dice-game .dice-layout {
+    align-content: start;
+    grid-template-rows: max-content max-content;
+  }
+
+  .dice-game .dice-board,
+  .dice-game .dice-bet-panel {
+    padding: 8px;
+  }
+
+  .dice-game .dice-bet-panel > div {
+    margin-top: 4px;
+  }
+
+  .dice-game .dice-bet-panel > div:first-child {
+    margin-top: 0;
+    margin-bottom: 4px;
+  }
+
+  .dice-game .dice-bet-panel input,
+  .dice-game .dice-bet-panel button:not([role="switch"]) {
+    height: 28px;
+  }
+
+  .dice-game .dice-bet-panel [data-dice-roll-action] > button {
+    height: 36px;
+  }
+
+  .dice-game .dice-board .mt-6 {
+    margin-top: 20px;
+  }
+}
+
+@media (max-width: 359px) {
+  .dice-game > header {
+    column-gap: 4px;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .dice-game > header > div:first-child > div:last-child {
+    letter-spacing: 0.02em;
+  }
+}

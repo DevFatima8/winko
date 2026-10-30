@@ -1,0 +1,25 @@
+.page {
+  color-scheme: dark;
+  background-color: var(--wx-bg);
+}
+
+.page :global(button),
+.page :global(input),
+.page :global(section),
+.page :global(select) {
+  border-radius: 0 !important;
+}
+
+.flow :global([class*="rounded"]) {
+  border-radius: 0 !important;
+}
+
+.flow :global(input[type="number"]) {
+  appearance: textfield;
+}
+
+.flow :global(input::-webkit-inner-spin-button),
+.flow :global(input::-webkit-outer-spin-button) {
+  appearance: none;
+  margin: 0;
+}

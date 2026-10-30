@@ -1,0 +1,28 @@
+
+.poker-container {
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+@keyframes card-enter {
+  from { opacity: 0; transform: translateY(-40px) scale(0.9); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.poker-container .card-enter { animation: card-enter 0.4s ease-out both; }
+
+@keyframes result-pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.poker-container .result-pop { animation: result-pop 0.45s cubic-bezier(.2,.9,.3,1.3) both; }
+
+.poker-container .chip:not(:disabled):hover { 
+  transform: translateY(-4px) scale(1.08); 
+  filter: brightness(1.15);
+}
+

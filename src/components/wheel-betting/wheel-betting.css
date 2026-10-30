@@ -1,0 +1,153 @@
+/* wheel-betting animations and styles */
+.wheel-container {
+  position: relative;
+  border-radius: 1.5rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: #060912;
+  background-image:
+    radial-gradient(1100px 620px at 15% -10%, rgba(124, 92, 255, 0.16), transparent 60%),
+    radial-gradient(900px 520px at 88% 8%, rgba(255, 190, 80, 0.13), transparent 62%),
+    radial-gradient(1200px 800px at 50% 110%, rgba(0, 229, 160, 0.09), transparent 60%);
+}
+
+/* hide number input spinners */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* ---------- wheel bulbs ---------- */
+@keyframes bulbIdle {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.wheel-bulb {
+  animation: bulbIdle 2.6s ease-in-out infinite;
+}
+.bulbs-fast .wheel-bulb {
+  animation-duration: 0.34s;
+}
+
+/* ---------- winning segment flash ---------- */
+@keyframes segFlash {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+.wheel-flash {
+  animation: segFlash 0.42s ease-in-out infinite;
+}
+
+/* ---------- shine sweep on spin button ---------- */
+@keyframes shineSweep {
+  0% {
+    background-position: 160% 0;
+  }
+  100% {
+    background-position: -60% 0;
+  }
+}
+.animate-shine {
+  animation: shineSweep 2.8s linear infinite;
+}
+
+/* ---------- confetti ---------- */
+@keyframes confettiFall {
+  0% {
+    transform: translateY(-10vh) rotate(0deg) scale(0.7);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(105vh) rotate(720deg) scale(1);
+    opacity: 0;
+  }
+}
+.confetti {
+  animation-name: confettiFall;
+  animation-timing-function: cubic-bezier(0.3, 0.1, 0.7, 1);
+  animation-fill-mode: both;
+}
+
+/* ---------- win popup ---------- */
+@keyframes winPop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  35% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  75% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.02);
+    opacity: 0;
+  }
+}
+.win-pop {
+  animation: winPop 2.6s ease-out both;
+}
+
+/* ---------- misc ---------- */
+@keyframes pulseGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 190, 80, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 28px 6px rgba(255, 190, 80, 0.08);
+  }
+}
+.pulse-glow {
+  animation: pulseGlow 2.2s ease-in-out infinite;
+}
+
+@keyframes floatUp {
+  0% {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.float-up {
+  animation: floatUp 0.35s ease-out both;
+}
+
+@keyframes toastIn {
+  0% {
+    transform: translateY(-12px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.toast-in {
+  animation: toastIn 0.25s ease-out both;
+}

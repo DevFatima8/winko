@@ -1,0 +1,15 @@
+@keyframes baccarat-card-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-24px) rotateX(40deg) scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) rotateX(0) scale(1);
+  }
+}
+
+.baccarat-card-enter {
+  animation: baccarat-card-in 0.4s ease-out both;
+  perspective: 600px;
+}

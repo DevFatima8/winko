@@ -1,0 +1,173 @@
+/* ── Rummy Royale Game Styles ───────────────────────── */
+
+.rummy-wrapper {
+  --color-gold-100: #faf0cf;
+  --color-gold-200: #f6e3a1;
+  --color-gold-300: #f0d27d;
+  --color-gold-400: #e7bc55;
+  --color-gold-500: #d6a63a;
+  --color-gold-600: #b9862a;
+  --color-gold-700: #8f651d;
+
+  --color-felt-50: #e8f4ec;
+  --color-felt-200: #9fd0b8;
+  --color-felt-300: #5aa986;
+  --color-felt-400: #2f8a64;
+  --color-felt-500: #1d6f4d;
+  --color-felt-600: #145a3f;
+  --color-felt-700: #0e4733;
+  --color-felt-800: #0a382a;
+  --color-felt-900: #072b20;
+  --color-felt-950: #041e16;
+
+  --color-ivory: #f7f1de;
+  --color-cardred: #b23a2c;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+}
+
+.rummy-wrapper .font-display {
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+/* ── Casino felt table ─────────────────────────────────────── */
+.rummy-felt-bg {
+  background-color: #072b20;
+  background-image:
+    radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1.4px),
+    radial-gradient(140% 100% at 50% 22%, rgba(255, 255, 255, 0.07), transparent 58%),
+    radial-gradient(130% 130% at 50% 42%, #1e7451 0%, #165e43 32%, #0f4a35 54%, #093527 78%, #05231a 100%);
+  background-size:
+    7px 7px,
+    100% 100%,
+    100% 100%;
+}
+
+.rummy-table-ring {
+  box-shadow:
+    inset 0 0 0 2px rgba(231, 188, 85, 0.22),
+    inset 0 0 90px rgba(0, 0, 0, 0.55);
+}
+
+/* ── Gold text & buttons ───────────────────────────────────── */
+.gold-text {
+  background: linear-gradient(180deg, #f9e9b0 0%, #ecc964 48%, #c08b26 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.rummy-btn-gold {
+  background: linear-gradient(180deg, #f6df9a 0%, #e5b84f 55%, #c8922c 100%);
+  color: #3a2a08;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    inset 0 -2px 0 rgba(120, 80, 10, 0.35),
+    0 6px 18px rgba(0, 0, 0, 0.4);
+  transition:
+    filter 0.15s ease,
+    transform 0.12s ease;
+  cursor: pointer;
+}
+
+.rummy-btn-gold:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.rummy-btn-gold:active:not(:disabled) {
+  transform: translateY(1px) scale(0.99);
+}
+
+.rummy-btn-gold:disabled {
+  filter: saturate(0.35) brightness(0.75);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.rummy-btn-dark {
+  background: linear-gradient(180deg, #124b37 0%, #0b3627 100%);
+  border: 1px solid rgba(231, 188, 85, 0.35);
+  color: #f6e3a1;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 4px 12px rgba(0, 0, 0, 0.35);
+  transition:
+    filter 0.15s ease,
+    transform 0.12s ease;
+  cursor: pointer;
+}
+
+.rummy-btn-dark:hover:not(:disabled) {
+  filter: brightness(1.15);
+}
+
+.rummy-btn-dark:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.rummy-btn-dark:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── Hint glow ─────────────────────────────────────────────── */
+@keyframes hintPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px rgba(246, 227, 161, 0.95),
+      0 0 16px 4px rgba(240, 210, 125, 0.5);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px rgba(250, 235, 190, 1),
+      0 0 30px 9px rgba(240, 210, 125, 0.85);
+  }
+}
+
+.card-hint {
+  animation: hintPulse 0.9s ease-in-out infinite;
+}
+
+/* ── Balance pop ───────────────────────────────────────────── */
+@keyframes balancePop {
+  0% {
+    transform: scale(1.22);
+    color: #f6e3a1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.balance-pop {
+  animation: balancePop 0.45s cubic-bezier(0.22, 1.2, 0.36, 1);
+}
+
+/* ── Win title glow ────────────────────────────────────────── */
+@keyframes titleGlow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 14px rgba(240, 210, 125, 0.45));
+  }
+  50% {
+    filter: drop-shadow(0 0 30px rgba(240, 210, 125, 0.8));
+  }
+}
+
+.title-glow {
+  animation: titleGlow 1.6s ease-in-out infinite;
+}
+
+/* Color utilities for inline elements */
+.text-gold-200 { color: #f6e3a1 !important; }
+.text-gold-300 { color: #f0d27d !important; }
+.text-gold-400 { color: #e7bc55 !important; }
+.text-felt-200 { color: #9fd0b8 !important; }
+.text-felt-300 { color: #5aa986 !important; }
+.bg-felt-700 { background-color: #0e4733 !important; }
+.bg-felt-800 { background-color: #0a382a !important; }
+.bg-felt-900 { background-color: #072b20 !important; }
+.bg-felt-950 { background-color: #041e16 !important; }
+.bg-gold-500 { background-color: #d6a63a !important; }
+.border-gold-400 { border-color: #e7bc55 !important; }
+.border-felt-300 { border-color: #5aa986 !important; }

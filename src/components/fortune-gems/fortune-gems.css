@@ -1,0 +1,72 @@
+.fortune-gems-container {
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  margin: 0;
+  background: #020908;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  font-family: 'Trebuchet MS', 'Segoe UI', Arial, sans-serif;
+}
+
+@keyframes winpulse {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 6px #ffe680) brightness(1.1); }
+  50% { transform: scale(1.14); filter: drop-shadow(0 0 16px #fff2a0) brightness(1.35); }
+}
+.fortune-gems-container .animate-winpulse { animation: winpulse 0.7s ease-in-out infinite; }
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.15; transform: scale(0.6); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+.fortune-gems-container .star { position: absolute; border-radius: 9999px; background: #fff; animation: twinkle 3s ease-in-out infinite; }
+
+@keyframes coinfall {
+  0% { transform: translateY(-40px) rotateY(0deg); opacity: 1; }
+  100% { transform: translateY(105vh) rotateY(720deg); opacity: 1; }
+}
+.fortune-gems-container .coin {
+  position: absolute; top: 0; width: 22px; height: 22px; border-radius: 9999px;
+  background: radial-gradient(circle at 35% 30%, #fff8b8, #ffc21a 55%, #a8620a);
+  border: 2px solid #8a4b00; animation: coinfall linear forwards;
+}
+
+@keyframes popin {
+  0% { transform: scale(0.2); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.fortune-gems-container .popin { animation: popin 0.5s cubic-bezier(.2,.9,.3,1.2) both; }
+
+@keyframes glowtext {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(255,200,50,.7)); }
+  50% { filter: drop-shadow(0 0 22px rgba(255,230,120,1)); }
+}
+.fortune-gems-container .glowtext { animation: glowtext 1.6s ease-in-out infinite; }
+
+@keyframes rays { to { transform: rotate(360deg); } }
+.fortune-gems-container .rays {
+  background: repeating-conic-gradient(from 0deg, rgba(255,220,90,.28) 0deg 10deg, transparent 10deg 20deg);
+  animation: rays 14s linear infinite;
+  mask-image: radial-gradient(circle, #000 25%, transparent 70%);
+  -webkit-mask-image: radial-gradient(circle, #000 25%, transparent 70%);
+}
+
+@keyframes spinbtn { to { transform: rotate(360deg); } }
+
+.fortune-gems-container .gold-text {
+  background: linear-gradient(180deg, #fffbc8 0%, #ffd23a 45%, #d98a00 60%, #ffe27a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@keyframes toast {
+  0% { opacity: 0; transform: translate(-50%, 10px); }
+  15%, 85% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -10px); }
+}
+.fortune-gems-container .toast { animation: toast 2s ease both; }

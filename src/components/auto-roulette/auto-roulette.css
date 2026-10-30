@@ -1,0 +1,30 @@
+.auto-roulette-container {
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.auto-roulette-container .pop-in {
+  animation: popIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.7); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.auto-roulette-container .win-banner {
+  animation: winBanner 0.4s ease-out both;
+}
+@keyframes winBanner {
+  from { opacity: 0; transform: translateY(-30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 1279px) {
+  .auto-roulette-main > .auto-roulette-bet-panel {
+    order: -1;
+  }
+}

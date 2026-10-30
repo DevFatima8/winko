@@ -1,0 +1,585 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-ui), ui-sans-serif, system-ui, sans-serif;
+  background: #052e1c;
+}
+
+/* ---------------- felt table ---------------- */
+
+.felt-bg {
+  background:
+    radial-gradient(1100px 520px at 50% -12%, rgba(255, 255, 255, 0.09), transparent 62%),
+    radial-gradient(900px 480px at 50% 112%, rgba(0, 0, 0, 0.4), transparent 62%),
+    linear-gradient(165deg, #0f7046 0%, #0b5734 46%, #073b23 100%);
+}
+
+.table-panel {
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1.5rem;
+  box-shadow:
+    inset 0 2px 18px rgba(0, 0, 0, 0.35),
+    0 12px 32px rgba(0, 0, 0, 0.28);
+}
+
+.gold-text {
+  background: linear-gradient(180deg, #fde68a 0%, #f5b73d 52%, #b45309 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ---------------- buttons ---------------- */
+
+.btn-gold {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
+  padding: 0.65rem 1.4rem;
+  font-weight: 900;
+  font-size: 0.85rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #171104;
+  background: linear-gradient(180deg, #fde68a 0%, #f5b73d 50%, #d9931a 100%);
+  box-shadow:
+    0 0 20px rgba(245, 183, 61, 0.4),
+    0 4px 12px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.2s ease,
+    filter 0.2s ease;
+  cursor: pointer;
+}
+.btn-gold:not(:disabled):hover {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+  box-shadow:
+    0 0 25px rgba(245, 183, 61, 0.55),
+    0 6px 16px rgba(0, 0, 0, 0.45);
+}
+.btn-gold:not(:disabled):active {
+  transform: translateY(0);
+}
+.btn-gold:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
+  padding: 0.65rem 1.1rem;
+  font-weight: 800;
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #fca5a5;
+  border: 1.5px solid rgba(244, 63, 94, 0.45);
+  background: linear-gradient(135deg, rgba(190, 18, 60, 0.25) 0%, rgba(159, 18, 57, 0.45) 100%);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  transition: transform 0.15s ease, filter 0.2s ease;
+}
+.btn-clear:not(:disabled):hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+  border-color: rgba(244, 63, 94, 0.7);
+}
+.btn-clear:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn-new-bet {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
+  padding: 0.65rem 1.1rem;
+  font-weight: 800;
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ffffff;
+  border: 1.5px solid rgba(56, 189, 248, 0.5);
+  background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%);
+  box-shadow: 0 0 16px rgba(14, 165, 233, 0.35), 0 4px 12px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  transition: transform 0.15s ease, filter 0.2s ease;
+}
+.btn-new-bet:not(:disabled):hover {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+}
+.btn-new-bet:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
+  padding: 0.65rem 1.1rem;
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.15s ease;
+  cursor: pointer;
+}
+.btn-ghost:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.45);
+  transform: translateY(-1px);
+}
+.btn-ghost:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---------------- playing cards ---------------- */
+
+.card-scene {
+  perspective: 900px;
+  container-type: inline-size;
+  aspect-ratio: 5 / 7;
+  width: 100%;
+  max-width: 60px;
+  margin: 0 auto;
+  animation: cardDeal 0.4s ease both;
+}
+@media (min-width: 640px) {
+  .card-scene {
+    max-width: 80px;
+  }
+}
+
+.card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transform: rotateY(180deg);
+  transition: transform 0.45s cubic-bezier(0.34, 0.1, 0.2, 1.15);
+}
+.card-inner.is-revealed {
+  transform: rotateY(0deg);
+}
+
+.card-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  border-radius: 0.65rem;
+  overflow: hidden;
+}
+
+.card-front {
+  background: linear-gradient(135deg, #ffffff 0%, #eef2f7 100%);
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 1px rgba(15, 23, 42, 0.1);
+}
+.card-front.is-red {
+  color: #dc2626;
+}
+.card-front.is-black {
+  color: #111827;
+}
+
+.card-corner {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+}
+.card-corner-tl {
+  top: 7%;
+  left: 9%;
+}
+.card-corner-br {
+  bottom: 7%;
+  right: 9%;
+  transform: rotate(180deg);
+}
+.card-rank {
+  font-weight: 800;
+  font-size: 17cqw;
+}
+.card-suit-sm {
+  font-size: 14cqw;
+  margin-top: 2cqw;
+}
+.card-pip {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 46cqw;
+}
+
+.card-back {
+  transform: rotateY(180deg);
+  background: #b91c1c;
+  box-shadow:
+    inset 0 0 0 4px #f8fafc,
+    inset 0 0 0 6.5px #b91c1c,
+    0 8px 20px rgba(0, 0, 0, 0.4);
+}
+.card-back-frame {
+  position: absolute;
+  inset: 9%;
+  border-radius: 0.4rem;
+  border: 2px dashed rgba(255, 255, 255, 0.65);
+  display: grid;
+  place-items: center;
+}
+.card-back-suit {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 34cqw;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+@keyframes cardDeal {
+  0% {
+    transform: translateY(-14px) scale(0.94);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+/* ---------------- betting spots ---------------- */
+
+.betting-spot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+  min-height: 52px;
+  padding: 5px 4px 6px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.22);
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease,
+    opacity 0.25s ease;
+}
+@media (min-width: 640px) {
+  .betting-spot {
+    min-height: 68px;
+    padding: 7px 6px 8px;
+    border-radius: 14px;
+  }
+}
+.betting-spot:not(:disabled):hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.45);
+  background: rgba(0, 0, 0, 0.32);
+}
+.betting-spot:disabled {
+  cursor: default;
+}
+.betting-spot.has-bet {
+  border-color: #fbbf24;
+  box-shadow:
+    0 0 0 1px #fbbf24,
+    0 6px 16px rgba(0, 0, 0, 0.4);
+}
+.betting-spot.spot-win {
+  border-color: #34d399;
+  background: rgba(16, 185, 129, 0.25);
+  animation: spotPulse 1s ease-in-out infinite;
+}
+.betting-spot.spot-lose {
+  opacity: 0.5;
+  border-color: rgba(244, 63, 94, 0.35);
+}
+
+.spot-name {
+  font-weight: 800;
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.92);
+  text-align: center;
+  line-height: 1.1;
+}
+@media (min-width: 640px) {
+  .spot-name {
+    font-size: 0.72rem;
+  }
+}
+.spot-odds {
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.5);
+}
+.spot-stack {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  margin-top: 1px;
+  display: grid;
+  place-items: center;
+}
+.spot-empty {
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+}
+.spot-bet {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  font-size: 0.6rem;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+@keyframes spotPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 14px rgba(52, 211, 153, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(52, 211, 153, 0.85);
+  }
+}
+
+/* ---------------- chips ---------------- */
+
+.chip {
+  position: relative;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    transform 0.14s ease,
+    box-shadow 0.2s ease;
+  box-shadow:
+    0 5px 12px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 3px rgba(255, 255, 255, 0.85),
+    inset 0 0 0 6px rgba(0, 0, 0, 0.18);
+}
+.chip::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 9999px;
+  border: 3px dashed rgba(255, 255, 255, 0.75);
+}
+.chip-light::before {
+  border-color: rgba(15, 23, 42, 0.3);
+}
+.chip-inner {
+  position: relative;
+  z-index: 1;
+  font-weight: 900;
+  font-size: 0.8rem;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.chip-1 {
+  background: radial-gradient(circle at 35% 30%, #ffffff, #c9ced6 74%);
+  color: #1e293b;
+}
+.chip-5 {
+  background: radial-gradient(circle at 35% 30%, #f87171, #b91c1c 74%);
+  color: #fff;
+}
+.chip-25 {
+  background: radial-gradient(circle at 35% 30%, #6ee7b7, #047857 74%);
+  color: #fff;
+}
+.chip-100 {
+  background: radial-gradient(circle at 35% 30%, #64748b, #0f172a 74%);
+  color: #fff;
+}
+.chip-500 {
+  background: radial-gradient(circle at 35% 30%, #d8b4fe, #7e22ce 74%);
+  color: #fff;
+}
+
+.chip-sm {
+  width: 36px;
+  height: 36px;
+}
+.chip-sm .chip-inner {
+  font-size: 0.72rem;
+}
+.chip-md {
+  width: 44px;
+  height: 44px;
+}
+.chip-md .chip-inner {
+  font-size: 0.8rem;
+}
+.chip-lg {
+  width: 54px;
+  height: 54px;
+}
+.chip-xl {
+  width: 64px;
+  height: 64px;
+}
+.chip-xl .chip-inner {
+  font-size: 0.9rem;
+}
+
+.chip:not(:disabled):hover {
+  transform: translateY(-3px);
+}
+.chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.chip-selected {
+  transform: translateY(-5px) scale(1.07);
+  box-shadow:
+    0 12px 24px rgba(0, 0, 0, 0.55),
+    0 0 0 3px #fbbf24,
+    inset 0 0 0 3px rgba(255, 255, 255, 0.9),
+    inset 0 0 0 6px rgba(0, 0, 0, 0.18);
+}
+
+.chip-stack {
+  position: relative;
+  width: 24px;
+  height: 24px;
+}
+.chip-disc {
+  position: absolute;
+  left: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 30%, #fcd34d, #b45309 74%);
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.7);
+}
+
+/* ---------------- banners & confetti ---------------- */
+
+.win-banner {
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  background: linear-gradient(180deg, #bbf7d0, #34d399 60%, #059669);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 2px 10px rgba(52, 211, 153, 0.4));
+  animation: popIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.lose-banner {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.65);
+  animation: popIn 0.35s ease both;
+}
+
+@keyframes popIn {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.confetti-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 60;
+}
+.confetti-piece {
+  position: absolute;
+  top: -24px;
+  border-radius: 2px;
+  animation-name: confettiFall;
+  animation-timing-function: cubic-bezier(0.2, 0.6, 0.6, 1);
+  animation-fill-mode: forwards;
+}
+@keyframes confettiFall {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(var(--drift, 0px), 106vh, 0) rotate(720deg);
+    opacity: 0.85;
+  }
+}
+
+/* ---------------- misc ---------------- */
+
+.stat-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 64px;
+  border-radius: 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.25);
+  padding: 0.2rem 0.5rem;
+}
+.stat-label {
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+.stat-value {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #fff;
+}

@@ -1,0 +1,33 @@
+.fortune-ox-container {
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 640px), (max-height: 760px) {
+  .fortune-ox-container { overflow-y: auto; overflow-x: hidden; justify-content: flex-start; }
+  .fortune-ox-container .ox-device { flex: 0 0 auto; height: auto; min-height: 100%; max-height: none; }
+  .fortune-ox-container .ox-machine { flex: 0 0 auto; }
+  .fortune-ox-container .ox-reel-window { flex: 0 0 auto; aspect-ratio: 1; }
+}
+
+@keyframes reelspin {
+  from { transform: translateY(0); }
+  to { transform: translateY(-50%); }
+}
+@keyframes blink {
+  from { opacity: 0.3; }
+  to { opacity: 1; }
+}
+@keyframes swing {
+  0%, 100% { transform: rotate(-8deg); }
+  50% { transform: rotate(8deg); }
+}
+@keyframes pop {
+  0% { transform: scale(0.2); opacity: 0; }
+  70% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); }
+}

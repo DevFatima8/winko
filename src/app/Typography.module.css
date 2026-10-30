@@ -1,0 +1,17 @@
+body.website {
+  font-family: var(--font-outfit), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-weight: 700;
+}
+
+:global(html:not(.lang-ur)) body.website :where(h1, h2, h3, h4, h5, h6, p, div, span, a, label, button, input, select, textarea, li, td, th, dt, dd, small, strong, b):not(:global(.game-surface *), :global(.wx-game *), [data-game-name]) {
+  font-weight: 700;
+}
+
+:global(html:not(.lang-ur)) body.website :is(h1, h2, h3, h4, h5, h6, strong, b, button, [role="button"]):not(:global(.game-surface *), :global(.wx-game *)) {
+  font-weight: 800;
+}
+
+:global(.lang-ur) body.website {
+  font-family: "Noto Nastaliq Urdu", "Jameel Noori Nastaleeq", "Noto Naskh Arabic", ui-sans-serif, system-ui, sans-serif;
+  font-weight: 400;
+}

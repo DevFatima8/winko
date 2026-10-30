@@ -1,0 +1,196 @@
+.fishing-arcade-container {
+  height: 100%;
+  background: #02152b;
+  overscroll-behavior: none;
+}
+
+.fishing-arcade-container .font-arcade {
+  font-family: "Arial Black", "Arial Rounded MT Bold", Impact, "Segoe UI", system-ui, sans-serif;
+}
+
+/* gold outlined title text */
+.fishing-arcade-container .gold-text {
+  font-weight: 900;
+  background: linear-gradient(#fffbc4 8%, #ffd54a 45%, #ff9a1a 92%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(2px 0 0 #6b3200) drop-shadow(-2px 0 0 #6b3200) drop-shadow(0 2px 0 #6b3200)
+    drop-shadow(0 -2px 0 #6b3200) drop-shadow(0 6px 5px rgba(0, 0, 0, 0.45));
+}
+
+/* glass / gold panels */
+.fishing-arcade-container .panel {
+  background: linear-gradient(#12356a, #071a38);
+  border: 3px solid #ffd54a;
+  border-radius: 16px;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.12),
+    0 6px 16px rgba(0, 0, 0, 0.45);
+}
+
+.fishing-arcade-container .hud-btn {
+  pointer-events: auto;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 9999px;
+  border: 3px solid #ffd54a;
+  background: linear-gradient(#2f7be0, #12326b);
+  color: #fff;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow:
+    0 4px 0 #0a1d44,
+    0 6px 12px rgba(0, 0, 0, 0.4);
+  transition: transform 0.08s;
+}
+.fishing-arcade-container .hud-btn:hover {
+  filter: brightness(1.15);
+}
+.fishing-arcade-container .hud-btn:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #0a1d44;
+}
+.fishing-arcade-container .hud-btn.on {
+  background: linear-gradient(#45e47f, #12873f);
+}
+
+.fishing-arcade-container .bet-btn {
+  pointer-events: auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  border: 3px solid #7a4a05;
+  background: linear-gradient(#fff3a0, #f0a30f);
+  color: #5a3205;
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  box-shadow:
+    0 3px 0 #7a4a05,
+    inset 0 0 0 2px rgba(255, 255, 255, 0.5);
+  transition: transform 0.08s;
+}
+.fishing-arcade-container .bet-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+.fishing-arcade-container .bet-btn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #7a4a05;
+}
+.fishing-arcade-container .bet-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.fishing-arcade-container .start-btn {
+  background: linear-gradient(#5bf08b, #14933f);
+  box-shadow:
+    0 8px 0 #0b5a26,
+    0 14px 24px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.45);
+  animation: pulse-btn 1.4s ease-in-out infinite;
+}
+.fishing-arcade-container .start-btn:active {
+  transform: translateY(4px);
+  box-shadow: 0 3px 0 #0b5a26;
+}
+
+@keyframes pulse-btn {
+  0%,
+  100% {
+    scale: 1;
+  }
+  50% {
+    scale: 1.06;
+  }
+}
+
+.fishing-arcade-container .float-y {
+  animation: float-y 3s ease-in-out infinite;
+}
+@keyframes float-y {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.fishing-arcade-container .toast-in {
+  animation: toast-in 0.25s ease-out;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* big win overlay */
+.fishing-arcade-container .bigwin-card {
+  animation: bigwin-pop 3s ease-out forwards;
+}
+@keyframes bigwin-pop {
+  0% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+  12% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  20% {
+    transform: scale(1);
+  }
+  85% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.1);
+    opacity: 0;
+  }
+}
+.fishing-arcade-container .bigwin-rays {
+  width: 1100px;
+  height: 1100px;
+  border-radius: 9999px;
+  background: repeating-conic-gradient(rgba(255, 233, 120, 0.4) 0deg 9deg, rgba(255, 233, 120, 0) 9deg 18deg);
+  -webkit-mask-image: radial-gradient(circle, #000 0%, transparent 68%);
+  mask-image: radial-gradient(circle, #000 0%, transparent 68%);
+  animation:
+    rays-spin 6s linear infinite,
+    rays-fade 3s ease-out forwards;
+}
+@keyframes rays-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes rays-fade {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}

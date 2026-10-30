@@ -1,0 +1,316 @@
+/* ── Scope + typography helpers ─────────────────────────────── */
+.tp-scope {
+  --cw: clamp(52px, 12.5vw, 84px);
+  background:
+    radial-gradient(120% 90% at 50% 0%, #221014 0%, #0b0507 60%, #060304 100%);
+  color: #f3e9d2;
+  border-radius: 1.5rem;
+}
+
+@media (max-width: 1023px), (max-height: 700px) {
+  .tp-scope { overflow-y: auto; overflow-x: hidden; justify-content: flex-start; }
+  .tp-scope > header,
+  .tp-scope > footer,
+  .tp-scope > div { flex-shrink: 0; }
+  .tp-scope .tp-main { flex: 0 0 auto; overflow: visible; }
+  .tp-scope .tp-table-frame { height: auto; }
+  .tp-scope .tp-felt { flex: 0 0 auto; gap: 12px; }
+  .tp-scope > footer > div { flex-wrap: wrap; justify-content: center; }
+}
+
+.text-gold {
+  background: linear-gradient(180deg, #fbe8ae 0%, #efc65c 45%, #a97c1f 62%, #f3d98b 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ── Table frame & felt ─────────────────────────────────────── */
+.tp-table-frame {
+  padding: 12px;
+  border-radius: 48px;
+  background: linear-gradient(160deg, #4a2f1c 0%, #2a170d 45%, #180c06 100%);
+  box-shadow:
+    0 30px 70px rgba(0, 0, 0, 0.65),
+    inset 0 2px 0 rgba(255, 255, 255, 0.07),
+    inset 0 0 0 1px rgba(233, 196, 106, 0.4);
+}
+
+.tp-felt {
+  background:
+    radial-gradient(90% 65% at 50% 14%, rgba(255, 222, 150, 0.1), transparent 55%),
+    radial-gradient(125% 125% at 50% 45%, #7d202d 0%, #58121d 42%, #310811 78%, #1e050a 100%);
+  box-shadow: inset 0 0 90px rgba(0, 0, 0, 0.68);
+}
+
+.tp-felt::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0.55;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+}
+
+/* ── Playing cards ──────────────────────────────────────────── */
+.tp-slot {
+  width: var(--cw);
+  height: calc(var(--cw) * 1.42);
+  border: 1.5px dashed rgba(233, 196, 106, 0.28);
+  border-radius: calc(var(--cw) * 0.12);
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.tp-card {
+  width: var(--cw);
+  height: calc(var(--cw) * 1.42);
+  perspective: 900px;
+}
+
+.tp-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.55s cubic-bezier(0.3, 0.15, 0.25, 1.1);
+}
+
+.tp-card-inner.is-up {
+  transform: rotateY(180deg);
+}
+
+.tp-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border-radius: calc(var(--cw) * 0.11);
+  overflow: hidden;
+}
+
+.tp-back-face {
+  background: linear-gradient(145deg, #7c1a24, #42080f);
+  box-shadow:
+    0 6px 14px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 2px rgba(233, 196, 106, 0.6),
+    inset 0 0 0 5px rgba(0, 0, 0, 0.22);
+}
+
+.tp-back-pattern {
+  position: absolute;
+  inset: 7%;
+  border-radius: calc(var(--cw) * 0.08);
+  display: grid;
+  place-items: center;
+  background:
+    repeating-linear-gradient(45deg, rgba(233, 196, 106, 0.13) 0 2px, transparent 2px 9px),
+    repeating-linear-gradient(-45deg, rgba(233, 196, 106, 0.13) 0 2px, transparent 2px 9px),
+    radial-gradient(circle at 50% 45%, rgba(233, 196, 106, 0.12), transparent 70%);
+}
+
+.tp-back-medal {
+  width: 54%;
+  aspect-ratio: 1;
+  border-radius: 9999px;
+  border: 1.5px solid rgba(233, 196, 106, 0.65);
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 35% 30%, rgba(233, 196, 106, 0.28), rgba(0, 0, 0, 0.4));
+}
+
+.tp-front-face {
+  transform: rotateY(180deg);
+  background: linear-gradient(160deg, #ffffff 0%, #f2ecdb 58%, #e6dcc3 100%);
+  box-shadow:
+    0 6px 14px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.tp-corner {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+}
+
+.tp-rank {
+  font-weight: 800;
+  font-size: calc(var(--cw) * 0.24);
+  letter-spacing: -0.02em;
+}
+
+.tp-corner-suit {
+  width: calc(var(--cw) * 0.17);
+  height: calc(var(--cw) * 0.17);
+  margin-top: 2px;
+}
+
+.tp-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+}
+
+.tp-center-suit {
+  width: calc(var(--cw) * 0.38);
+  height: calc(var(--cw) * 0.38);
+  opacity: 0.92;
+}
+
+.tp-center-rank {
+  font-weight: 800;
+  font-size: calc(var(--cw) * 0.24);
+}
+
+.tp-card-glow .tp-card {
+  filter: drop-shadow(0 0 11px rgba(233, 196, 106, 0.8));
+}
+
+/* ── Buttons ────────────────────────────────────────────────── */
+.tp-btn-gold {
+  position: relative;
+  overflow: hidden;
+  border-radius: 9999px;
+  padding: 0.6rem 1.6rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  color: #1a0f00;
+  background: linear-gradient(180deg, #fde047 0%, #eab308 45%, #ca8a04 58%, #facc15 100%);
+  box-shadow:
+    0 0 18px rgba(250, 204, 21, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.tp-btn-gold:hover:not(:disabled) {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+  box-shadow:
+    0 0 24px rgba(250, 204, 21, 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.tp-btn-gold:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.tp-btn-gold:disabled {
+  opacity: 0.4;
+  filter: saturate(0.4);
+  cursor: not-allowed;
+}
+
+.tp-btn-gold::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -80%;
+  width: 45%;
+  height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.75), transparent);
+  transform: skewX(-20deg);
+  animation: tp-shine 3.4s ease-in-out infinite;
+}
+
+@keyframes tp-shine {
+  0%, 55% { left: -80%; }
+  100% { left: 165%; }
+}
+
+.tp-btn-ghost {
+  border-radius: 9999px;
+  padding: 0.6rem 1.3rem;
+  border: 1px solid rgba(244, 63, 94, 0.6);
+  color: #fecdd3;
+  background: rgba(225, 29, 72, 0.2);
+  box-shadow: 0 0 12px rgba(244, 63, 94, 0.35);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  font-size: 0.7rem;
+  transition: all 0.2s ease;
+}
+
+.tp-btn-ghost:hover {
+  border-color: rgba(244, 63, 94, 0.9);
+  background: rgba(225, 29, 72, 0.35);
+  color: #ffffff;
+  box-shadow: 0 0 16px rgba(244, 63, 94, 0.5);
+}
+
+.tp-icon-btn {
+  display: grid;
+  place-items: center;
+  height: 34px;
+  width: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(243, 217, 139, 0.75);
+  background: rgba(0, 0, 0, 0.45);
+  transition: all 0.2s ease;
+}
+
+.tp-icon-btn:hover {
+  border-color: rgba(233, 196, 106, 0.5);
+  color: #f3d98b;
+}
+
+/* ── Motion flourishes ──────────────────────────────────────── */
+.tp-pop {
+  display: inline-block;
+  animation: tp-pop 0.45s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+@keyframes tp-pop {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.22); }
+  100% { transform: scale(1); }
+}
+
+.tp-shuffling {
+  animation: tp-shuffle 0.45s ease-in-out infinite;
+}
+
+@keyframes tp-shuffle {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  25% { transform: translateX(-2px) rotate(-2deg); }
+  75% { transform: translateX(2px) rotate(2deg); }
+}
+
+.tp-rays {
+  position: absolute;
+  inset: -70%;
+  border-radius: 9999px;
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgba(233, 196, 106, 0.14) 0deg 9deg,
+    transparent 9deg 28deg
+  );
+  -webkit-mask-image: radial-gradient(circle, black 0%, transparent 68%);
+  mask-image: radial-gradient(circle, black 0%, transparent 68%);
+  animation: tp-spin 16s linear infinite;
+}
+
+@keyframes tp-spin {
+  to { transform: rotate(360deg); }
+}
+
+.tp-win-text {
+  filter: drop-shadow(0 2px 12px rgba(233, 196, 106, 0.55));
+  animation: tp-winpulse 1.6s ease-in-out infinite;
+}
+
+@keyframes tp-winpulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.045); }
+}

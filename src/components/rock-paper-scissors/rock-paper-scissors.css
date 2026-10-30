@@ -1,0 +1,8 @@
+.rock-paper-scissors-container {
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}

@@ -1,0 +1,51 @@
+{
+  "name": "nextjs-postgresql-template",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build --webpack",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "package:hostinger": "node scripts/package-standalone.mjs",
+    "provision:agent": "node scripts/provision-agent.mjs",
+    "test:agent": "node --test scripts/test-agent-permissions.mjs",
+    "test:chicken-traffic": "node --test scripts/test-chicken-traffic.mjs scripts/test-chicken-crash-lane.mjs",
+    "test:bet-presets": "node --test scripts/test-bet-presets.mjs",
+    "test:daily-pool": "node --test scripts/test-daily-pool.mjs scripts/test-daily-pool-config.mjs scripts/test-daily-pool-api.mjs scripts/test-daily-pool-browser.mjs scripts/test-browser-recovery.mjs scripts/test-browser-pool-ui.mjs scripts/test-daily-pool-dedicated.mjs scripts/test-multiplayer.mjs scripts/test-multiplayer-client.mjs scripts/test-live-card-rounds.mjs scripts/test-shared-aviator.mjs",
+    "test:aviator-ui": "node --test scripts/test-aviator-scenic.mjs scripts/test-aviator-multiplier.mjs scripts/test-aviator-flight.mjs scripts/test-shared-aviator.mjs",
+    "test:live-rounds": "node --test scripts/test-live-rounds.mjs scripts/test-live-card-rounds.mjs scripts/test-live-other-tables.mjs scripts/test-live-crash-rounds.mjs scripts/test-live-wheel-rounds.mjs",
+    "test:multiplayer": "node --test scripts/test-multiplayer.mjs scripts/test-multiplayer-client.mjs scripts/test-multiplayer-cards.mjs scripts/test-multiplayer-wheels.mjs scripts/test-multiplayer-dice-crash.mjs scripts/test-shared-aviator.mjs scripts/test-live-card-rounds.mjs"
+  },
+  "dependencies": {
+    "@types/canvas-confetti": "^1.9.0",
+    "canvas-confetti": "^1.9.4",
+    "dotenv": "17.3.1",
+    "drizzle-orm": "0.45.2",
+    "framer-motion": "^14.0.0",
+    "lucide-react": "^1.54.0",
+    "mysql2": "^3.24.5",
+    "next": "^16.3.6",
+    "particles.js": "^2.0.0",
+    "pg": "8.20.0",
+    "qrcode": "^1.5.4",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.1.17",
+    "@types/node": "22.19.15",
+    "@types/pg": "8.18.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@types/three": "^0.186.0",
+    "drizzle-kit": "0.31.10",
+    "eslint": "9.39.4",
+    "eslint-config-next": "^16.3.6",
+    "postcss": "8.5.8",
+    "tailwindcss": "4.1.17",
+    "typescript": "5.9.3"
+  }
+}

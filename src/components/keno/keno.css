@@ -1,0 +1,142 @@
+/* --- Keno Stake Theme Variables --- */
+.keno-root {
+  --stake-bg: #1a2c38;
+  --stake-panel: #0f212e;
+  --stake-panel-2: #1a2c38;
+  --stake-border: #2f4553;
+  --stake-text: #ffffff;
+  --stake-text-dim: #b1c2cf;
+  --stake-green: #00e701;
+  --stake-green-hover: #1fff20;
+  --stake-red: #ed3333;
+  --stake-tile: #2f4553;
+  --stake-tile-hover: #3c566a;
+}
+
+/* Hide number input spinners in Keno */
+.keno-root input[type="number"]::-webkit-outer-spin-button,
+.keno-root input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.keno-root input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* --- Keno board animations --- */
+@keyframes keno-ball-in {
+  0% {
+    transform: scale(0.45) rotate(-8deg);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.12) rotate(2deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+@keyframes keno-hit-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 231, 1, 0.75);
+  }
+  50% {
+    box-shadow: 0 0 14px 4px rgba(0, 231, 1, 0.75);
+  }
+}
+
+@keyframes keno-chip-in {
+  0% {
+    transform: translateY(8px) scale(0.7);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes keno-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  75% {
+    transform: translateX(4px);
+  }
+}
+
+@keyframes keno-rise {
+  0% {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+  20% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-14px);
+    opacity: 0;
+  }
+}
+
+@keyframes keno-glow-sweep {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+.keno-ball-in {
+  animation: keno-ball-in 240ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.keno-hit-pulse {
+  animation: keno-hit-pulse 900ms ease-in-out infinite;
+}
+
+.keno-chip-in {
+  animation: keno-chip-in 220ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.keno-shake {
+  animation: keno-shake 260ms ease-in-out;
+}
+
+.keno-rise {
+  animation: keno-rise 1500ms ease-out forwards;
+}
+
+.keno-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.keno-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.keno-scroll::-webkit-scrollbar-thumb {
+  background: #2f4553;
+  border-radius: 999px;
+}
+
+.keno-grid-tile {
+  transition:
+    background-color 130ms ease,
+    color 130ms ease,
+    transform 130ms ease,
+    box-shadow 130ms ease;
+}

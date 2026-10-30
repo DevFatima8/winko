@@ -1,0 +1,150 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  min-height: 100%;
+  background: #111214;
+}
+
+body {
+  -webkit-tap-highlight-color: transparent;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
+}
+
+.bg-casino {
+  background:
+    radial-gradient(1100px 560px at 50% -10%, rgba(40, 169, 9, 0.14), transparent 60%),
+    radial-gradient(800px 500px at 100% 100%, rgba(229, 5, 57, 0.09), transparent 60%),
+    #111214;
+}
+
+.panel {
+  background: #1b1c1d;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.btn-spin {
+  background: linear-gradient(180deg, #36c814 0%, #28a909 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 8px 22px rgba(40, 169, 9, 0.35);
+}
+.btn-spin:disabled {
+  background: #2c2d30;
+  box-shadow: none;
+}
+
+@keyframes chip-pop {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.chip-pop {
+  animation: chip-pop 0.22s ease-out both;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes win-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.win-pulse {
+  animation: win-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes win-banner {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.win-banner {
+  animation: win-banner 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
+}
+
+@keyframes toast-in {
+  from {
+    transform: translate(-50%, 14px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+.toast-in {
+  animation: toast-in 0.25s ease-out both;
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+.drawer-in {
+  animation: drawer-in 0.25s ease-out both;
+}
+
+@keyframes spin-glow {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.28),
+      0 0 0 0 rgba(40, 169, 9, 0.55);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.28),
+      0 0 0 10px rgba(40, 169, 9, 0);
+  }
+}
+.spin-glow {
+  animation: spin-glow 1.6s ease-out infinite;
+}

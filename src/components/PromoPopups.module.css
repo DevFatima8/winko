@@ -1,0 +1,13 @@
+@media (max-width: 767px) {
+  .overlay.overlay {
+    align-items: center;
+    justify-content: center;
+  }
+
+  .overlay.overlay > div {
+    max-width: 340px;
+    max-height: calc(100dvh - 2rem);
+    transform: scale(.9);
+    transform-origin: center;
+  }
+}

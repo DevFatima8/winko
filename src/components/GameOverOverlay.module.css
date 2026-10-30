@@ -1,0 +1,64 @@
+.message {
+  animation: result-message 2s ease-in-out both;
+}
+
+.heading {
+  margin: 0;
+  color: #fff;
+  font-size: clamp(1.8rem, 5.5vw, 2.3rem);
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+  -webkit-text-stroke: 1.5px #000;
+  paint-order: stroke fill;
+  text-shadow: 0 2px 3px #000;
+}
+
+.heading,
+.winnings {
+  font-family: var(--font-outfit), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.congratulations {
+  color: #22c55e;
+  font-size: clamp(2rem, 6vw, 2.5rem);
+  font-weight: 400;
+}
+
+.winnings {
+  font-weight: 800;
+}
+
+.heading.loss {
+  color: #ef4444;
+}
+
+.detail {
+  text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+}
+
+@keyframes result-message {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.92);
+  }
+  16% {
+    opacity: 1;
+    transform: translateY(0) scale(1.02);
+  }
+  28%, 82% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message {
+    animation: none;
+  }
+}

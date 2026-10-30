@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256"><defs><linearGradient id="a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7ff08c"/><stop offset="1" stop-color="#25a04a"/></linearGradient><linearGradient id="c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff08a"/><stop offset="1" stop-color="#f0980a"/></linearGradient><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2a60f"/><stop offset="1" stop-color="#b86a00"/></linearGradient></defs><g stroke-linejoin="round" stroke-linecap="round">
+ <rect x="20" y="70" width="184" height="108" rx="14" fill="url(#a)" stroke="#126530" stroke-width="7"/>
+ <rect x="34" y="84" width="156" height="80" rx="8" fill="none" stroke="#fff" stroke-width="3" opacity=".55"/>
+ <circle cx="112" cy="124" r="28" fill="#d6ffd9" stroke="#126530" stroke-width="5"/>
+ <path d="M122 111 C122 100 102 100 102 112 C102 124 124 122 124 136 C124 149 100 149 100 138" fill="none" stroke="#126530" stroke-width="8"/>
+ <path d="M112 94 V154" stroke="#126530" stroke-width="6"/>
+ <g>
+  <path d="M146 214 v-18 a40 14 0 0 1 80 0 v18 a40 14 0 0 1 -80 0z" fill="url(#s)" stroke="#8a4e00" stroke-width="6"/>
+  <path d="M146 196 v-18 a40 14 0 0 1 80 0 v18 a40 14 0 0 1 -80 0z" fill="url(#s)" stroke="#8a4e00" stroke-width="6"/>
+  <path d="M146 178 v-18 a40 14 0 0 1 80 0 v18 a40 14 0 0 1 -80 0z" fill="url(#s)" stroke="#8a4e00" stroke-width="6"/>
+  <ellipse cx="186" cy="160" rx="40" ry="14" fill="url(#c)" stroke="#8a4e00" stroke-width="6"/>
+  <ellipse cx="186" cy="160" rx="24" ry="7" fill="none" stroke="#c77a00" stroke-width="4"/>
+ </g>
+ </g></svg>

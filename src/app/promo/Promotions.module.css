@@ -1,0 +1,48 @@
+.content {
+  min-width: 0;
+  flex: 1;
+}
+
+.heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.title {
+  min-width: 0;
+  flex: 1 1 150px;
+  font-weight: 700;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  border: 1px solid #ffc933;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #e11d48, #7c1d6f 45%, #1d4ed8);
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: keep-all;
+}
+
+.content .action {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: keep-all;
+}

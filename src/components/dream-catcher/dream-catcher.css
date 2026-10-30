@@ -1,0 +1,27 @@
+.studio-stage .gold-text {
+  background: linear-gradient(180deg, #ffd85f 0%, #f5a300 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.studio-stage .panel {
+  background: rgba(18, 14, 38, 0.85);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  backdrop-filter: blur(12px);
+}
+
+.studio-stage .panel-flat {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.studio-stage .thin-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.studio-stage .thin-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 9999px;
+}

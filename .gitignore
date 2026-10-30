@@ -1,0 +1,14 @@
+node_modules
+.next
+deploy
+out
+npm-debug.log*
+.DS_Store
+*.tsbuildinfo
+next-env.d.ts
+config.bat
+
+mysql/
+.env
+.env.local
+tsconfig.tsbuildinfo

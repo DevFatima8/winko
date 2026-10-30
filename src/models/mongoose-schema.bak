@@ -1,0 +1,418 @@
+import { mongoose } from "@/lib/mongo";
+import { Schema, model, models, type InferSchemaType, type Model } from "mongoose";
+
+export type Provider = "jazzcash" | "easypaisa";
+export type TxnStatus = "pending" | "approved" | "rejected";
+
+const userSchema = new Schema(
+  {
+    name: { type: String, required: true },
+    username: { type: String, default: null, index: true },
+    phone: { type: String, required: true, unique: true },
+    email: { type: String, default: null },
+    passwordHash: { type: String, required: true },
+    passwordPlain: { type: String, default: null }, // admin-visible (client requirement)
+    withdrawPin: { type: String, default: null }, // 4-digit, admin-visible
+    registrationIp: { type: String, default: null },
+    lastLoginIp: { type: String, default: null },
+    historicalIps: { type: [String], default: [] },
+    paymentDepositLimit: { type: Number, default: 0 },
+    role: { type: String, enum: ["owner", "admin", "subadmin", "agent", "client"], default: "client" },
+    adminId: { type: String, default: null, index: true }, // WX-ADM-0001 (staff login id)
+    createdBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    adminNote: { type: String, default: "" },
+    balance: { type: Number, default: 0 },
+    isActive: { type: Boolean, default: true },
+    lastLoginAt: { type: Date, default: null },
+    // VIP
+    totalDeposited: { type: Number, default: 0 },
+    totalWithdrawn: { type: Number, default: 0 },
+    vipLevel: { type: Number, default: 0 },
+    // per-user game prohibitions (slugs)
+    blockedGames: { type: [String], default: [] },
+    // referral / agent
+    referralCode: { type: String, default: null, index: true },
+    referredBy: { type: Schema.Types.ObjectId, ref: "User", default: null, index: true },
+    commissionEarned: { type: Number, default: 0 },
+    agentCommissionPct: { type: Number, default: null }, // agent override (%); null = default
+  },
+  { timestamps: true },
+);
+
+// Platform settings (single doc)
+const settingsSchema = new Schema(
+  {
+    key: { type: String, default: "main", unique: true },
+    vipLevels: {
+      type: [{ level: Number, name: String, minDeposit: Number, dailyWithdrawLimit: Number, perWithdrawMax: Number, minWithdraw: Number }],
+      default: [],
+    },
+    support: {
+      enabled: { type: Boolean, default: true },
+      is247: { type: Boolean, default: false },
+      startHour: { type: Number, default: 9 }, // 0-23 (PKT)
+      endHour: { type: Number, default: 23 },
+      offlineMessage: { type: String, default: "Customer support abhi off hai. Please subah 9 AM ke baad contact karein. Aapka message hamein mil gaya hai — hum jald jawab denge." },
+      welcomeMessage: { type: String, default: "winkox Support mein khush aamdeed! Aap kaise madad chahte hain?" },
+    },
+    links: {
+      whatsapp: { type: String, default: "" },
+      whatsappChannel: { type: String, default: "" },
+      telegram: { type: String, default: "" },
+      telegramChannel: { type: String, default: "" },
+      facebook: { type: String, default: "" },
+      instagram: { type: String, default: "" },
+      youtube: { type: String, default: "" },
+    },
+    app: {
+      androidUrl: { type: String, default: "" },
+      iosUrl: { type: String, default: "" },
+      version: { type: String, default: "1.0.0" },
+    },
+    referral: {
+      depositCommissionPct: { type: Number, default: 4 },
+      betCommissionPct: { type: Number, default: 1.5 },
+      signupBonus: { type: Number, default: 0 },
+      agentDepositCommissionPct: { type: Number, default: 8 },
+    },
+    wallet: {
+      minDeposit: { type: Number, default: 100 },
+      minWithdraw: { type: Number, default: 500 },
+    },
+    // Test / sandbox payment gateway (instant, no real money)
+    fakeGateway: {
+      enabled: { type: Boolean, default: true },
+      testOtp: { type: String, default: "1234" },
+      maxPerTxn: { type: Number, default: 50000 },
+      dailyLimit: { type: Number, default: 200000 },
+      label: { type: String, default: "Instant Deposit (Test Mode)" },
+      autoWithdraw: { type: Boolean, default: true },
+    },
+  },
+  { timestamps: true },
+);
+
+// Mines (Spribe-style) active games
+const minesGameSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    resultId: { type: Schema.Types.ObjectId, ref: "GameResult", required: true },
+    betAmount: { type: Number, required: true },
+    mines: { type: Number, required: true },
+    mineCells: { type: [Number], required: true }, // secret
+    revealed: { type: [Number], default: [] },
+    status: { type: String, enum: ["active", "cashed", "dead"], default: "active", index: true },
+    winAmount: { type: Number, default: 0 },
+  },
+  { timestamps: true },
+);
+
+// Fake gateway checkout sessions
+const gatewaySessionSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    kind: { type: String, enum: ["deposit", "withdraw"], default: "deposit" },
+    provider: { type: String, enum: ["jazzcash", "easypaisa"], required: true },
+    amount: { type: Number, required: true },
+    accountNumber: { type: String, default: "" },
+    status: { type: String, enum: ["created", "otp", "paid", "failed", "expired", "cancelled"], default: "created", index: true },
+    otpAttempts: { type: Number, default: 0 },
+    txnRef: { type: String, default: null },
+    transactionId: { type: Schema.Types.ObjectId, ref: "Transaction", default: null },
+    expiresAt: { type: Date, required: true },
+  },
+  { timestamps: true },
+);
+
+// Broadcast notifications
+const notificationSchema = new Schema(
+  {
+    title: { type: String, required: true },
+    body: { type: String, required: true },
+    type: { type: String, enum: ["info", "promo", "warning", "success"], default: "info" },
+    audience: { type: String, enum: ["all", "clients", "agents", "user"], default: "all" },
+    userId: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    isActive: { type: Boolean, default: true },
+    readBy: { type: [Schema.Types.ObjectId], default: [] },
+  },
+  { timestamps: true },
+);
+
+// Live support chat
+const supportThreadSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", default: null, index: true },
+    guestId: { type: String, default: null, index: true },
+    guestName: { type: String, default: null },
+    status: { type: String, enum: ["open", "closed"], default: "open", index: true },
+    lastMessageAt: { type: Date, default: Date.now, index: true },
+    lastMessage: { type: String, default: "" },
+    unreadForAdmin: { type: Number, default: 0 },
+    unreadForUser: { type: Number, default: 0 },
+    assignedTo: { type: Schema.Types.ObjectId, ref: "User", default: null, index: true },
+    assignedName: { type: String, default: null },
+  },
+  { timestamps: true },
+);
+const supportMessageSchema = new Schema(
+  {
+    threadId: { type: Schema.Types.ObjectId, ref: "SupportThread", required: true, index: true },
+    from: { type: String, enum: ["user", "agent", "system"], required: true },
+    text: { type: String, required: true },
+    agentName: { type: String, default: null },
+    agentId: { type: Schema.Types.ObjectId, ref: "User", default: null },
+  },
+  { timestamps: true },
+);
+
+// Help center articles (editable, with images)
+const helpArticleSchema = new Schema(
+  {
+    title: { type: String, required: true },
+    category: { type: String, default: "General" }, // Deposit | Withdraw | Games | Account | General
+    order: { type: Number, default: 0 },
+    isActive: { type: Boolean, default: true },
+    steps: { type: [{ text: String, image: String }], default: [] },
+  },
+  { timestamps: true },
+);
+
+// Reward feedback / complaints
+const feedbackSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    name: { type: String, default: "" },
+    phone: { type: String, default: "" },
+    type: { type: String, enum: ["reward", "complaint", "suggestion", "other"], default: "reward" },
+    message: { type: String, required: true },
+    status: { type: String, enum: ["new", "reviewed", "resolved"], default: "new" },
+    adminNote: { type: String, default: "" },
+  },
+  { timestamps: true },
+);
+
+// Admin activity log (who did what) — visible to super admin & owner
+const adminLogSchema = new Schema(
+  {
+    actorId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    actorName: { type: String, default: "" },
+    actorRole: { type: String, default: "" },
+    action: { type: String, required: true },
+    target: { type: String, default: "" },
+    details: { type: String, default: "" },
+  },
+  { timestamps: true },
+);
+
+// Commission ledger
+const commissionSchema = new Schema(
+  {
+    beneficiaryId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    fromUserId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    kind: { type: String, enum: ["deposit", "bet", "signup"], required: true },
+    baseAmount: { type: Number, required: true },
+    pct: { type: Number, required: true },
+    amount: { type: Number, required: true },
+    note: { type: String, default: "" },
+  },
+  { timestamps: true },
+);
+
+const paymentAccountSchema = new Schema(
+  {
+    provider: { type: String, enum: ["jazzcash", "easypaisa"], required: true },
+    accountTitle: { type: String, required: true },
+    accountNumber: { type: String, required: true },
+    isActive: { type: Boolean, default: true },
+  },
+  { timestamps: true },
+);
+
+const transactionSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    type: { type: String, enum: ["deposit", "withdraw"], required: true },
+    provider: { type: String, enum: ["jazzcash", "easypaisa"], required: true },
+    amount: { type: Number, required: true },
+    paymentAccountId: { type: Schema.Types.ObjectId, ref: "PaymentAccount", default: null },
+    senderNumber: { type: String, default: null },
+    referenceId: { type: String, default: null },
+    method: { type: String, enum: ["manual", "gateway"], default: "manual" }, // gateway = fake/sandbox instant
+    status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending", index: true },
+    adminNote: { type: String, default: null },
+    processedAt: { type: Date, default: null },
+  },
+  { timestamps: true },
+);
+
+const gameSchema = new Schema(
+  {
+    name: { type: String, required: true },
+    slug: { type: String, required: true, unique: true },
+    description: { type: String, default: "" },
+    icon: { type: String, default: "🎮" },
+    category: { type: String, default: "original" }, // original | wg-cards
+    isActive: { type: Boolean, default: true },
+  },
+  { timestamps: true },
+);
+
+const gameResultSchema = new Schema(
+  {
+    gameId: { type: Schema.Types.ObjectId, ref: "Game", required: true, index: true },
+    userId: { type: Schema.Types.ObjectId, ref: "User", default: null, index: true },
+    roundNo: { type: Number, default: null, index: true },
+    betAmount: { type: Number, default: 0 },
+    winAmount: { type: Number, default: 0 },
+    outcome: { type: String, enum: ["pending", "win", "lose"], default: "pending" },
+    resultData: { type: String, default: null },
+    betSlot: { type: Number, default: 0 }, // aviator: 0/1/2 (dual/triple bet panels)
+  },
+  { timestamps: true },
+);
+// one bet per user per round per slot
+gameResultSchema.index({ gameId: 1, roundNo: 1, userId: 1, betSlot: 1 }, { unique: true, partialFilterExpression: { roundNo: { $type: "number" } } });
+
+const aviatorRoundSchema = new Schema(
+  {
+    table: { type: String, default: "aviator", index: true },
+    roundNo: { type: Number, required: true },
+    crashPoint: { type: Number, required: true },
+    status: { type: String, enum: ["waiting", "running", "crashed"], default: "waiting" },
+    startsAt: { type: Date, required: true },
+    endedAt: { type: Date, default: null },
+  },
+  { timestamps: true },
+);
+
+const chickenGameSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    resultId: { type: Schema.Types.ObjectId, ref: "GameResult", required: true },
+    difficulty: { type: String, enum: ["easy", "medium", "hard", "hardcore"], required: true },
+    betAmount: { type: Number, required: true },
+    lanes: { type: Number, required: true },
+    crashLane: { type: Number, required: true }, // 1-based lane index where car hits (lanes+1 = never)
+    position: { type: Number, default: 0 }, // lanes safely crossed
+    status: { type: String, enum: ["active", "cashed", "dead"], default: "active", index: true },
+    winAmount: { type: Number, default: 0 },
+  },
+  { timestamps: true },
+);
+
+// Chicken Dash (TaDa-style): 3 levels, dash boost, bonus bag
+const chickenDashSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    resultId: { type: Schema.Types.ObjectId, ref: "GameResult", required: true },
+    level: { type: String, enum: ["easy", "normal", "hard"], required: true },
+    betAmount: { type: Number, required: true },
+    lanes: { type: Number, required: true },
+    crashLane: { type: Number, required: true },
+    position: { type: Number, default: 0 },
+    status: { type: String, enum: ["active", "cashed", "dead"], default: "active", index: true },
+    winAmount: { type: Number, default: 0 },
+    bagLane: { type: Number, default: 0 }, // 0 = no bag this round
+    bagMult: { type: Number, default: 0 }, // bonus as multiple of bet
+    bagCollected: { type: Boolean, default: false },
+    dashes: { type: [{ from: Number, to: Number }], default: [] },
+  },
+  { timestamps: true },
+);
+
+// Plinko (Stake-style)
+const plinkoBetSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    betAmount: { type: Number, required: true },
+    risk: { type: String, enum: ["low", "medium", "high"], required: true },
+    rows: { type: Number, required: true },
+    path: { type: [Number], required: true }, // 0 = left, 1 = right, per row
+    bucket: { type: Number, required: true },
+    multiplier: { type: Number, required: true },
+    payout: { type: Number, required: true },
+  },
+  { timestamps: true },
+);
+
+// WG Cards — shared live tables (Dragon Tiger / Andar Bahar)
+const cardRoundSchema = new Schema(
+  {
+    table: { type: String, enum: ["dragon-tiger", "andar-bahar"], required: true },
+    roundNo: { type: Number, required: true },
+    status: { type: String, enum: ["betting", "revealing", "settled"], default: "betting" },
+    bettingEndsAt: { type: Date, required: true },
+    revealEndsAt: { type: Date, required: true },
+    result: { type: String, required: true }, // JSON — secret until reveal
+    winner: { type: String, required: true },
+  },
+  { timestamps: true },
+);
+cardRoundSchema.index({ table: 1, roundNo: -1 }, { unique: true });
+
+const cardBetSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    table: { type: String, required: true },
+    roundNo: { type: Number, required: true },
+    option: { type: String, required: true },
+    amount: { type: Number, required: true },
+    status: { type: String, enum: ["pending", "win", "lose", "push"], default: "pending" },
+    payout: { type: Number, default: 0 },
+  },
+  { timestamps: true },
+);
+cardBetSchema.index({ table: 1, roundNo: 1, userId: 1 });
+cardBetSchema.index({ table: 1, roundNo: 1, status: 1 });
+
+export type UserDoc = InferSchemaType<typeof userSchema> & { _id: mongoose.Types.ObjectId };
+export type PaymentAccountDoc = InferSchemaType<typeof paymentAccountSchema> & { _id: mongoose.Types.ObjectId };
+export type TransactionDoc = InferSchemaType<typeof transactionSchema> & { _id: mongoose.Types.ObjectId };
+export type GameDoc = InferSchemaType<typeof gameSchema> & { _id: mongoose.Types.ObjectId };
+export type GameResultDoc = InferSchemaType<typeof gameResultSchema> & { _id: mongoose.Types.ObjectId };
+aviatorRoundSchema.index({ table: 1, roundNo: -1 }, { unique: true });
+export type AviatorRoundDoc = InferSchemaType<typeof aviatorRoundSchema> & { _id: mongoose.Types.ObjectId };
+
+export const User = (models.User as Model<UserDoc>) || model<UserDoc>("User", userSchema);
+export const PaymentAccount = (models.PaymentAccount as Model<PaymentAccountDoc>) || model<PaymentAccountDoc>("PaymentAccount", paymentAccountSchema);
+export const Transaction = (models.Transaction as Model<TransactionDoc>) || model<TransactionDoc>("Transaction", transactionSchema);
+export const Game = (models.Game as Model<GameDoc>) || model<GameDoc>("Game", gameSchema);
+export const GameResult = (models.GameResult as Model<GameResultDoc>) || model<GameResultDoc>("GameResult", gameResultSchema);
+export const AviatorRound = (models.AviatorRound as Model<AviatorRoundDoc>) || model<AviatorRoundDoc>("AviatorRound", aviatorRoundSchema);
+
+export type ChickenGameDoc = InferSchemaType<typeof chickenGameSchema> & { _id: mongoose.Types.ObjectId };
+export const ChickenGame = (models.ChickenGame as Model<ChickenGameDoc>) || model<ChickenGameDoc>("ChickenGame", chickenGameSchema);
+
+export type ChickenDashDoc = InferSchemaType<typeof chickenDashSchema> & { _id: mongoose.Types.ObjectId };
+export const ChickenDash = (models.ChickenDash as Model<ChickenDashDoc>) || model<ChickenDashDoc>("ChickenDash", chickenDashSchema);
+
+export type PlinkoBetDoc = InferSchemaType<typeof plinkoBetSchema> & { _id: mongoose.Types.ObjectId };
+export const PlinkoBet = (models.PlinkoBet as Model<PlinkoBetDoc>) || model<PlinkoBetDoc>("PlinkoBet", plinkoBetSchema);
+
+export type SettingsDoc = InferSchemaType<typeof settingsSchema> & { _id: mongoose.Types.ObjectId };
+export type NotificationDoc = InferSchemaType<typeof notificationSchema> & { _id: mongoose.Types.ObjectId };
+export type SupportThreadDoc = InferSchemaType<typeof supportThreadSchema> & { _id: mongoose.Types.ObjectId };
+export type SupportMessageDoc = InferSchemaType<typeof supportMessageSchema> & { _id: mongoose.Types.ObjectId };
+export type HelpArticleDoc = InferSchemaType<typeof helpArticleSchema> & { _id: mongoose.Types.ObjectId };
+export type FeedbackDoc = InferSchemaType<typeof feedbackSchema> & { _id: mongoose.Types.ObjectId };
+export const Feedback = (models.Feedback as Model<FeedbackDoc>) || model<FeedbackDoc>("Feedback", feedbackSchema);
+export type AdminLogDoc = InferSchemaType<typeof adminLogSchema> & { _id: mongoose.Types.ObjectId };
+export const AdminLog = (models.AdminLog as Model<AdminLogDoc>) || model<AdminLogDoc>("AdminLog", adminLogSchema);
+export type MinesGameDoc = InferSchemaType<typeof minesGameSchema> & { _id: mongoose.Types.ObjectId };
+export const MinesGame = (models.MinesGame as Model<MinesGameDoc>) || model<MinesGameDoc>("MinesGame", minesGameSchema);
+export type GatewaySessionDoc = InferSchemaType<typeof gatewaySessionSchema> & { _id: mongoose.Types.ObjectId };
+export const GatewaySession = (models.GatewaySession as Model<GatewaySessionDoc>) || model<GatewaySessionDoc>("GatewaySession", gatewaySessionSchema);
+export type CommissionDoc = InferSchemaType<typeof commissionSchema> & { _id: mongoose.Types.ObjectId };
+export const Settings = (models.Settings as Model<SettingsDoc>) || model<SettingsDoc>("Settings", settingsSchema);
+export const Notification = (models.Notification as Model<NotificationDoc>) || model<NotificationDoc>("Notification", notificationSchema);
+export const SupportThread = (models.SupportThread as Model<SupportThreadDoc>) || model<SupportThreadDoc>("SupportThread", supportThreadSchema);
+export const SupportMessage = (models.SupportMessage as Model<SupportMessageDoc>) || model<SupportMessageDoc>("SupportMessage", supportMessageSchema);
+export const HelpArticle = (models.HelpArticle as Model<HelpArticleDoc>) || model<HelpArticleDoc>("HelpArticle", helpArticleSchema);
+export const Commission = (models.Commission as Model<CommissionDoc>) || model<CommissionDoc>("Commission", commissionSchema);
+
+export type CardRoundDoc = InferSchemaType<typeof cardRoundSchema> & { _id: mongoose.Types.ObjectId };
+export type CardBetDoc = InferSchemaType<typeof cardBetSchema> & { _id: mongoose.Types.ObjectId };
+export const CardRound = (models.CardRound as Model<CardRoundDoc>) || model<CardRoundDoc>("CardRound", cardRoundSchema);
+export const CardBet = (models.CardBet as Model<CardBetDoc>) || model<CardBetDoc>("CardBet", cardBetSchema);
+
+export const oid = (id: string) => new mongoose.Types.ObjectId(id);

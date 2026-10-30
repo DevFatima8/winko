@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256"><defs><linearGradient id="a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e2e8f6"/></linearGradient><linearGradient id="b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6cb8ff"/><stop offset="1" stop-color="#2a6fd6"/></linearGradient><linearGradient id="y" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe45a"/><stop offset="1" stop-color="#f2a800"/></linearGradient><linearGradient id="c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff08a"/><stop offset="1" stop-color="#f0980a"/></linearGradient></defs><g stroke-linejoin="round" stroke-linecap="round">
+ <rect x="30" y="40" width="156" height="192" rx="16" fill="url(#a)" stroke="#1c4f9a" stroke-width="7"/>
+ <path d="M30 56 a16 16 0 0 1 16-16 h124 a16 16 0 0 1 16 16 v28 H30Z" fill="url(#b)" stroke="#1c4f9a" stroke-width="7"/>
+ <circle cx="62" cy="40" r="8" fill="#fff" stroke="#1c4f9a" stroke-width="4"/><circle cx="108" cy="40" r="8" fill="#fff" stroke="#1c4f9a" stroke-width="4"/><circle cx="154" cy="40" r="8" fill="#fff" stroke="#1c4f9a" stroke-width="4"/>
+ <rect x="52" y="106" width="100" height="10" rx="5" fill="#b4c3e0" stroke="none"/>
+ <rect x="52" y="132" width="80" height="10" rx="5" fill="#b4c3e0" stroke="none"/>
+ <rect x="52" y="158" width="60" height="10" rx="5" fill="#b4c3e0" stroke="none"/>
+ <g transform="translate(184,160) rotate(38)">
+  <rect x="-15" y="-74" width="30" height="20" rx="7" fill="#ff8aa0" stroke="#a02040" stroke-width="5"/>
+  <rect x="-15" y="-58" width="30" height="14" fill="#c8d0dc" stroke="#6a7488" stroke-width="4"/>
+  <rect x="-15" y="-46" width="30" height="92" fill="url(#y)" stroke="#9a6200" stroke-width="6"/>
+  <polygon points="-15,46 15,46 0,78" fill="#ffd9b0" stroke="#9a6200" stroke-width="6"/>
+  <polygon points="-6,66 6,66 0,78" fill="#3a2a1a" stroke="none"/>
+ </g>
+ <polygon points="210.0,28.0 217.1,46.3 236.6,47.3 221.4,59.7 226.5,78.7 210.0,68.0 193.5,78.7 198.6,59.7 183.4,47.3 202.9,46.3" fill="url(#c)" stroke="#9a5200" stroke-width="6"/>
+ </g></svg>

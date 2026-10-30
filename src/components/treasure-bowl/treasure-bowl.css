@@ -1,0 +1,252 @@
+.treasure-bowl-app {
+  --ink: #15090b;
+  --wine: #350b12;
+  --red: #8d1720;
+  --red-bright: #c72c28;
+  --gold: #e8b64e;
+  --gold-pale: #ffe6a0;
+  --gold-muted: #a8762e;
+  --cream: #fff7db;
+  --panel: #260c10;
+  --line: rgba(232, 182, 78, 0.28);
+}
+
+.treasure-bowl-app {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  padding: 2px clamp(4px, 1.5vw, 12px);
+  background:
+    radial-gradient(circle at 50% -10%, rgba(158, 31, 27, .3), transparent 39%),
+    radial-gradient(circle at 50% 120%, rgba(99, 18, 20, .22), transparent 45%),
+    #0d0507;
+  border-radius: 1rem;
+  color: var(--cream, #fff7db);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  user-select: none;
+}
+.treasure-bowl-app .ambient-glow { position: fixed; pointer-events: none; width: 440px; height: 440px; border-radius: 50%; filter: blur(80px); opacity: .12; }
+.treasure-bowl-app .ambient-glow--left { background: #d43b26; left: -260px; top: 20%; }
+.treasure-bowl-app .ambient-glow--right { background: #f0ad3d; right: -290px; bottom: 4%; }
+.treasure-bowl-app .treasure-bowl-shell {
+  position: relative;
+  z-index: 1;
+  width: min(1440px, 100%);
+  height: 100%;
+  flex: 1 1 0%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(229, 175, 73, .36);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(47, 11, 16, .98), rgba(20, 7, 9, .98));
+  box-shadow: 0 28px 110px rgba(0, 0, 0, .58), inset 0 1px rgba(255, 236, 153, .1);
+}
+.treasure-bowl-app .treasure-bowl-shell::before { content: ""; position: absolute; inset: 7px; pointer-events: none; border: 1px solid rgba(229, 175, 73, .09); border-radius: 17px; }
+
+.treasure-bowl-app .topbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 6px 14px;
+  border-bottom: 1px solid rgba(229, 175, 73, .21);
+  background: linear-gradient(180deg, rgba(70, 17, 22, .82), rgba(37, 10, 14, .82));
+  flex-shrink: 0;
+}
+.treasure-bowl-app .brand-lockup { display: flex; align-items: center; gap: 10px; }
+.treasure-bowl-app .brand-mark { display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid rgba(255, 220, 127, .7); border-radius: 12px; color: var(--gold-pale); background: linear-gradient(145deg, #c67b20, #6d1e18 66%, #3b0d10); box-shadow: inset 0 0 0 2px rgba(76, 14, 14, .45), 0 4px 10px rgba(0,0,0,.27); }
+.treasure-bowl-app .bowl-icon { width: 28px; height: 28px; color: #f7c750; filter: drop-shadow(0 2px 2px rgba(45, 6, 5, .5)); }
+.treasure-bowl-app .bowl-icon--small { width: 22px; height: 22px; }
+.treasure-bowl-app .brand-name { color: #fff3c4; font-size: 15px; font-weight: 900; letter-spacing: .15em; line-height: 1; text-shadow: 0 2px 0 #551211; }
+.treasure-bowl-app .brand-name span { color: #f1bd51; }
+.treasure-bowl-app .brand-subtitle { margin-top: 4px; color: #c89344; font-size: 7.5px; font-weight: 800; letter-spacing: .24em; }
+.treasure-bowl-app .brand-subtitle i { display: inline-block; width: 3px; height: 3px; margin: 0 5px 2px; border-radius: 50%; background: #c89344; }
+.treasure-bowl-app .topbar-actions { display: flex; align-items: center; gap: 8px; }
+.treasure-bowl-app .demo-badge { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border: 1px solid rgba(101, 214, 151, .28); border-radius: 999px; background: rgba(18, 89, 51, .2); color: #9de5b7; font-size: 8.5px; font-weight: 800; letter-spacing: .14em; }
+.treasure-bowl-app .demo-badge span, .treasure-bowl-app .live-dot, .treasure-bowl-app .positive-dot { width: 6px; height: 6px; border-radius: 50%; background: #6ee09f; box-shadow: 0 0 0 3px rgba(110, 224, 159, .1), 0 0 11px #6ee09f; }
+.treasure-bowl-app .icon-button, .treasure-bowl-app .avatar-button { display: grid; place-items: center; border: 1px solid rgba(235, 184, 78, .24); cursor: pointer; color: #d6aa5d; background: rgba(255, 218, 130, .04); transition: .2s ease; }
+.treasure-bowl-app .icon-button:hover { color: #fff0b1; border-color: rgba(235, 184, 78, .7); background: rgba(255, 218, 130, .1); }
+.treasure-bowl-app .icon-button { width: 30px; height: 30px; border-radius: 50%; }
+.treasure-bowl-app .icon-button svg { width: 14px; height: 14px; }
+.treasure-bowl-app .avatar-button { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(135deg, #e9b849, #783018); color: #35100e; font-size: 11px; font-weight: 900; }
+
+.treasure-bowl-app .game-layout { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1 1 0%; min-height: 0; gap: 8px; padding: 6px 10px; overflow: hidden; }
+@media (min-width: 1024px) {
+  .treasure-bowl-app .game-layout { grid-template-columns: minmax(0, 1fr) 280px; gap: 14px; }
+}
+.treasure-bowl-app .play-column { min-width: 0; height: 100%; flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; }
+.treasure-bowl-app .session-strip { display: flex; align-items: center; justify-content: space-between; min-height: 22px; padding: 0 2px 6px; color: #e2ae51; font-size: 8.5px; font-weight: 800; letter-spacing: .15em; flex-shrink: 0; }
+.treasure-bowl-app .session-strip__item { display: flex; align-items: center; gap: 6px; }
+.treasure-bowl-app .session-strip__item--muted { color: #8c5d32; letter-spacing: .1em; }
+.treasure-bowl-app .session-strip strong { color: #d6a049; font-weight: 800; }
+.treasure-bowl-app .live-dot { display: inline-block; width: 5px; height: 5px; box-shadow: 0 0 0 3px rgba(110,224,159,.08); }
+
+.treasure-bowl-app .reel-stage { position: relative; display: flex; flex: 1 1 0%; min-height: 0; flex-direction: column; align-items: center; justify-content: space-around; overflow: hidden; padding: 8px 14px 6px; border: 1px solid rgba(235, 181, 74, .44); border-radius: 14px; background: radial-gradient(ellipse at 50% 41%, rgba(133, 26, 20, .94), rgba(76, 12, 17, .96) 51%, #280a0f 100%); box-shadow: inset 0 0 0 4px rgba(54, 11, 12, .66), inset 0 0 0 5px rgba(243, 181, 68, .16), 0 10px 20px rgba(0,0,0,.2); }
+.treasure-bowl-app .reel-stage::before { content: ""; position: absolute; inset: 12px; border: 1px solid rgba(247, 198, 92, .22); border-radius: 10px; pointer-events: none; }
+.treasure-bowl-app .reel-stage::after { content: ""; position: absolute; inset: 0; opacity: .3; pointer-events: none; background-image: radial-gradient(rgba(255,225,138,.22) .6px, transparent .6px); background-size: 10px 10px; mix-blend-mode: screen; }
+.treasure-bowl-app .reel-stage--huge { animation: huge-pulse 1.8s ease-in-out infinite alternate; }
+@keyframes huge-pulse { from { box-shadow: inset 0 0 0 5px rgba(54,11,12,.66), inset 0 0 0 6px rgba(243,181,68,.16), 0 15px 30px rgba(0,0,0,.2); } to { box-shadow: inset 0 0 0 5px rgba(54,11,12,.66), inset 0 0 0 6px rgba(243,181,68,.28), 0 0 45px rgba(239,170,51,.22); } }
+.treasure-bowl-app .stage-corner { position: absolute; z-index: 2; width: 36px; height: 36px; border-color: rgba(249, 205, 105, .9); border-style: solid; }
+.treasure-bowl-app .stage-corner--tl { top: 25px; left: 25px; border-width: 2px 0 0 2px; border-radius: 7px 0 0; }
+.treasure-bowl-app .stage-corner--tr { top: 25px; right: 25px; border-width: 2px 2px 0 0; border-radius: 0 7px 0 0; }
+.treasure-bowl-app .stage-corner--bl { bottom: 24px; left: 25px; border-width: 0 0 2px 2px; border-radius: 0 0 0 7px; }
+.treasure-bowl-app .stage-corner--br { right: 25px; bottom: 24px; border-width: 0 2px 2px 0; border-radius: 0 0 7px; }
+.treasure-bowl-app .stage-heading { position: relative; z-index: 3; text-align: center; }
+.treasure-bowl-app .eyebrow { display: block; color: #c99542; font-size: 9px; font-weight: 800; letter-spacing: .32em; }
+.treasure-bowl-app .stage-heading h1 { margin: 7px 0 8px; color: #fff0b1; font-family: Georgia, "Times New Roman", serif; font-size: clamp(24px, 4vw, 37px); font-weight: 700; letter-spacing: .14em; line-height: 1; text-shadow: 0 2px 0 #7a211b, 0 0 20px rgba(255,201,89,.28); }
+.treasure-bowl-app .heading-rule { display: flex; align-items: center; justify-content: center; gap: 8px; color: #f3c65f; }
+.treasure-bowl-app .heading-rule i { display: block; width: 58px; height: 1px; background: linear-gradient(90deg, transparent, #dca849); }
+.treasure-bowl-app .heading-rule i:last-child { transform: rotate(180deg); }
+.treasure-bowl-app .heading-rule b { display: block; width: 5px; height: 5px; transform: rotate(45deg); border: 1px solid #f3c65f; }
+.treasure-bowl-app .reel-window-wrap { position: relative; z-index: 2; width: min(100%, 460px); margin: 6px auto; }
+.treasure-bowl-app .reel-window-glow { position: absolute; inset: 10% 10%; border-radius: 50%; background: #f5ac33; filter: blur(44px); opacity: .14; }
+.treasure-bowl-app .reel-window { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; width: 100%; padding: 8px; border: 1px solid #d28a2e; border-radius: 11px; background: linear-gradient(145deg, #f4c25b, #86501c 15%, #3a100d 50%, #c37a25); box-shadow: 0 0 0 3px rgba(75, 19, 12, .9), 0 0 0 4px rgba(239, 180, 68, .32), inset 0 0 0 2px rgba(255, 232, 148, .45), 0 10px 25px rgba(0,0,0,.36); }
+.treasure-bowl-app .reel-window::before { content: ""; position: absolute; inset: 6px; z-index: 1; border: 1px solid rgba(255, 225, 147, .35); border-radius: 6px; pointer-events: none; }
+.treasure-bowl-app .symbol-card { position: relative; display: flex; min-height: clamp(56px, 11vw, 86px); flex-direction: column; align-items: center; justify-content: center; overflow: hidden; border: 1px solid rgba(229, 165, 65, .5); border-radius: 6px; background: #41171a; box-shadow: inset 0 0 16px rgba(0,0,0,.3); transition: filter .2s; }
+.treasure-bowl-app .symbol-card::before { content: ""; position: absolute; inset: 3px; border: 1px solid rgba(255, 218, 129, .12); border-radius: 3px; }
+.treasure-bowl-app .symbol-card__shine { position: absolute; top: -50%; left: -50%; width: 80%; height: 200%; transform: rotate(28deg) translateX(-120%); background: linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent); pointer-events: none; }
+.treasure-bowl-app .symbol-card--spinning .symbol-card__shine { animation: card-shine .5s linear infinite; }
+@keyframes card-shine { to { transform: rotate(28deg) translateX(310%); } }
+.treasure-bowl-app .symbol-card__mark { position: relative; color: #fff1ad; font-family: Georgia, serif; font-size: clamp(26px, 5.5vw, 40px); font-weight: 700; line-height: 1; text-shadow: 0 2px 0 #672018, 0 0 13px currentColor; }
+.treasure-bowl-app .symbol-card__label { position: relative; margin-top: 4px; color: rgba(255,239,180,.73); font-size: 6.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.treasure-bowl-app .symbol-card--coin { background: radial-gradient(circle at 50% 38%, #bb771f, #5b2419 68%, #321215); }
+.treasure-bowl-app .symbol-card--coin .symbol-card__mark { color: #f5cc62; }
+.treasure-bowl-app .symbol-card--lantern { background: radial-gradient(circle at 50% 38%, #b43127, #601520 68%, #301016); }
+.treasure-bowl-app .symbol-card--lantern .symbol-card__mark { color: #ffbf47; }
+.treasure-bowl-app .symbol-card--peach { background: radial-gradient(circle at 50% 38%, #b64c3a, #651a20 68%, #301015); }
+.treasure-bowl-app .symbol-card--peach .symbol-card__mark { color: #ffac89; }
+.treasure-bowl-app .symbol-card--jade { background: radial-gradient(circle at 50% 38%, #237361, #173f3c 68%, #112625); }
+.treasure-bowl-app .symbol-card--jade .symbol-card__mark { color: #8ee7bc; }
+.treasure-bowl-app .symbol-card--ingot { background: radial-gradient(circle at 50% 38%, #b87925, #693019 68%, #351313); }
+.treasure-bowl-app .symbol-card--ingot .symbol-card__mark { color: #ffe37f; }
+.treasure-bowl-app .symbol-card--bowl { background: radial-gradient(circle at 50% 38%, #a56e25, #612318 68%, #331113); }
+.treasure-bowl-app .symbol-card--bowl .symbol-card__mark { color: #ffe38a; font-size: clamp(30px, 6vw, 45px); }
+.treasure-bowl-app .symbol-card--winner { border-color: #ffe083; box-shadow: inset 0 0 21px rgba(0,0,0,.3), 0 0 15px rgba(255,198,76,.2); animation: winning-card 1.7s ease-in-out infinite alternate; }
+@keyframes winning-card { from { filter: brightness(1); } to { filter: brightness(1.23); } }
+.treasure-bowl-app .payline { position: absolute; z-index: 3; left: 0; width: 100%; height: 1px; pointer-events: none; background: rgba(255, 230, 148, .35); box-shadow: 0 0 6px rgba(255, 211, 89, .45); }
+.treasure-bowl-app .payline--top { top: 33.3%; }
+.treasure-bowl-app .payline--middle { top: 50%; display: flex; align-items: center; justify-content: space-between; padding: 0 0; background: rgba(255, 223, 113, .75); }
+.treasure-bowl-app .payline--middle span { display: grid; place-items: center; width: 15px; height: 15px; border: 1px solid rgba(255,239,171,.75); border-radius: 50%; background: #791f1b; color: #ffe49c; font-size: 7px; }
+.treasure-bowl-app .payline--bottom { top: 66.6%; }
+.treasure-bowl-app .result-banner { position: relative; z-index: 3; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 24px; color: #d3a149; font-size: 9.5px; font-weight: 900; letter-spacing: .16em; text-align: center; }
+.treasure-bowl-app .result-banner strong { color: #ffe7a0; font-size: 11px; letter-spacing: .06em; }
+.treasure-bowl-app .result-banner__ornament { color: #e9b64f; font-size: 8px; }
+.treasure-bowl-app .result-banner--win, .treasure-bowl-app .result-banner--huge { color: #ffe59a; text-shadow: 0 0 12px rgba(255, 208, 94, .45); }
+.treasure-bowl-app .result-banner--huge { font-size: 11px; letter-spacing: .22em; animation: result-glow 1s ease-in-out infinite alternate; }
+@keyframes result-glow { to { text-shadow: 0 0 22px rgba(255, 210, 77, .8); } }
+.treasure-bowl-app .result-banner--loss { color: #aa754a; }
+.treasure-bowl-app .stage-footnote { position: relative; z-index: 3; margin-top: 4px; color: #ad793a; font-size: 7.5px; font-weight: 800; letter-spacing: .16em; }
+.treasure-bowl-app .stage-footnote span { margin: 0 6px; color: #e5b550; }
+
+.treasure-bowl-app .control-deck { display: block; width: 100%; min-width: 0; margin-top: 6px; padding: 8px 12px; border: 1px solid rgba(228, 170, 69, .27); border-radius: 12px; background: linear-gradient(180deg, rgba(62, 16, 19, .92), rgba(36, 10, 13, .96)); flex-shrink: 0; }
+.treasure-bowl-app .control-deck__top { display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center; gap: 8px; }
+.treasure-bowl-app .auto-button { position: static; inset: auto; display: flex; align-items: center; justify-self: start; gap: 8px; min-width: 0; max-width: 100%; padding: 6px 8px; border: 1px solid rgba(224, 173, 73, .35); border-radius: 7px; cursor: pointer; color: #d7a650; background: rgba(126, 42, 23, .18); text-align: left; transition: .2s ease; }
+.treasure-bowl-app .auto-button:hover, .treasure-bowl-app .auto-button--active { border-color: #ddae4d; background: rgba(198, 116, 28, .19); color: #ffe49b; }
+.treasure-bowl-app .auto-button:disabled { cursor: not-allowed; opacity: .5; }
+.treasure-bowl-app .auto-button__icon { display: grid; place-items: center; width: 22px; height: 22px; border: 1px solid currentColor; border-radius: 50%; font-size: 15px; line-height: 1; }
+.treasure-bowl-app .auto-button b { display: block; font-size: 8.5px; letter-spacing: .08em; }
+.treasure-bowl-app .auto-button small { display: block; margin-top: 2px; color: #936b3a; font-size: 7.5px; }
+.treasure-bowl-app .stake-control { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.treasure-bowl-app .stake-control button { display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid rgba(230, 175, 73, .4); border-radius: 50%; cursor: pointer; color: #e4b45a; background: rgba(216, 146, 45, .08); font-size: 18px; line-height: 1; transition: .2s; }
+.treasure-bowl-app .stake-control button:hover:not(:disabled) { color: #fff0ad; border-color: #fff0ad; background: rgba(216,146,45,.2); }
+.treasure-bowl-app .stake-control button:disabled { cursor: not-allowed; opacity: .35; }
+.treasure-bowl-app .stake-value { min-width: 55px; text-align: center; }
+.treasure-bowl-app .stake-value small, .treasure-bowl-app .balance-readout span { display: block; color: #976b36; font-size: 7.5px; font-weight: 800; letter-spacing: .15em; }
+.treasure-bowl-app .stake-value strong { display: block; margin-top: 2px; color: #f8d77e; font-family: Georgia, serif; font-size: 15px; }
+.treasure-bowl-app .spin-button { position: relative; display: grid; place-items: center; justify-self: end; width: clamp(60px, 12vw, 74px); height: clamp(60px, 12vw, 74px); border: 2px solid #f0c15c; border-radius: 50%; cursor: pointer; color: #1a0805; background: radial-gradient(circle at 34% 28%, #ffe8a0, #f59e0b 50%, #b45309 80%); box-shadow: 0 0 24px rgba(245, 158, 11, 0.7), inset 0 2px 0 rgba(255, 255, 255, 0.7); transition: transform .2s, filter .2s; }
+.treasure-bowl-app .spin-button:hover:not(:disabled) { transform: scale(1.04); filter: brightness(1.12); box-shadow: 0 0 32px rgba(245, 158, 11, 0.9); }
+.treasure-bowl-app .spin-button:active:not(:disabled) { transform: scale(.96); }
+.treasure-bowl-app .spin-button:disabled { cursor: not-allowed; filter: grayscale(.3); opacity: .55; }
+.treasure-bowl-app .spin-button__ring { position: absolute; inset: 6px; border: 1px dashed rgba(103, 38, 16, .7); border-radius: 50%; }
+.treasure-bowl-app .spin-button__label { position: relative; font-size: 15px; font-weight: 1000; letter-spacing: .08em; text-shadow: 0 1px rgba(255,245,177,.45); }
+.treasure-bowl-app .spin-button__spark { position: absolute; top: 10px; right: 12px; color: #fff0a1; font-size: 10px; text-shadow: 0 0 5px #fff; }
+.treasure-bowl-app .control-deck__bottom { display: flex; align-items: center; gap: 12px; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(229, 175, 73, .13); }
+.treasure-bowl-app .balance-readout { min-width: 110px; }
+.treasure-bowl-app .balance-readout strong { display: block; margin-top: 2px; color: #f3cc6d; font-size: 13px; font-weight: 800; letter-spacing: .03em; }
+.treasure-bowl-app .balance-readout small { display: block; margin-top: 1px; color: #845b33; font-size: 7.5px; }
+.treasure-bowl-app .progress-track { height: 4px; flex: 1; overflow: hidden; border-radius: 99px; background: #1b090b; }
+.treasure-bowl-app .progress-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #9b3c1c, #f1bd4c); transition: width .4s ease; }
+.treasure-bowl-app .reset-button { padding: 4px 8px; border: 1px solid rgba(244,63,94,0.4); border-radius: 6px; cursor: pointer; color: #ffd0d0; background: linear-gradient(135deg, #e11d48, #9f1239); font-size: 8px; font-weight: 800; letter-spacing: .1em; box-shadow: 0 0 10px rgba(225,29,72,0.3); transition: filter .2s; }
+.treasure-bowl-app .reset-button:hover { filter: brightness(1.15); }
+
+.treasure-bowl-app .side-panel { align-self: stretch; padding: 14px; border: 1px solid rgba(228, 170, 69, .23); border-radius: 14px; background: linear-gradient(180deg, rgba(55, 14, 18, .88), rgba(35, 10, 13, .98)); box-shadow: inset 0 1px rgba(255,235,151,.05); overflow-y: auto; }
+.treasure-bowl-app .panel-title { display: flex; align-items: center; gap: 8px; padding-bottom: 12px; }
+.treasure-bowl-app .panel-title__icon { display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid rgba(235,180,73,.65); border-radius: 50%; color: #f0be5e; font-size: 11px; }
+.treasure-bowl-app .panel-title h2 { margin: 2px 0 0; color: #f4d27a; font-family: Georgia, serif; font-size: 15px; letter-spacing: .08em; }
+.treasure-bowl-app .session-card { padding: 10px; border: 1px solid rgba(231,176,75,.3); border-radius: 8px; background: radial-gradient(circle at 50% 0, rgba(138, 42, 25, .5), rgba(81,17,19,.36)); }
+.treasure-bowl-app .session-card__label { color: #a97438; font-size: 7.5px; font-weight: 800; letter-spacing: .16em; }
+.treasure-bowl-app .session-card__amount { margin-top: 4px; color: #ffe19a; font-family: Georgia, serif; font-size: 22px; font-weight: 700; letter-spacing: .02em; }
+.treasure-bowl-app .session-card__amount span { margin-right: 2px; color: #d89f39; font-size: 16px; }
+.treasure-bowl-app .session-card__note { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: #8d9d62; font-size: 7.5px; letter-spacing: .08em; text-transform: uppercase; }
+.treasure-bowl-app .positive-dot { display: inline-block; width: 5px; height: 5px; box-shadow: 0 0 0 3px rgba(110,224,159,.06); }
+.treasure-bowl-app .panel-divider { display: flex; align-items: center; gap: 8px; margin: 12px 0 8px; color: #9a6834; font-size: 7.5px; font-weight: 800; letter-spacing: .16em; }
+.treasure-bowl-app .panel-divider::before, .treasure-bowl-app .panel-divider::after { content: ""; display: block; height: 1px; flex: 1; background: rgba(229,175,73,.17); }
+.treasure-bowl-app .history-row { display: flex; align-items: center; gap: 6px; }
+.treasure-bowl-app .history-chip { display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid; border-radius: 50%; font-size: 10px; font-weight: 900; }
+.treasure-bowl-app .history-chip--win, .treasure-bowl-app .history-chip--huge { border-color: rgba(225,177,72,.6); color: #f4cb70; background: rgba(188,108,27,.2); }
+.treasure-bowl-app .history-chip--huge { border-color: #f0bd51; color: #fff0a8; box-shadow: 0 0 8px rgba(255,199,71,.2); }
+.treasure-bowl-app .history-chip--loss { border-color: rgba(173,91,61,.45); color: #a66048; background: rgba(95,32,29,.2); }
+.treasure-bowl-app .history-caption { margin-left: auto; color: #805732; font-size: 7.5px; letter-spacing: .08em; text-transform: uppercase; }
+.treasure-bowl-app .paytable { display: grid; gap: 5px; }
+.treasure-bowl-app .paytable-row { display: grid; grid-template-columns: 24px 1fr auto; align-items: center; gap: 6px; padding: 2px; color: #bd8950; font-size: 9px; }
+.treasure-bowl-app .paytable-row strong { color: #edc875; font-family: Georgia, serif; font-size: 11px; }
+.treasure-bowl-app .paytable-symbol { display: grid; place-items: center; width: 22px; height: 22px; border: 1px solid rgba(238,190,86,.45); border-radius: 4px; font-family: Georgia, serif; font-size: 13px; font-weight: 700; }
+.treasure-bowl-app .paytable-symbol--coin, .treasure-bowl-app .paytable-symbol--ingot { color: #f6cf65; background: #6e3a1c; }
+.treasure-bowl-app .paytable-symbol--lantern, .treasure-bowl-app .paytable-symbol--peach { color: #ffad66; background: #692124; }
+.treasure-bowl-app .paytable-symbol--jade { color: #8fe2b5; background: #193d37; }
+.treasure-bowl-app .paytable-symbol--bowl { color: #ffe297; background: #6c381b; }
+.treasure-bowl-app .feature-card { position: relative; display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 8px; overflow: hidden; border: 1px solid rgba(233,176,69,.29); border-radius: 6px; background: linear-gradient(100deg, rgba(133,46,23,.32), rgba(87,26,21,.1)); }
+.treasure-bowl-app .feature-card__icon { display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 28px; border-radius: 50%; background: rgba(192,119,28,.23); }
+.treasure-bowl-app .feature-card strong { display: block; color: #eac06a; font-size: 8.5px; letter-spacing: .08em; }
+.treasure-bowl-app .feature-card p { margin: 2px 0 0; color: #93673a; font-size: 7.5px; line-height: 1.3; }
+.treasure-bowl-app .feature-card__multiplier { position: absolute; top: 6px; right: 8px; color: #f2cd73; font-family: Georgia, serif; font-size: 10px; font-weight: 700; }
+.treasure-bowl-app .fairness-note { display: flex; gap: 6px; margin: 10px 2px 0; color: #795735; font-size: 7.5px; line-height: 1.4; }
+.treasure-bowl-app .fairness-note span { color: #af7d3e; font-size: 10px; }
+.treasure-bowl-app .game-footer { display: flex; align-items: center; justify-content: space-between; padding: 4px 14px; border-top: 1px solid rgba(229,175,73,.14); color: #714d30; font-size: 7.5px; font-weight: 700; letter-spacing: .1em; flex-shrink: 0; }
+.treasure-bowl-app .footer-pips { display: flex; gap: 4px; }
+.treasure-bowl-app .footer-pips i { display: block; width: 4px; height: 4px; border-radius: 50%; background: #9b6d37; }
+
+@media (max-width: 1023px) {
+  .treasure-bowl-app .side-panel { display: none; }
+  .treasure-bowl-app .game-layout { grid-template-columns: minmax(0, 1fr); padding: 4px; gap: 4px; }
+}
+
+/* Layout fix: scrollable board column and a non-overlapping control deck */
+.treasure-bowl-app .game-layout { overflow-x: hidden; overflow-y: auto; align-items: start; grid-auto-rows: max-content; }
+.treasure-bowl-app .play-column { height: auto; min-height: min-content; flex: 0 0 auto; justify-content: flex-start; gap: 8px; overflow: visible; }
+.treasure-bowl-app .reel-stage { flex: 0 0 auto; min-height: auto; overflow: hidden; justify-content: flex-start; gap: 6px; padding-bottom: 10px; }
+.treasure-bowl-app .reel-window-wrap { width: min(100%, 460px, max(260px, calc((100dvh - 420px) * 1.4))); flex: 0 0 auto; }
+.treasure-bowl-app .symbol-card { min-height: clamp(52px, 9dvh, 86px); }
+.treasure-bowl-app .control-deck { margin-top: 0; }
+.treasure-bowl-app .control-deck__top { grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; }
+.treasure-bowl-app .stake-control { min-width: 0; gap: 8px; }
+.treasure-bowl-app .stake-value { min-width: 64px; white-space: nowrap; }
+.treasure-bowl-app .stake-value strong { white-space: nowrap; }
+.treasure-bowl-app .stake-control button { flex: 0 0 auto; }
+.treasure-bowl-app .spin-button { flex: 0 0 auto; }
+.treasure-bowl-app .stake-chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(52px, 1fr)); gap: 6px; width: 100%; max-width: 100%; box-sizing: border-box; margin-top: 8px !important; }
+.treasure-bowl-app .stake-chip { min-width: 0; min-height: 34px; padding: 6px 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.treasure-bowl-app .stake-chip:disabled, .treasure-bowl-app .stake-chips__custom:disabled { opacity: .5; cursor: not-allowed; }
+.treasure-bowl-app .stake-chips__custom { grid-column: 1 / -1; width: 100%; min-width: 0; min-height: 34px; padding: 6px 8px; box-sizing: border-box; }
+.treasure-bowl-app .control-deck__bottom { flex-wrap: wrap; gap: 8px 12px; }
+.treasure-bowl-app .balance-readout { min-width: 0; white-space: nowrap; }
+.treasure-bowl-app .progress-track { min-width: 60px; }
+.treasure-bowl-app .reset-button { flex: 0 0 auto; white-space: nowrap; }
+@media (max-width: 520px) {
+  .treasure-bowl-app .topbar { flex-wrap: wrap; gap: 6px; padding: 6px; }
+  .treasure-bowl-app .game-footer { flex-wrap: wrap; gap: 4px; padding: 4px 6px; }
+  .treasure-bowl-app .control-deck { padding: 8px; }
+  .treasure-bowl-app .control-deck__top { grid-template-columns: 1fr auto; }
+  .treasure-bowl-app .stake-control { grid-column: 1 / -1; grid-row: 2; justify-content: center; }
+  .treasure-bowl-app .auto-button { grid-column: 1; grid-row: 1; }
+  .treasure-bowl-app .spin-button { grid-column: 2; grid-row: 1; }
+  .treasure-bowl-app .progress-track { order: 3; flex-basis: 100%; }
+}
