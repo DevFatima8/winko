@@ -65,7 +65,7 @@ export default function WalletPageClient({ mode = "deposit", params, searchParam
           </div>
         </header>
         <Balance initial={me.balance} />
-        <DepositFlow accounts={accounts} initialAmount={initialAmount} minDeposit={minDeposit} firstDepositBonusEligible={data.firstDepositBonusEligible === true} />
+        <DepositFlow accounts={accounts} qrAccount={data.qrAccount} initialAmount={initialAmount} minDeposit={minDeposit} firstDepositBonusEligible={data.firstDepositBonusEligible === true} />
       </div>
     );
   }, [mode, JSON.stringify(params ?? {}), JSON.stringify(searchParams ?? {})]);

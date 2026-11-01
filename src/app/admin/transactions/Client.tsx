@@ -2,9 +2,12 @@
 import Link from "next/link";
 import { Card, ProviderBadge, StatusBadge, fmt, fmtDate } from "@/components/Shell";
 import { processTransactionAction } from "@/lib/clientActions";
-import { usePage } from "@/lib/useDb";
+import { useDb } from "@/lib/useDb";
 import { compressImage } from "@/lib/imageFile";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
+import { refreshAdminData } from "@/lib/adminLiveUpdates";
 
 type TransactionType = "deposit" | "withdraw";
 
@@ -18,7 +21,7 @@ function PendingActions({ id, type }: { id: string; type: TransactionType }) {
     try {
       const r = await processTransactionAction(id, decision, decision === "rejected" ? "Rejected by admin" : undefined, decision === "approved" && slip ? slip : undefined);
       if (r?.error) setError(r.error);
-      else window.dispatchEvent(new CustomEvent("wx:admin-refresh"));
+      else refreshAdminData();
     } catch (reason) {
       console.error("[Process transaction]", reason);
       setError(reason instanceof Error ? reason.message : "Transaction process nahi ho saki. Dobara try karein.");
@@ -65,18 +68,31 @@ const getWeekRange = (value: string) => {
 };
 
 export default function TransactionsPageClient({ type, params, searchParams }: { type: TransactionType; params?: Record<string, string>; searchParams?: Record<string, string> }) {
-  return usePage(async () => {
-    const { status, q, days, date, week, year, order } = searchParams ?? {};
+  void params;
+  return <TransactionsView key={`${type}:${JSON.stringify(searchParams ?? {})}`} type={type} searchParams={searchParams} />;
+}
+
+type TransactionRow = {
+  _id: string; userId: { name: string; phone: string } | null; paymentAccountId: { accountTitle: string; accountNumber: string } | null;
+  provider: string; amount: number; type: TransactionType; senderNumber: string | null; referenceId: string | null; proofImage?: string | null; slipImage?: string | null;
+  status: string; method: string; adminNote: string | null; createdAt: Date | string; holderName?: string | null;
+};
+
+function TransactionsView({ type, searchParams }: { type: TransactionType; searchParams?: Record<string, string> }) {
+    const router = useRouter();
+    const [status, setStatus] = useState(searchParams?.status ?? "");
+    const [preview, setPreview] = useState<{ src: string; title: string } | null>(null);
+    const { q, days, date, week, year, order } = searchParams ?? {};
+    const { data, error, reload } = useDb(async (signal) => {
     const query = new URLSearchParams({ type });
     for (const [key, value] of Object.entries({ status, q, days, date, week, year, order })) if (value) query.set(key, value);
-    const response = await fetch(`/api/admin/transactions?${query}`, { cache: "no-store" });
+    const response = await fetch(`/api/admin/transactions?${query}`, { cache: "no-store", signal });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error ?? "Transactions load nahi ho sake.");
-    const rows = result.rows as {
-      _id: string; userId: { name: string; phone: string } | null; paymentAccountId: { accountTitle: string; accountNumber: string } | null;
-      provider: string; amount: number; type: TransactionType; senderNumber: string | null; referenceId: string | null; proofImage?: string | null; slipImage?: string | null;
-      status: string; method: string; adminNote: string | null; createdAt: Date | string; holderName?: string | null;
-    }[];
+    return { status, rows: result.rows as TransactionRow[] };
+    }, [type, status, q, days, date, week, year, order]);
+    const updating = data === null || data.status !== status;
+    const rows = (data?.rows ?? []).filter(row => !status || row.status === status);
 
     const tabs = [["", "All"], ["pending", "Pending"], ["approved", "Approved"], ["rejected", "Rejected"]];
     const basePath = type === "deposit" ? "/admin/deposits" : "/admin/withdrawals";
@@ -91,20 +107,31 @@ export default function TransactionsPageClient({ type, params, searchParams }: {
     return (
       <div className="space-y-6">
         <div className="flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-2xl font-bold text-white">{type === "deposit" ? "Deposits" : "Withdrawals"}</h1><p className="mt-1 text-sm text-slate-400">{type === "deposit" ? "Deposit requests ki history aur approval." : "Withdrawal requests ki history aur approval."}</p></div><div className="flex gap-2"><Link href="/admin/deposits" className={`rounded-lg px-3 py-1.5 text-sm font-medium ${type === "deposit" ? "bg-emerald-400 text-slate-950" : "bg-slate-800 text-slate-300"}`}>Deposits</Link><Link href="/admin/withdrawals" className={`rounded-lg px-3 py-1.5 text-sm font-medium ${type === "withdraw" ? "bg-red-400 text-slate-950" : "bg-slate-800 text-slate-300"}`}>Withdrawals</Link></div></div>
-        <form className="grid gap-2 rounded-xl border border-slate-700 bg-slate-900/60 p-3 sm:grid-cols-2 lg:grid-cols-6" method="get">
+        <form className="grid gap-2 rounded-xl border border-slate-700 bg-slate-900/60 p-3 sm:grid-cols-2 lg:grid-cols-6" method="get" onSubmit={event => {
+          event.preventDefault();
+          const values = new URLSearchParams();
+          for (const [key, value] of new FormData(event.currentTarget)) if (typeof value === "string" && value) values.set(key, value);
+          if (status) values.set("status", status);
+          router.push(`${basePath}?${values}`);
+        }}>
           <input name="q" defaultValue={q ?? ""} placeholder="Search user, phone, TID..." className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-yellow-400 lg:col-span-2" />
           <select name="order" defaultValue={order === "asc" ? "asc" : "desc"} aria-label="Transaction sort order" className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"><option value="asc">Ascending (oldest first)</option><option value="desc">Descending (newest first)</option></select>
           <input name="days" type="number" min="1" defaultValue={days ?? ""} placeholder="Last N days" className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-yellow-400" />
           <input name="date" type="date" defaultValue={date ?? ""} title="Specific day" className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-yellow-400" />
           <input name="week" type="week" defaultValue={week ?? ""} title="Specific week" className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-yellow-400" />
           <div className="flex gap-2"><input name="year" type="number" min="2000" max="2100" defaultValue={year ?? ""} placeholder="Year" className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-yellow-400" /><button className="rounded-lg bg-yellow-400 px-4 py-2 text-sm font-bold text-slate-950">Search</button></div>
-          <div className="flex flex-wrap gap-2 text-xs text-slate-400 sm:col-span-2 lg:col-span-6">Specific day, week, year ya last N days mein se ek filter select karein. <a href={basePath} className="text-yellow-400">Clear filters</a></div>
+          <div className="flex flex-wrap gap-2 text-xs text-slate-400 sm:col-span-2 lg:col-span-6">Specific day, week, year ya last N days mein se ek filter select karein. <Link href={basePath} onClick={() => setStatus("")} className="text-yellow-400">Clear filters</Link></div>
         </form>
         <div className="flex flex-wrap gap-2">
           {tabs.map(([v, l]) => (
-            <a key={v} href={makeHref(v)} className={`rounded-lg px-3 py-1.5 text-sm font-medium ${(status ?? "") === v ? "bg-yellow-400 text-slate-950" : "bg-slate-800 text-slate-300"}`}>{l}</a>
+            <button key={v} type="button" aria-pressed={status === v} onClick={() => {
+              setStatus(v);
+              window.history.replaceState(null, "", makeHref(v));
+            }} className={`rounded-lg px-3 py-1.5 text-sm font-medium ${status === v ? "bg-yellow-400 text-slate-950" : "bg-slate-800 text-slate-300"}`}>{l}</button>
           ))}
         </div>
+        {error && <div role="alert" className="rounded-xl border border-red-500/30 p-3 text-sm text-red-300">{error} <button type="button" onClick={reload} className="underline">Try again</button></div>}
+        {updating && !error && <p role="status" className="text-xs text-slate-400">Loading transactions...</p>}
         <Card>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[980px] text-left text-sm [&_td]:px-3 [&_td]:align-middle [&_th]:px-3 [&_th]:whitespace-nowrap [&_td:nth-child(2)]:whitespace-nowrap [&_td:nth-child(3)]:whitespace-nowrap [&_td:nth-child(4)]:whitespace-nowrap [&_td:nth-child(7)]:whitespace-nowrap">
@@ -114,6 +141,7 @@ export default function TransactionsPageClient({ type, params, searchParams }: {
               <tbody className="divide-y divide-slate-800">
                 {rows.map((t) => {
                   const id = String(t._id);
+                  const { proofImage, slipImage } = t;
                   return (
                     <tr key={id}>
                       <td className="py-2.5"><div className="font-medium text-white">{t.userId?.name}</div><div className="text-xs text-slate-500">{t.userId?.phone}</div></td>
@@ -126,7 +154,7 @@ export default function TransactionsPageClient({ type, params, searchParams }: {
                             <div>To: <b className="text-white">{t.paymentAccountId?.accountTitle ?? "-"}</b> ({t.paymentAccountId?.accountNumber ?? "-"})</div>
                             <div>From: {t.senderNumber}</div>
                             <div className="font-mono text-yellow-400">TID: {t.referenceId}</div>
-                            {t.proofImage && <a href={t.proofImage} target="_blank" rel="noreferrer" className="mt-1 inline-block text-yellow-400 underline">Open payment screenshot</a>}
+                            {proofImage && <button type="button" onClick={() => setPreview({ src: proofImage, title: "Payment screenshot" })} className="mt-1 inline-block text-yellow-400 underline">Open payment screenshot</button>}
                           </>
                         ) : (
                           <div>
@@ -139,17 +167,42 @@ export default function TransactionsPageClient({ type, params, searchParams }: {
                       <td className="py-2.5 text-slate-400">{fmtDate(t.createdAt)}</td>
                       <td className="py-2.5">
                         {t.status === "pending" && <PendingActions id={id} type={type} />}
-                        {t.status !== "pending" && t.slipImage && <a href={t.slipImage} target="_blank" rel="noreferrer" className="text-xs text-yellow-400 underline">View slip</a>}
+                        {t.status !== "pending" && slipImage && <button type="button" onClick={() => setPreview({ src: slipImage, title: "Payment slip" })} className="text-xs text-yellow-400 underline">View slip</button>}
                       </td>
                     </tr>
                   );
                 })}
-                {rows.length === 0 && <tr><td colSpan={8} className="py-8 text-center text-slate-500">Is filter ke liye koi {type} nahi.</td></tr>}
+                {rows.length === 0 && !updating && !error && <tr><td colSpan={8} className="py-8 text-center text-slate-500">Is filter ke liye koi {type} nahi.</td></tr>}
               </tbody>
             </table>
           </div>
         </Card>
+        {preview && <PaymentPreview key={preview.src} src={preview.src} title={preview.title} onClose={() => setPreview(null)} />}
       </div>
     );
-  }, [type, JSON.stringify(params ?? {}), JSON.stringify(searchParams ?? {})]);
+}
+
+function PaymentPreview({ src, title, onClose }: { src: string; title: string; onClose: () => void }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", close);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener("keydown", close);
+    };
+  }, [onClose]);
+  return createPortal(
+    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 p-4" onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
+      <section role="dialog" aria-modal="true" aria-label={title} className="max-h-[90dvh] w-full max-w-3xl overflow-auto rounded-xl bg-slate-900 p-4">
+        <div className="mb-3 flex items-center justify-between gap-3"><h2 className="font-bold text-white">{title}</h2><button type="button" autoFocus onClick={onClose} className="rounded-lg bg-slate-800 px-3 py-2 text-white">Close</button></div>
+        {failed ? <p role="alert" className="text-red-300">Screenshot load nahi ho saka. Image missing ya unavailable hai.</p> :
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={src} alt={title} onError={() => setFailed(true)} className="mx-auto max-h-[75dvh] max-w-full object-contain" />}
+      </section>
+    </div>,
+    document.body,
+  );
 }

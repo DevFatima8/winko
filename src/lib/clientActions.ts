@@ -13,6 +13,7 @@ export async function signupAction(_: ActionState, form: FormData): Promise<any>
     const response = await fetch("/api/auth/signup", { method: "POST", body: form });
     const data = await response.json().catch(() => ({ error: "Signup failed. Server se connect nahi ho saka." }));
     if (!response.ok || data.error) return { error: data.error ?? "Signup failed." };
+    await import("./providerCatalogCache").then(cache => cache.clearProviderCatalog());
     resetPromoFlags();
     await createSession({ id: data.id, role: data.role, name: data.name });
     return { success: "Account created successfully! Redirecting...", redirect: "/player" };
@@ -26,6 +27,7 @@ export async function loginAction(_: ActionState, form: FormData): Promise<any> 
     const response = await fetch("/api/auth/login", { method: "POST", body: form });
     const data = await response.json().catch(() => ({ error: "Login failed. Server se connect nahi ho saka." }));
     if (!response.ok || data.error) return { error: data.error ?? "Login failed." };
+    await import("./providerCatalogCache").then(cache => cache.clearProviderCatalog());
     resetPromoFlags();
     await createSession({ id: data.id, role: data.role, name: data.name });
     return { success: "Login successful! Redirecting...", redirect: data.role === "admin" ? "/admin" : "/" };
@@ -34,6 +36,7 @@ export async function loginAction(_: ActionState, form: FormData): Promise<any> 
 export async function logoutAction() {
     await fetch("/api/auth/logout", { method: "POST" });
     await destroySession();
+    await import("./providerCatalogCache").then(cache => cache.clearProviderCatalog());
     resetPromoFlags();
     window.location.assign("/login");
 }

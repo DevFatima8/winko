@@ -1,12 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
 import { adjustUserBalanceAction, type ActionState } from "../../lib/actions";
+import { useAdminActionState } from "@/lib/adminLiveUpdates";
 
 const input = "w-full rounded-xl border border-[#3a2470] bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-[#d946ef]";
 
 export function BalanceAdjustForm({ userId, balance }: { userId: string; balance: number }) {
-    const [state, action, pending] = useActionState<ActionState, FormData>(adjustUserBalanceAction, undefined);
+    const [state, action, pending] = useAdminActionState<ActionState, FormData>(adjustUserBalanceAction, undefined);
     return (
         <form action={action} className="space-y-3">
             <input type="hidden" name="id" value={userId} />

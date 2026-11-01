@@ -1,23 +1,32 @@
 "use client";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CAT_ICONS, PROVIDER_CATS } from "@/components/lobby/Lobby";
 import { Header, BottomNav } from "@/components/lobby/Lobby";
 import { useSession } from "@/lib/useDb";
 import { useI18n } from "@/lib/i18n/client";
 import { ArrowLeftIcon, TrophyIcon, GamepadIcon } from "@/components/Icons";
-import { useGameReturnScroll } from "@/lib/gameNavigation";
+import { readProviderGameReturn } from "@/lib/gameNavigation";
 import { GregmornGames } from "@/components/lobby/GregmornGames";
+import { useProviderCatalog } from "@/lib/useProviderCatalog";
 
 const CATEGORIES = PROVIDER_CATS;
 
 export default function AllGames() {
+  const catalog = useProviderCatalog();
   const { user } = useSession();
   const { t } = useI18n();
   const searchParams = useSearchParams();
   const [categoryOverride, setCategoryOverride] = useState<string | null>(null);
-  useGameReturnScroll(true);
+  useEffect(() => {
+    let alive = true;
+    void Promise.resolve().then(() => {
+      const saved = readProviderGameReturn();
+      if (alive && saved && CATEGORIES.some(category => category.key === saved.category)) setCategoryOverride(saved.category);
+    });
+    return () => { alive = false; };
+  }, []);
 
   const requestedCategory = searchParams.get("cat");
   const selectedCategory = categoryOverride ?? CATEGORIES.find((category) => category.key.toLowerCase() === requestedCategory?.toLowerCase())?.key ?? "All";
@@ -76,7 +85,7 @@ export default function AllGames() {
             <div className="min-w-0"><h2 className="break-words text-sm font-black min-[380px]:text-base sm:text-xl">{CATEGORIES.find((category) => category.key === selectedCategory)?.label ?? "All games"}</h2></div>
             <span className="hidden rounded-full bg-[#8b5cf6]/15 px-3 py-1 text-xs font-bold text-[#d8c8ff] sm:inline-flex">{selectedCategory === "All" ? "All categories" : "Category filter active"}</span>
           </div>
-          <GregmornGames key={selectedCategory} category={selectedCategory} />
+          <GregmornGames key={selectedCategory} category={selectedCategory} catalog={catalog} />
           </section>
         </section>
       </main>

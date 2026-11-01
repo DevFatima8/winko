@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { toggleUserActiveAction } from "@/lib/actions";
+import { refreshAdminData } from "@/lib/adminLiveUpdates";
 
 type StatusState = { error?: string; success?: string; isActive: boolean };
 
@@ -16,7 +17,7 @@ export function UserActiveForm({ userId, isActive, requireReason = false, onChan
       const result = await toggleUserActiveAction(userId, !previous.isActive, form);
       if (result?.success && typeof result.isActive === "boolean") {
         onChange?.(result.isActive);
-        window.dispatchEvent(new CustomEvent("wx:admin-refresh"));
+        refreshAdminData();
         return { ...result, isActive: result.isActive };
       }
       return { isActive: previous.isActive, error: result?.error ?? "Account status update nahi ho saka." };

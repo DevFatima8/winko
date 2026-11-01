@@ -3,8 +3,10 @@ import { Header, Lobby, CONTAINER } from "@/components/lobby/Lobby";
 import { useEffect, useState } from "react";
 import { PageLoadingSkeleton, useSession } from "@/lib/useDb";
 import type { Row } from "@/components/lobby/LobbyClient";
+import { useProviderCatalog } from "@/lib/useProviderCatalog";
 
 export default function HomeClient({ cat }: { cat: string }) {
+  const catalog = useProviderCatalog();
   const { user, loading: sessionLoading, error: sessionError } = useSession();
   const [links, setLinks] = useState<Record<string, string>>({});
   const [leaderboard, setLeaderboard] = useState<Row[]>([]);
@@ -19,7 +21,6 @@ export default function HomeClient({ cat }: { cat: string }) {
       controller?.abort();
       const request = new AbortController();
       controller = request;
-      setLoading(true);
       setError("");
       try {
         const response = await fetch("/api/public/data?view=lobby", { cache: "no-store", signal: request.signal });
@@ -46,10 +47,10 @@ export default function HomeClient({ cat }: { cat: string }) {
     <div className="wx-lobby wx-bg min-h-[100dvh] text-white">
       <Header viewer={viewer} showAnnouncement={false} />
       <main className={`${CONTAINER} space-y-3 px-2 py-3`}>
-        {(error || sessionError) && <div role="alert" className="rounded-xl border border-red-500/30 p-3 text-sm text-red-300">{error || sessionError}{error && <button type="button" onClick={() => setRetry((n) => n + 1)} className="ml-3 text-[#ffc933] underline">Retry</button>}</div>}
+        {(error || sessionError) && <div role="alert" className="rounded-xl border border-red-500/30 p-3 text-sm text-red-300">{error || sessionError}{error && <button type="button" onClick={() => { setLoading(true); setRetry((n) => n + 1); }} className="ml-3 text-[#ffc933] underline">Retry</button>}</div>}
         {!error && <PageLoadingSkeleton message="Lobby loading..." />}
       </main>
     </div>
   );
-  return <Lobby viewer={viewer} cat={cat} links={links} leaderboard={leaderboard} />;
+  return <Lobby viewer={viewer} cat={cat} links={links} leaderboard={leaderboard} catalog={catalog} />;
 }

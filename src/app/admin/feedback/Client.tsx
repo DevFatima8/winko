@@ -2,6 +2,7 @@
 import { Card, fmtDate } from "@/components/Shell";
 import { updateFeedbackAction } from "@/lib/actions";
 import { usePage, NOT_FOUND, REDIRECT } from "@/lib/useDb";
+import { withAdminRefresh } from "@/lib/adminLiveUpdates";
 
 export default function FeedbackAdminPageClient({ params, searchParams }: { params?: Record<string, string>; searchParams?: Record<string, string> }) {
   void params; void searchParams;
@@ -32,7 +33,7 @@ export default function FeedbackAdminPageClient({ params, searchParams }: { para
                     <p className="mt-1 whitespace-pre-wrap text-sm text-[#e9ddff]">{f.message}</p>
                     {f.adminNote && <p className="mt-1 text-xs text-[#b8a7e6]">Note: {f.adminNote}</p>}
                   </div>
-                  <form action={updateFeedbackAction} className="flex flex-wrap items-center gap-1.5">
+                  <form action={withAdminRefresh(updateFeedbackAction)} className="flex flex-wrap items-center gap-1.5">
                     <input type="hidden" name="id" value={String(f._id)} />
                     <input name="note" placeholder="Admin note" defaultValue={f.adminNote} className="w-40 rounded-lg border border-[#3a2470] bg-black/30 px-2 py-1 text-xs text-white" />
                     <button name="status" value="reviewed" className="rounded-lg bg-sky-500/15 px-2.5 py-1 text-xs font-semibold text-sky-300">Reviewed</button>

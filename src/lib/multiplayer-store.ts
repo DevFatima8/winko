@@ -1,7 +1,7 @@
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { ensureMysqlTable, getMysqlPool } from "./mysql";
 
-export type MultiplayerTable = "users" | "games" | "gameresults" | "winholds" | "multiplayerrooms" | "multiplayerrequests" | "aviatorrounds" | "cardrounds" | "cardbets" | "chickengames" | "chickendashes" | "minesgames" | "plinkobets" | "dailypools" | "dailypoolentries" | "gregmornsessions" | "gregmorntransactions";
+export type MultiplayerTable = "users" | "paymentaccounts" | "transactions" | "games" | "gameresults" | "winholds" | "multiplayerrooms" | "multiplayerrequests" | "aviatorrounds" | "cardrounds" | "cardbets" | "chickengames" | "chickendashes" | "minesgames" | "plinkobets" | "dailypools" | "dailypoolentries" | "gregmornsessions" | "gregmorntransactions";
 export type JsonDocument = { _id?: string } & object;
 export type MultiplayerFilters = Record<string, string | number | boolean | null>;
 export type MultiplayerSort = { field: string; direction: "asc" | "desc" };
@@ -20,7 +20,7 @@ export interface MultiplayerStore {
 }
 type DataRow = RowDataPacket & { data: string | object };
 const parse = <T,>(row: DataRow): T => (typeof row.data === "string" ? JSON.parse(row.data) : row.data) as T;
-const allowedTables = new Set<MultiplayerTable>(["users", "games", "gameresults", "winholds", "multiplayerrooms", "multiplayerrequests", "aviatorrounds", "cardrounds", "cardbets", "chickengames", "chickendashes", "minesgames", "plinkobets", "dailypools", "dailypoolentries", "gregmornsessions", "gregmorntransactions"]);
+const allowedTables = new Set<MultiplayerTable>(["users", "paymentaccounts", "transactions", "games", "gameresults", "winholds", "multiplayerrooms", "multiplayerrequests", "aviatorrounds", "cardrounds", "cardbets", "chickengames", "chickendashes", "minesgames", "plinkobets", "dailypools", "dailypoolentries", "gregmornsessions", "gregmorntransactions"]);
 function tableName(table: MultiplayerTable) {
   if (!allowedTables.has(table)) throw new Error("Unsupported multiplayer collection.");
   return `\`${table}\``;

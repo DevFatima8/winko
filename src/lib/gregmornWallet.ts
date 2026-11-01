@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
-import type { GameDoc, GameResultDoc, UserDoc } from "@/models";
+import type { GameDoc, GameResultDoc, UserDoc, WinHoldDoc } from "@/models";
 import type { MultiplayerTransaction } from "./multiplayer-store";
 import { gregmornGameSlug } from "./gregmornIdentity";
+import { nextPakistanMidnight } from "./providerWinnings";
 
 export type GregmornSession = {
   _id: string;
@@ -131,11 +132,19 @@ export async function processGregmornWalletCallback(tx: MultiplayerTransaction, 
       }
     }
     if (currentCents < betCents) throw new GregmornWalletError("insufficient funds", currentCents / 100);
-    const nextCents = currentCents - betCents + winCents;
+    const nextCents = currentCents - betCents;
     if (!Number.isSafeInteger(nextCents)) throw new GregmornWalletError("Transaction amount exceeds wallet limits.", currentCents / 100);
     user.balance = withRemainder(user.balance, currentCents, nextCents);
     await tx.put("users", session.userId, user);
     const now = new Date(await tx.now());
+    if (winCents > 0) {
+      await tx.insert<WinHoldDoc>("winholds", `gregmorn-${key}`, {
+        _id: `gregmorn-${key}`, userId: session.userId, amount: winCents / 100,
+        provider: "gregmorn", gameId: session.catalogGameId ?? gregmornGameSlug(session.gameId),
+        transactionId: body.transactionId, unlockAt: nextPakistanMidnight(now.getTime()),
+        claimed: false, claimedAt: null, createdAt: now, updatedAt: now,
+      });
+    }
     await tx.insert("gregmorntransactions", key, {
       _id: key, sessionId: body.sessionid, transactionId: body.transactionId,
       requestHash: fingerprint, betCents, winCents, rolledBack: false, createdAt: now, updatedAt: now,

@@ -1,11 +1,11 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { StatusBadge, fmt, fmtDate } from "@/components/Shell";
-import { usePage } from "@/lib/useDb";
+import { useDb, usePage } from "@/lib/useDb";
 
-type Row = { _id: string; gameId: { name: string; icon: string } | null; userId: { name: string; phone: string } | null; roundNo: number | null; betAmount: number; winAmount: number; outcome: string; resultData: string | null; createdAt: string };
-type GameInfo = { _id: string; icon: string; name: string };
+type Row = { _id: string; userId: { name: string; phone: string } | null; roundNo: number | null; betAmount: number; winAmount: number; outcome: string; resultData: string | null; createdAt: string };
+type GameSummary = { key: string; icon: string; name: string; total: number; wins: number; losses: number; profit: number };
 type Filter = "all" | "win" | "lose";
 
 function GameIcon({ icon }: { icon: string }) {
@@ -16,28 +16,12 @@ function GameIcon({ icon }: { icon: string }) {
   return <>{icon}</>;
 }
 
-function ResultsView({ rows, games }: { rows: Row[]; games: GameInfo[] }) {
+function ResultsView({ games }: { games: GameSummary[] }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
 
-  const sections = useMemo(() => {
-    const map = new Map<string, { name: string; icon: string; rows: Row[] }>();
-    for (const g of games) if (!map.has(g.name)) map.set(g.name, { name: g.name, icon: g.icon, rows: [] });
-    for (const r of rows) {
-      const name = r.gameId?.name ?? "Unknown";
-      if (!map.has(name)) map.set(name, { name, icon: r.gameId?.icon ?? "🎮", rows: [] });
-      map.get(name)!.rows.push(r);
-    }
-    return [...map.values()].map((s) => {
-      const done = s.rows.filter((r) => r.outcome !== "pending");
-      const wins = done.filter((r) => r.outcome === "win").length;
-      const bets = done.reduce((a, r) => a + r.betAmount, 0);
-      const paid = done.reduce((a, r) => a + r.winAmount, 0);
-      return { ...s, total: s.rows.length, wins, losses: done.length - wins, profit: bets - paid };
-    }).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
-  }, [rows, games]);
-
-  const current = sections.find((s) => s.name === selected) ?? null;
+  const sections = games;
+  const current = sections.find((s) => s.key === selected) ?? null;
 
   if (!current) {
     return (
@@ -49,9 +33,9 @@ function ResultsView({ rows, games }: { rows: Row[]; games: GameInfo[] }) {
         <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {sections.map((s) => (
             <button
-              key={s.name}
+              key={s.key}
               type="button"
-              onClick={() => { setSelected(s.name); setFilter("all"); }}
+              onClick={() => { setSelected(s.key); setFilter("all"); }}
               className="group min-w-0 rounded-2xl border border-fuchsia-500/20 bg-[#0b0820]/80 p-4 text-left shadow-[0_0_24px_-14px_rgba(168,85,247,0.7)] transition hover:-translate-y-0.5 hover:border-fuchsia-400/60"
             >
               <div className="flex items-center gap-3">
@@ -73,12 +57,23 @@ function ResultsView({ rows, games }: { rows: Row[]; games: GameInfo[] }) {
     );
   }
 
-  const list = current.rows.filter((r) => filter === "all" || r.outcome === filter);
+  return <GameResultsDetail key={current.key} current={current} filter={filter} setFilter={setFilter} onBack={() => setSelected(null)} />;
+}
+
+function GameResultsDetail({ current, filter, setFilter, onBack }: { current: GameSummary; filter: Filter; setFilter: (filter: Filter) => void; onBack: () => void }) {
+  const { data, error } = useDb<Row[]>(async (signal) => {
+    const response = await fetch(`/api/admin/data?view=results&game=${encodeURIComponent(current.key)}`, { cache: "no-store", signal });
+    const json = await response.json();
+    if (!response.ok) throw new Error(json.error ?? "Results load nahi ho sake.");
+    return json.rows as Row[];
+  }, [current.key]);
+  const list = (data ?? []).filter((r) => filter === "all" || r.outcome === filter);
   const tabs: [Filter, string, number][] = [["all", "All", current.total], ["win", "Win", current.wins], ["lose", "Lose", current.losses]];
+  const emptyText = error ? `Results load nahi ho sake: ${error}` : data === null ? "Loading results..." : "Is filter ke liye koi result nahi.";
 
   return (
     <div className="space-y-5">
-      <button type="button" onClick={() => setSelected(null)} className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-700"><ArrowLeft size={14} /> All games</button>
+      <button type="button" onClick={onBack} className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-700"><ArrowLeft size={14} /> All games</button>
       <div className="flex items-center gap-3">
         <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/5 text-3xl"><GameIcon icon={current.icon} /></span>
         <div className="min-w-0">
@@ -107,7 +102,7 @@ function ResultsView({ rows, games }: { rows: Row[]; games: GameInfo[] }) {
                 <td className="text-slate-400">{fmtDate(r.createdAt)}</td>
               </tr>
             ))}
-            {list.length === 0 && <tr><td colSpan={7} className="!whitespace-normal py-8 text-center text-slate-500">Is filter ke liye koi result nahi.</td></tr>}
+            {list.length === 0 && <tr><td colSpan={7} className="!whitespace-normal py-8 text-center text-slate-500">{emptyText}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -126,7 +121,7 @@ function ResultsView({ rows, games }: { rows: Row[]; games: GameInfo[] }) {
             </div>
           </div>
         ))}
-        {list.length === 0 && <p className="py-8 text-center text-slate-500">Is filter ke liye koi result nahi.</p>}
+        {list.length === 0 && <p className="py-8 text-center text-slate-500">{emptyText}</p>}
       </div>
     </div>
   );
@@ -136,6 +131,6 @@ export default function ResultsPageClient({ params, searchParams }: { params?: R
   return usePage(async () => {
     const response = await fetch("/api/admin/data?view=results", { cache: "no-store" });
     const data = await response.json(); if (!response.ok) throw new Error(data.error ?? "Results load nahi ho sake.");
-    return <ResultsView rows={data.rows as Row[]} games={data.games as GameInfo[]} />;
+    return <ResultsView games={data.games as GameSummary[]} />;
   }, [JSON.stringify(params ?? {}), JSON.stringify(searchParams ?? {})]);
 }

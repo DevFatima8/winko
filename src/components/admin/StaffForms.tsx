@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState } from "react";
 import { createSubAdminAction, updateStaffAction, changeOwnPasswordAction, type ActionState } from "../../lib/actions";
+import { useAdminActionState } from "@/lib/adminLiveUpdates";
 
 const input = "w-full rounded-xl border border-[#3a2470] bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-[#d946ef]";
 const label = "mb-1 block text-xs font-semibold text-[#b8a7e6]";
@@ -10,7 +11,7 @@ const Msg = ({ s }: { s: ActionState }) => (!s ? null : s.error ? <p className="
 function genPass() { const c = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"; let p = ""; for (let i = 0; i < 10; i++) p += c[Math.floor(Math.random() * c.length)]; return p; }
 
 export function CreateStaffForm({ canCreateSuper }: { canCreateSuper: boolean }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(createSubAdminAction, undefined);
+  const [state, action, pending] = useAdminActionState<ActionState, FormData>(createSubAdminAction, undefined);
   const [pw, setPw] = useState(genPass());
   return (
     <form action={action} className="space-y-3">
@@ -33,7 +34,7 @@ export function CreateStaffForm({ canCreateSuper }: { canCreateSuper: boolean })
 }
 
 export function EditStaffForm({ id, name, note }: { id: string; name: string; note: string }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(updateStaffAction, undefined);
+  const [state, action, pending] = useAdminActionState<ActionState, FormData>(updateStaffAction, undefined);
   return (
     <form action={action} className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
       <input type="hidden" name="id" value={id} />
@@ -47,7 +48,7 @@ export function EditStaffForm({ id, name, note }: { id: string; name: string; no
 }
 
 export function OwnPasswordForm() {
-  const [state, action, pending] = useActionState<ActionState, FormData>(changeOwnPasswordAction, undefined);
+  const [state, action, pending] = useAdminActionState<ActionState, FormData>(changeOwnPasswordAction, undefined);
   return (
     <form action={action} className="space-y-3">
       <input name="current" type="password" required placeholder="Current password" className={input} />

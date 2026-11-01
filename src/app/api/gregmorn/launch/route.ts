@@ -32,8 +32,20 @@ export async function POST(request: Request) {
     const saved = await saveProviderGame(game);
     const denied = await checkGameAccess(me.id, game.slug);
     if (denied) return NextResponse.json({ error: denied }, { status: 403 });
-    const exitUrl = process.env.GREGMORN_EXIT_URL;
-    if (!exitUrl) throw new Error("Gregmorn launch requires GREGMORN_EXIT_URL.");
+    const configuredExitUrl = process.env.GREGMORN_EXIT_URL;
+    if (!configuredExitUrl) throw new Error("Gregmorn launch requires GREGMORN_EXIT_URL.");
+    let exitUrl = configuredExitUrl;
+    if ("returnTo" in body) {
+      if (typeof body.returnTo !== "string" || !body.returnTo.startsWith("/") || body.returnTo.startsWith("//") || body.returnTo.includes("\\") || body.returnTo.length > 2048) {
+        return NextResponse.json({ error: "Invalid game return location." }, { status: 400 });
+      }
+      const base = new URL(configuredExitUrl);
+      const target = new URL(body.returnTo, base.origin);
+      if (target.origin !== base.origin || !["/", "/games-all", "/player"].includes(target.pathname)) {
+        return NextResponse.json({ error: "Invalid game return location." }, { status: 400 });
+      }
+      exitUrl = target.toString();
+    }
     stage = "provider_launch";
     const session = await openGregmornGame({
       gameId: body.gameId,

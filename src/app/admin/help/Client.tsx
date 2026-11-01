@@ -4,6 +4,7 @@ import { Card } from "@/components/Shell";
 import { HelpArticleForm } from "@/components/admin/Forms";
 import { deleteHelpArticleAction } from "@/lib/actions";
 import { usePage, NOT_FOUND, REDIRECT } from "@/lib/useDb";
+import { withAdminRefresh } from "@/lib/adminLiveUpdates";
 
 export default function HelpAdminPageClient({ params, searchParams }: { params?: Record<string, string>; searchParams?: Record<string, string> }) {
   void params; void searchParams;
@@ -34,7 +35,7 @@ export default function HelpAdminPageClient({ params, searchParams }: { params?:
                 <div className="flex gap-2">
                   <a href={`/help#${a._id}`} target="_blank" className="btn-outline rounded-lg px-2.5 py-1 text-xs font-semibold">View</a>
                   <a href={`/admin/help?edit=${a._id}`} className="btn-violet rounded-lg px-2.5 py-1 text-xs font-semibold">Edit</a>
-                  <form action={deleteHelpArticleAction.bind(null, String(a._id))}><button className="rounded-lg bg-red-500/15 px-2.5 py-1 text-xs text-red-300">Delete</button></form>
+                  <form action={withAdminRefresh(deleteHelpArticleAction.bind(null, String(a._id)))}><button className="rounded-lg bg-red-500/15 px-2.5 py-1 text-xs text-red-300">Delete</button></form>
                 </div>
               </li>
             ))}

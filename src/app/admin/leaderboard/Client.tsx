@@ -1,15 +1,16 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState } from "react";
 import { Card } from "@/components/Shell";
 import { saveLeaderboardAction, type ActionState } from "@/lib/actions";
 import { usePage, REDIRECT } from "@/lib/useDb";
+import { useAdminActionState } from "@/lib/adminLiveUpdates";
 
 type Entry = { name: string; amount: number };
 
 function LeaderboardEditor({ initial }: { initial: Entry[] }) {
     const [entries, setEntries] = useState(() => Array.from({ length: 3 }, (_, index) => initial[index] ?? { name: "", amount: 0 }));
-    const [state, action, pending] = useActionState<ActionState, FormData>(saveLeaderboardAction, undefined);
+    const [state, action, pending] = useAdminActionState<ActionState, FormData>(saveLeaderboardAction, undefined);
     const update = (index: number, change: Partial<Entry>) => setEntries((current) => current.map((entry, i) => i === index ? { ...entry, ...change } : entry));
     return (
         <form action={action} className="space-y-4">

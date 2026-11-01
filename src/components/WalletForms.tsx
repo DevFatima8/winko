@@ -381,7 +381,7 @@ export function DepositForm({ accounts = [], initialAmount }: { accounts?: Accou
                 <span>Account Title: <b className="text-white">{selectedAccount.accountTitle}</b></span>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span>Account Number: <b className="font-mono text-emerald-400">{selectedAccount.accountNumber}</b></span>
+                <span>Till ID: <b className="font-mono text-emerald-400">{selectedAccount.accountNumber}</b></span>
                 <button
                   type="button"
                   onClick={() => copyToClipboard(selectedAccount.accountNumber, "detail")}

@@ -47,7 +47,7 @@ function Steps({ step }: { step: 1 | 2 | 3 }) {
   );
 }
 
-export function DepositFlow({ accounts = [], initialAmount, minDeposit = MIN_DEPOSIT, firstDepositBonusEligible = false }: { accounts?: Account[]; initialAmount?: number; minDeposit?: number; firstDepositBonusEligible?: boolean }) {
+export function DepositFlow({ accounts = [], qrAccount = null, initialAmount, minDeposit = MIN_DEPOSIT, firstDepositBonusEligible = false }: { accounts?: Account[]; qrAccount?: Account | null; initialAmount?: number; minDeposit?: number; firstDepositBonusEligible?: boolean }) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [provider, setProvider] = useState<Provider>(accounts.find((a) => a.provider === "jazzcash") ? "jazzcash" : accounts[0]?.provider ?? "easypaisa");
   const [amount, setAmount] = useState<number | string>(initialAmount ?? 500);
@@ -62,11 +62,11 @@ export function DepositFlow({ accounts = [], initialAmount, minDeposit = MIN_DEP
   const [zoom, setZoom] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const account = accounts.find((a) => a.provider === provider) ?? null;
+  const account = qrMode ? qrAccount : accounts.find((a) => a.provider === provider) ?? null;
   const numAmount = Number(amount);
   const validAmount = Number.isFinite(numAmount) && numAmount > 0 ? numAmount : 0;
   const providers = (["easypaisa", "jazzcash", "raast"] as const).map((p) => ({ p, has: accounts.some((a) => a.provider === p) }));
-  const qrAccounts = accounts.filter((a) => a.qrImage);
+  const qrAccounts = qrAccount ? [qrAccount] : [];
   const bonusFor = (value: number) => firstDepositBonusEligible ? Math.round(value * 5) / 100 : 0;
   const bonus = bonusFor(validAmount);
   const formatted = (value: number) => value.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -87,7 +87,7 @@ export function DepositFlow({ accounts = [], initialAmount, minDeposit = MIN_DEP
       await navigator.clipboard.writeText(account.accountNumber);
       setCopied(true);
     } catch {
-      setError("Account number copy nahi ho saka. Number manually copy karein.");
+      setError("Till ID copy nahi ho saki. Till ID manually copy karein.");
     }
   };
 
@@ -108,12 +108,16 @@ export function DepositFlow({ accounts = [], initialAmount, minDeposit = MIN_DEP
       const form = new FormData();
       form.set("amount", String(numAmount));
       form.set("paymentAccountId", account.id);
+      form.set("paymentMethod", qrMode ? "qr" : provider);
       form.set("senderNumber", senderNumber.trim() || "Not provided");
       const dataUrl = await compressImage(file, 1100, 0.8);
       form.set("proofImage", await (await fetch(dataUrl)).blob(), "proof.jpg");
       const res = await depositAction(undefined, form);
       if (res?.error) setError(res.error);
-      else setStep(3);
+      else {
+        setStep(3);
+        window.dispatchEvent(new Event("wx:data-refresh"));
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Screenshot upload nahi ho saka. Dobara koshish karein.");
     } finally {
@@ -154,7 +158,7 @@ export function DepositFlow({ accounts = [], initialAmount, minDeposit = MIN_DEP
                     </button>
                   );
                 })}
-                <button type="button" disabled={!qrAccounts.length} aria-pressed={qrMode} onClick={() => { const target = account?.qrImage ? account : qrAccounts[0]; if (target) { setProvider(target.provider); setQrMode(true); setError(null); setCopied(false); } }} className={`flex min-h-[48px] items-center gap-2 border p-1.5 disabled:opacity-40 ${qrMode ? "border-[#ffc933] bg-[var(--wx-card-2)] text-[#ffc933]" : "border-white/25 text-white"}`}><Image src="/bank-icons/Qr.jpeg" alt="" width={32} height={32} className="h-8 w-8 object-contain" /><span className="flex-1 text-[13px] sm:text-base">QR{!qrAccounts.length && <small className="block text-[9px]">Unavailable</small>}</span></button>
+                <button type="button" disabled={!qrAccounts.length} aria-pressed={qrMode} onClick={() => { if (qrAccount) { setProvider(qrAccount.provider); setQrMode(true); setError(null); setCopied(false); } }} className={`flex min-h-[48px] items-center gap-2 border p-1.5 disabled:opacity-40 ${qrMode ? "border-[#ffc933] bg-[var(--wx-card-2)] text-[#ffc933]" : "border-white/25 text-white"}`}><Image src="/bank-icons/Qr.jpeg" alt="" width={32} height={32} className="h-8 w-8 object-contain" /><span className="flex-1 text-[13px] sm:text-base">QR{!qrAccounts.length && <small className="block text-[9px]">Unavailable</small>}</span></button>
               </div>
             </div>
 
@@ -223,10 +227,10 @@ export function DepositFlow({ accounts = [], initialAmount, minDeposit = MIN_DEP
               <div className="mb-4 space-y-2 rounded-xl bg-black/30 p-3 text-left text-sm text-white">
                 <div className="text-xs text-slate-400">Account title</div>
                 <div className="break-words font-semibold">{account.accountTitle}</div>
-                <div className="text-xs text-slate-400">Account number</div>
+                <div className="text-xs text-slate-400">Till ID</div>
                 <div className="flex items-center justify-between gap-2">
                   <span className="min-w-0 break-all font-mono text-[#ffc933]">{account.accountNumber}</span>
-                  <button type="button" onClick={copyAccount} aria-label="Copy account number" className="flex shrink-0 items-center gap-1 rounded-lg bg-white/10 px-2 text-xs"><Copy size={14} />{copied ? "Copied" : "Copy"}</button>
+                  <button type="button" onClick={copyAccount} aria-label="Copy Till ID" className="flex shrink-0 items-center gap-1 rounded-lg bg-white/10 px-2 text-xs"><Copy size={14} />{copied ? "Copied" : "Copy"}</button>
                 </div>
               </div>
               {account.qrImage ? (

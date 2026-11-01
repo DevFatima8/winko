@@ -12,6 +12,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n/client";
 import { usePage } from "@/lib/useDb";
 import { DEFAULT_BET_PRESETS, MAX_BET_PRESET, normalizeBetPresets, saveBetPresets } from "@/lib/betPresets";
+import { WinHoldCard } from "@/components/WinHoldCard";
 
 const ico = (dir: string, file: string) => <img src={`/Website-Icons/Website-Icons/${dir}/png/${file}-128.png`} alt="" width={32} height={32} draggable={false} className="h-full w-full object-contain" />;
 const disc = (bg: string, node: ReactNode) => <span className={`flex h-full w-full items-center justify-center rounded-full text-white ${bg}`}>{node}</span>;
@@ -196,6 +197,7 @@ export default function ProfilePageClient({ params, searchParams }: { params?: R
         </div>
 
         <BetPresetSettings userId={me.id} initial={me.betPresets} />
+        <WinHoldCard locked={data.holds?.locked ?? 0} claimable={data.holds?.claimable ?? 0} referralClaimable={data.holds?.referralClaimable ?? 0} />
 
         <div className="wx-card rounded-xl">
           <Link href="/player/withdraw" className="flex flex-col items-center gap-1.5 py-4 text-[13px] font-medium text-white">

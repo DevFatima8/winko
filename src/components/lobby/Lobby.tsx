@@ -6,7 +6,7 @@ import { NotificationBell } from "../../components/NotificationBell";
 import { SupportWidget } from "../../components/SupportWidget";
 import { InstallApp } from "../../components/InstallApp";
 import { useAppInstalled } from "@/lib/appInstall";
-import { rememberGameReturn, useGameReturnScroll } from "@/lib/gameNavigation";
+import { rememberGameReturn } from "@/lib/gameNavigation";
 import { OpenSupportButton } from "../../components/OpenSupport";
 import { LanguageSwitch } from "../../components/LanguageSwitch";
 import { BrandLogo } from "../../components/BrandLogo";
@@ -25,6 +25,7 @@ import gameLabel from "./GameLabel.module.css";
 import { FloatingActions } from "./FloatingActions";
 import { ReferralCommissionPopup } from "../ReferralCommissionPopup";
 import { GregmornGames } from "./GregmornGames";
+import type { ProviderCatalogState } from "@/lib/useProviderCatalog";
 
 export { GAME_ORDER } from "@/lib/gameCatalog";
 
@@ -335,22 +336,13 @@ export function Header({ viewer, active = "home", showAnnouncement = true }: { v
             <OpenSupportButton className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white hover:text-[#ffc933]"><HeadsetIcon size={19} /></OpenSupportButton>
             <span className="hidden h-6 w-px bg-white/15 md:block" />
             <div className="hidden items-center gap-2 md:flex">
-              {viewer.loggedIn ? (
-                <>
-                  {viewer.isAdmin
-                    ? <Link href={prof} className="btn-violet inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold lg:px-4 lg:text-sm">{t("adminPanel")}</Link>
-                    : <Link href={dep} aria-label={t("deposit")} title={t("deposit")} className="btn-violet relative inline-flex h-9 w-9 items-center justify-center rounded-full"><span className="absolute -right-1.5 -top-2 rounded-full bg-[#ff3b30] px-1.5 text-[9px] font-bold leading-[14px] text-white">5%</span><WalletIcon size={17} /></Link>}
-                </>
-              ) : (
-                <>
-                  <Link href="/login" className="btn-outline whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold lg:px-4 lg:text-sm">{t("login")}</Link>
-                  <Link href="/signup" className="btn-gold whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-black lg:px-4 lg:text-sm">{t("register")}</Link>
-                </>
-              )}
+              {viewer.isAdmin
+                ? <Link href={prof} className="btn-violet inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold lg:px-4 lg:text-sm">{t("adminPanel")}</Link>
+                : <Link href={dep} aria-label={t("deposit")} title={t("deposit")} className="btn-violet relative inline-flex h-9 w-9 items-center justify-center rounded-full"><span className="absolute -right-1.5 -top-2 rounded-full bg-[#ff3b30] px-1.5 text-[9px] font-bold leading-[14px] text-white">5%</span><WalletIcon size={17} /></Link>}
             </div>
-            {/* mobile: compact auth/account button */}
+            {/* mobile: compact account button */}
             <span className="md:hidden">
-              {viewer.loggedIn ? <Link href={viewer.isAdmin ? prof : dep} className="btn-violet relative flex h-8 w-8 items-center justify-center rounded-full" aria-label={viewer.isAdmin ? "Admin panel" : "Deposit"}>{!viewer.isAdmin && <span className="absolute -right-1.5 -top-2 rounded-full bg-[#ff3b30] px-1 text-[8px] font-bold leading-[13px] text-white">5%</span>}{viewer.isAdmin ? <UserIcon size={16} /> : <WalletIcon size={16} />}</Link> : <Link href="/login" className="btn-gold whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-black">{t("login")}</Link>}
+              <Link href={viewer.isAdmin ? prof : dep} className="btn-violet relative flex h-8 w-8 items-center justify-center rounded-full" aria-label={viewer.isAdmin ? "Admin panel" : "Deposit"}>{!viewer.isAdmin && <span className="absolute -right-1.5 -top-2 rounded-full bg-[#ff3b30] px-1 text-[8px] font-bold leading-[13px] text-white">5%</span>}{viewer.isAdmin ? <UserIcon size={16} /> : <WalletIcon size={16} />}</Link>
             </span>
           </div>
         </div>
@@ -474,10 +466,9 @@ function LeaderboardCard({ rows }: { rows: Row[] }) {
 }
 
 /* ---------------- full lobby ---------------- */
-export function Lobby({ viewer, cat, links = {}, leaderboard = [], showHeader = true }: { viewer: Viewer; cat: string; links?: Links; leaderboard?: Row[]; showHeader?: boolean }) {
+export function Lobby({ viewer, cat, links = {}, leaderboard = [], showHeader = true, catalog }: { viewer: Viewer; cat: string; links?: Links; leaderboard?: Row[]; showHeader?: boolean; catalog?: ProviderCatalogState }) {
   const installed = useAppInstalled();
   const { t, locale } = useI18n();
-  useGameReturnScroll(true);
   void cat;
   const wa = links.whatsapp || BRAND.whatsapp; const tg = links.telegram || BRAND.telegram;
   const slides: Slide[] = SLIDES.map((sl, i) => ({
@@ -495,11 +486,11 @@ export function Lobby({ viewer, cat, links = {}, leaderboard = [], showHeader = 
       <main className={`${CONTAINER} grid grid-cols-2 gap-2 px-2 pb-28 pt-2 md:block md:space-y-5 [&>*]:min-w-0 [&>*:not(.wx-half)]:col-span-2 sm:[&>.wx-half]:col-span-2 md:px-4 md:pb-12 lg:px-6`}>
         <BannerCarousel slides={slides} />
 
-        {!viewer.isAdmin && <div className="wx-card order-1 rounded-2xl p-2 sm:hidden"><Marquee items={t("marquee")} /></div>}
+        {viewer.loggedIn && !viewer.isAdmin && <div className="wx-card order-1 rounded-2xl p-2 sm:hidden"><Marquee items={t("marquee")} /></div>}
 
         {/* marquee + auth */}
-        <section className={`wx-card wx-half order-3 flex flex-col-reverse justify-center sm:flex-row sm:justify-start items-stretch sm:items-center gap-2 sm:gap-3 md:gap-4 rounded-2xl p-2 sm:p-3 md:order-none md:p-4 ${viewer.loggedIn && !viewer.isAdmin ? "max-sm:order-2 max-sm:col-span-2" : ""}`}>
-          {!viewer.isAdmin && <div className="hidden min-w-0 w-full flex-1 sm:block">
+        <section className={`wx-card wx-half order-3 flex ${viewer.loggedIn ? "flex-col-reverse justify-center items-stretch" : "flex-row justify-start items-center max-md:order-1 max-md:col-span-2"} sm:flex-row sm:justify-start sm:items-center gap-2 sm:gap-3 md:gap-4 rounded-2xl p-2 sm:p-3 md:order-none md:p-4 ${viewer.loggedIn && !viewer.isAdmin ? "max-sm:order-2 max-sm:col-span-2" : ""}`}>
+          {!viewer.isAdmin && <div className={`${viewer.loggedIn ? "hidden sm:block" : ""} min-w-0 w-full flex-1`}>
             <Marquee items={t("marquee")} />
           </div>}
 
@@ -517,16 +508,16 @@ export function Lobby({ viewer, cat, links = {}, leaderboard = [], showHeader = 
               </div>
             </div>
           ) : (
-            <div className="flex w-full sm:w-auto shrink-0 items-center justify-end gap-2">
+            <div className="flex w-auto shrink-0 items-center justify-end gap-2">
               <Link
                 href="/signup"
-                className="btn-gold flex h-8.5 sm:h-10 flex-1 sm:flex-initial min-w-[80px] sm:min-w-[96px] px-4 sm:px-5 shrink-0 items-center justify-center whitespace-nowrap rounded-full text-center text-xs sm:text-sm font-black active:scale-95 transition"
+                className="btn-gold flex h-8.5 sm:h-10 flex-initial min-w-[64px] sm:min-w-[96px] px-2 sm:px-5 shrink-0 items-center justify-center whitespace-nowrap rounded-full text-center text-xs sm:text-sm font-black active:scale-95 transition"
               >
                 {t("register")}
               </Link>
               <Link
                 href="/login"
-                className="btn-outline flex h-8.5 sm:h-10 flex-1 sm:flex-initial min-w-[80px] sm:min-w-[96px] px-4 sm:px-5 shrink-0 items-center justify-center whitespace-nowrap rounded-full text-center text-xs sm:text-sm font-bold active:scale-95 transition"
+                className="btn-outline flex h-8.5 sm:h-10 flex-initial min-w-[64px] sm:min-w-[96px] px-2 sm:px-5 shrink-0 items-center justify-center whitespace-nowrap rounded-full text-center text-xs sm:text-sm font-bold active:scale-95 transition"
               >
                 {t("login")}
               </Link>
@@ -576,7 +567,7 @@ export function Lobby({ viewer, cat, links = {}, leaderboard = [], showHeader = 
         {/* games grid */}
         <section id="games" className="wx-card order-5 scroll-mt-16 space-y-2 rounded-2xl p-2.5 md:order-none md:space-y-3 md:p-4">
           <SectionTitle icon="🔥" title={t("games")} right={<Link href="/games-all" className="rounded-full bg-[#8b5cf6]/20 px-3 py-1 text-xs font-bold text-[#c4b5fd] ring-1 ring-[#8b5cf6]/40 hover:bg-[#8b5cf6]/30">{t("viewAll")} ›</Link>} />
-          <GregmornGames lobby />
+          <GregmornGames lobby catalog={catalog} />
         </section>
 
 

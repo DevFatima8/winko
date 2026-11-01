@@ -11,10 +11,12 @@ export async function GET() {
         if (!me || me.role !== "client") return NextResponse.json({ error: "Login required." }, { status: 401 });
 
         const assigned = await assignPaymentAccounts(me.id);
-        const assignedIds = new Set(Object.values(assigned).map(String));
+        const assignedIds = new Set(["jazzcash", "easypaisa", "raast"].flatMap(provider => assigned[provider] ? [assigned[provider]] : []));
         const rows = await PaymentAccount.find({ isActive: true }).sort({ createdAt: 1 }).lean();
         const accounts = rows.filter((account) => assignedIds.has(String(account._id)))
             .map((account) => ({ id: String(account._id), provider: account.provider, accountTitle: account.accountTitle, accountNumber: account.accountNumber, qrImage: account.qrImage ?? null }));
+        const qr = rows.find(account => String(account._id) === assigned.qr);
+        const qrAccount = qr ? { id: String(qr._id), provider: qr.provider, accountTitle: qr.accountTitle, accountNumber: qr.accountNumber, qrImage: qr.qrImage ?? null } : null;
         const settings = await getSettings();
         const { cur } = vipInfo(me.vipLevel, settings.vipLevels);
         const usedToday = await withdrawnToday(me.id);
@@ -29,6 +31,7 @@ export async function GET() {
         return NextResponse.json({
             me,
             accounts,
+            qrAccount,
             firstDepositBonusEligible: approvedDeposits === 0 && !(user?.totalDeposited > 0) && !user?.firstDepositBonusTransactionId,
             withdrawalAccounts: user?.withdrawalAccounts ?? {},
             minDeposit: settings.wallet?.minDeposit ?? 10,

@@ -4,7 +4,8 @@ import { getServerSessionUser } from "@/lib/serverAuth";
 import { isStaff } from "@/lib/auth";
 import { ensureHelp, getSettings } from "@/lib/platform";
 import { getProviderCatalog } from "@/lib/gregmornCatalog";
-import { gameResultGameMap } from "@/lib/gameResultGames";
+import { gameResultGameMap, gameResultSummaries, type GameResultStat } from "@/lib/gameResultGames";
+import { recordedPlayerLogins } from "@/lib/dashboardLogins";
 
 export const dynamic = "force-dynamic";
 
@@ -86,8 +87,10 @@ async function loadData(request: Request) {
                 ...(me.level < 2 ? { referredBy: me.id } : {}),
                 ...dateFilter,
             };
-            const [users, transactions, results, logins, threads, gameRows] = await Promise.all([
-                userRowsMetric
+            const [users, transactions, results, storedLogins, threads, gameRows] = await Promise.all([
+                loginMetrics.has(metric)
+                    ? me.level < 2 ? Promise.resolve(scopedUsers) : User.find({ role: { $in: ["client", "agent"] } }).lean()
+                    : userRowsMetric
                     ? me.level < 2 ? Promise.resolve(scopedUsers.filter((user) => !rangeStart || (new Date(user.createdAt) >= rangeStart && new Date(user.createdAt) < rangeEnd!))) : User.find(usersFilter).sort({ createdAt: -1 }).lean()
                     : Promise.resolve([]),
                 transactionMetrics.has(metric) ? Transaction.find(transactionFilter).sort({ createdAt: -1 }).lean() : Promise.resolve([]),
@@ -107,6 +110,7 @@ async function loadData(request: Request) {
                 resultMetrics.has(metric) ? Game.find().lean() : Promise.resolve([]),
             ]);
             if (request.signal.aborted) return new Response(null, { status: 499 });
+            const logins = recordedPlayerLogins(users, storedLogins);
             const gameMap = gameResultGameMap(gameRows);
             const isInRange = (date: Date | string) => !rangeStart || (new Date(date) >= rangeStart && new Date(date) < rangeEnd!);
             const approved = transactions.filter((row) => row.status === "approved");
@@ -251,7 +255,7 @@ async function loadData(request: Request) {
                     title = `Login Earners — ${rangeLabel}`;
                     description = `Players who logged in in ${rangeLabel.toLowerCase()} and had a winning game result in the same period.`;
                     rows = loginRows(todayLoginIds.filter((id) => winnerIds.has(id)));
-                    summaries = [{ label: "Winning users", value: winnerIds.size }, { label: "Logged-in users", value: todayLoginIds.length }, { label: "Earner rate", value: `${todayLoginIds.length ? (winnerIds.size / todayLoginIds.length * 100).toFixed(1) : "0.0"}%` }];
+                    summaries = [{ label: "Winning users", value: todayLoginIds.filter(id => winnerIds.has(id)).length }, { label: "Logged-in users", value: todayLoginIds.length }, { label: "Earner rate", value: `${todayLoginIds.length ? (todayLoginIds.filter(id => winnerIds.has(id)).length / todayLoginIds.length * 100).toFixed(1) : "0.0"}%` }];
                     columns = [{ key: "user", label: "User" }, { key: "phone", label: "Phone" }, { key: "role", label: "Role" }, { key: "logins", label: "Login events" }, { key: "lastLogin", label: "Last login" }, { key: "wonToday", label: "Won today" }];
                     break;
                 case "repeat-earners":
@@ -410,7 +414,7 @@ async function loadData(request: Request) {
                 ...(me.level < 2 ? { referredBy: me.id } : {}),
             }).sort({ createdAt: -1 }).lean();
             const teamIds = users.map((user) => user._id);
-            const [transactions, results, logins, paymentAccounts, threads] = await Promise.all([
+            const [transactions, results, storedLogins, paymentAccounts, threads] = await Promise.all([
                 Transaction.find(me.level < 2 ? { userId: { $in: teamIds } } : {}).lean(),
                 GameResult.find(me.level < 2 ? { userId: { $in: teamIds } } : {}).sort({ createdAt: -1 }).lean(),
                 LoginEvent.find({
@@ -421,6 +425,7 @@ async function loadData(request: Request) {
                 PaymentAccount.find({ isActive: true, ...(me.level < 2 ? { ownerId: me.id } : {}) }, "_id").lean(),
                 SupportThread.find(me.level < 2 ? { userId: { $in: teamIds.map(String) } } : {}).lean(),
             ]);
+            const logins = recordedPlayerLogins(users, storedLogins);
             const approved = transactions.filter((row) => row.status === "approved");
             const deposits = approved.filter((row) => row.type === "deposit");
             const withdrawals = approved.filter((row) => row.type === "withdraw");
@@ -430,8 +435,8 @@ async function loadData(request: Request) {
             const previousResults = completedResults.filter((row) => new Date(row.createdAt) < start);
             const todayDeposits = deposits.filter((row) => new Date(row.createdAt) >= start && new Date(row.createdAt) < end);
             const todayUsers = users.filter((row) => new Date(row.createdAt) >= start && new Date(row.createdAt) < end);
-            const earlierPlayerIds = new Set(previousResults.map((row) => String(row.userId)).filter(Boolean));
-            const todayPlayerIds = [...new Set(todayResults.map((row) => String(row.userId)).filter(Boolean))];
+            const earlierPlayerIds = new Set(previousResults.map((row) => String(row.userId ?? "")).filter(Boolean));
+            const todayPlayerIds = [...new Set(todayResults.map((row) => String(row.userId ?? "")).filter(Boolean))];
             const repeatedIds = new Set(todayPlayerIds.filter((id) => earlierPlayerIds.has(id)));
             const userMap = new Map(users.map((user) => [String(user._id), user]));
             const repeatedPlayers = todayPlayerIds.filter((id) => repeatedIds.has(id)).map((id) => {
@@ -448,10 +453,11 @@ async function loadData(request: Request) {
                 const repeatIds = loginIds.filter((id) => !signupIds.has(id));
                 const dayResults = completedResults.filter((row) => new Date(row.createdAt) >= day && new Date(row.createdAt) < next);
                 const winnerIds = new Set(dayResults.filter((row) => row.outcome === "win" && row.winAmount > 0 && row.userId).map((row) => String(row.userId)));
+                const loginWinnerIds = loginIds.filter((id) => winnerIds.has(id));
                 const repeatWinnerIds = repeatIds.filter((id) => winnerIds.has(id));
                 const bet = dayResults.reduce((sum, row) => sum + row.betAmount, 0);
                 const payout = dayResults.reduce((sum, row) => sum + row.winAmount, 0);
-                return { key: day.toISOString().slice(0, 10), date: day, logins: loginIds.length, repeats: repeatIds.length, repeatPct: loginIds.length ? (repeatIds.length / loginIds.length) * 100 : 0, winners: winnerIds.size, earningPct: loginIds.length ? (winnerIds.size / loginIds.length) * 100 : 0, repeatEarningPct: repeatIds.length ? (repeatWinnerIds.length / repeatIds.length) * 100 : 0, bet, payout, earned: bet - payout };
+                return { key: new Date(day.getTime() + 5 * 3600000).toISOString().slice(0, 10), date: day, logins: loginIds.length, repeats: repeatIds.length, repeatPct: loginIds.length ? (repeatIds.length / loginIds.length) * 100 : 0, winners: loginWinnerIds.length, earningPct: loginIds.length ? (loginWinnerIds.length / loginIds.length) * 100 : 0, repeatEarningPct: repeatIds.length ? (repeatWinnerIds.length / repeatIds.length) * 100 : 0, bet, payout, earned: bet - payout };
             });
             const gameIds = [...new Set(results.slice(0, 8).map((row) => String(row.gameId)))];
             const recentGames = gameIds.length ? await Game.find({ $or: [{ _id: { $in: gameIds } }, { slug: { $in: gameIds } }] }, "slug name icon").lean() : [];
@@ -731,16 +737,36 @@ async function loadData(request: Request) {
             const teamIds = me.level < 2
                 ? (await User.find({ referredBy: me.id, role: { $in: ["client", "agent"] } }, "_id").lean()).map((user) => user._id)
                 : null;
-            const [rows, games] = await Promise.all([
-                GameResult.find(teamIds ? { userId: { $in: teamIds } } : {}).sort({ createdAt: -1 }).limit(500).lean(),
+            const scope = teamIds ? { userId: { $in: teamIds } } : {};
+            const [games, catalog, stats] = await Promise.all([
                 Game.find().lean(),
+                getProviderCatalog(),
+                GameResult.aggregate<GameResultStat>([
+                    ...(teamIds ? [{ $match: scope }] : []),
+                    { $group: {
+                        _id: "$gameId",
+                        total: { $sum: 1 },
+                        wins: { $sum: { $cond: [{ $eq: ["$outcome", "win"] }, 1, 0] } },
+                        losses: { $sum: { $cond: [{ $eq: ["$outcome", "lose"] }, 1, 0] } },
+                        bet: { $sum: { $cond: [{ $ne: ["$outcome", "pending"] }, "$betAmount", 0] } },
+                        paid: { $sum: { $cond: [{ $ne: ["$outcome", "pending"] }, "$winAmount", 0] } },
+                    } },
+                ]),
             ]);
+            const summaries = gameResultSummaries(games, catalog, stats);
+            const requested = params.get("game");
+            if (!requested) {
+                return NextResponse.json({ games: summaries.map(({ refs: _refs, ...game }) => game) }, { headers: { "Cache-Control": "no-store" } });
+            }
+            const selected = summaries.find((game) => game.key === requested);
+            if (!selected) return NextResponse.json({ error: "Game nahi mili." }, { status: 404 });
+            const refs: (string | null)[] = selected.refs.flatMap((ref) => ref ? [ref] : [null, ""]);
+            const rows = await GameResult.find({ ...scope, gameId: { $in: refs } }).sort({ createdAt: -1 }).limit(500).lean();
             const userIds = [...new Set(rows.flatMap((row) => row.userId ? [String(row.userId)] : []))];
-            const gameMap = gameResultGameMap(games);
             const users = userIds.length ? await User.find({ _id: { $in: userIds } }, "name phone").lean() : [];
             const userMap = new Map(users.map((user) => [String(user._id), { name: user.name, phone: user.phone }]));
-            const results = rows.map((row) => ({ ...row, gameId: gameMap.get(String(row.gameId)) ?? null, userId: row.userId ? userMap.get(String(row.userId)) ?? null : null }));
-            return NextResponse.json({ rows: results, games }, { headers: { "Cache-Control": "no-store" } });
+            const results = rows.map((row) => ({ ...row, userId: row.userId ? userMap.get(String(row.userId)) ?? null : null }));
+            return NextResponse.json({ rows: results }, { headers: { "Cache-Control": "no-store" } });
         }
         if (view === "staff") {
             if (me.level < 2) return NextResponse.json({ error: "Admin access required." }, { status: 403 });

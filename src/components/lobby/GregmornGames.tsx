@@ -1,39 +1,49 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ProviderCatalogGame } from "@/lib/gregmornCatalog";
 import { getCurrentUser } from "@/lib/auth";
 import { GameThumbnail } from "./GameThumbnail";
 import { GameGridSkeleton } from "./GameGridSkeleton";
 import { HotSlider } from "./HotSlider";
+import { useProviderCatalog, type ProviderCatalogState } from "@/lib/useProviderCatalog";
+import { readProviderGameReturn, rememberGameReturn, useGameReturnScroll } from "@/lib/gameNavigation";
 
-export function GregmornGames({ category = "All", lobby = false }: { category?: string; lobby?: boolean }) {
-  const [games, setGames] = useState<ProviderCatalogGame[]>([]);
+export function GregmornGames({ category = "All", lobby = false, catalog }: { category?: string; lobby?: boolean; catalog?: ProviderCatalogState }) {
+  const ownCatalog = useProviderCatalog(catalog === undefined);
+  const { games, loading, error: catalogError } = catalog ?? ownCatalog;
   const router = useRouter();
   const titleId = useId();
   const [search, setSearch] = useState("");
   const [provider, setProvider] = useState("");
   const [limit, setLimit] = useState(60);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [launchError, setError] = useState("");
+  const error = launchError || catalogError;
   const [launching, setLaunching] = useState<string | null>(null);
   const [restPhase, setRestPhase] = useState(false);
+  const [restored, setRestored] = useState(false);
+  const [sliderScrollLeft, setSliderScrollLeft] = useState(0);
+  const sectionRef = useRef<HTMLElement>(null);
+  useGameReturnScroll(restored && !loading && !catalogError);
 
   useEffect(() => {
-    const controller = new AbortController();
-    void fetch("/api/gregmorn/catalog", { cache: "no-store", signal: controller.signal })
-      .then(async response => {
-        const data = await response.json() as { games?: ProviderCatalogGame[]; error?: string };
-        if (!response.ok) throw new Error(data.error ?? "Provider games could not be loaded.");
-        setGames(Array.isArray(data.games) ? data.games : []);
-      })
-      .catch(reason => {
-        if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Provider games could not be loaded.");
-      })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
-  }, []);
+    let alive = true;
+    void Promise.resolve().then(() => {
+      if (!alive) return;
+      const saved = readProviderGameReturn();
+      if (saved && saved.category === category) {
+        setSearch(saved.search);
+        setProvider(saved.provider);
+        setLimit(saved.limit);
+        setSliderScrollLeft(saved.sliderScrollLeft);
+      }
+      setRestored(true);
+    });
+    const back = (event: PageTransitionEvent) => { if (event.persisted) setLaunching(null); };
+    window.addEventListener("pageshow", back);
+    return () => { alive = false; window.removeEventListener("pageshow", back); };
+  }, [category]);
 
   async function launch(game: ProviderCatalogGame) {
     if (launching) return;
@@ -46,10 +56,14 @@ export function GregmornGames({ category = "All", lobby = false }: { category?: 
       const response = await fetch("/api/gregmorn/launch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ gameId: game.id }),
+        body: JSON.stringify({ gameId: game.id, returnTo: `${window.location.pathname}${window.location.search}${window.location.hash}` }),
       });
       const data = await response.json() as { url?: string; error?: string };
       if (!response.ok || typeof data.url !== "string") throw new Error(data.error ?? "Game launch failed.");
+      rememberGameReturn({
+        category, search, provider, limit,
+        sliderScrollLeft: sectionRef.current?.querySelector("[data-provider-slider]")?.scrollLeft ?? 0,
+      });
       window.location.assign(data.url);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Game launch failed.");
@@ -64,11 +78,11 @@ export function GregmornGames({ category = "All", lobby = false }: { category?: 
     (!search.trim() || `${game.title} ${game.provider}`.toLowerCase().includes(search.trim().toLowerCase())));
   const ordered = lobby ? [...filtered.filter(game => game.isHot), ...filtered.filter(game => !game.isHot)] : filtered;
   const visible = ordered.slice(0, limit);
-  const cards = visible.map(game => (
+  const cards = visible.map((game, index) => (
     <button key={game.id} type="button" onClick={() => void launch(game)} disabled={launching !== null}
       className="group block w-full min-w-0 overflow-hidden rounded-xl border border-[#3a2470] bg-[#1b1038] text-left transition hover:border-[#8b5cf6] disabled:cursor-wait disabled:opacity-70">
       <span className="relative block aspect-[1.2] overflow-hidden bg-[#100a21]">
-        <GameThumbnail src={game.imageUrl} alt={game.title} loading="lazy" className="h-full w-full object-cover transition group-hover:scale-105" />
+        <GameThumbnail src={game.imageUrl} alt={game.title} loading={index < 6 ? "eager" : "lazy"} className="h-full w-full object-cover transition group-hover:scale-105" />
         {game.isHot && <span className="absolute left-1 top-1 rounded bg-orange-600 px-2 py-1 text-[10px] font-black text-white">HOT</span>}
         {launching === game.id && <span className="absolute inset-0 flex items-center justify-center bg-black/70 text-xs font-bold text-white" role="status">Opening…</span>}
       </span>
@@ -79,7 +93,7 @@ export function GregmornGames({ category = "All", lobby = false }: { category?: 
   const hotCount = visible.filter(game => game.isHot).length;
 
   return (
-    <section className="wx-card space-y-3 rounded-2xl p-3 md:p-4" aria-labelledby={titleId}>
+    <section ref={sectionRef} className="wx-card space-y-3 rounded-2xl p-3 md:p-4" aria-labelledby={titleId}>
       <div className="flex items-center justify-between gap-2">
         <div>
           <h2 id={titleId} className="text-base font-black text-white md:text-lg">{category === "Hot" ? "Hot Games" : lobby ? restPhase || hotCount === 0 ? "All Games" : "Hot Games" : "Provider Games"}</h2>
@@ -88,9 +102,9 @@ export function GregmornGames({ category = "All", lobby = false }: { category?: 
         {loading && <span className="text-xs text-[#b8a7e6]" role="status">Loading…</span>}
       </div>
         <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
-          <input aria-label="Search provider games" value={search} onChange={event => { setSearch(event.target.value); setLimit(60); setRestPhase(false); }}
+          <input aria-label="Search provider games" value={search} onChange={event => { setSearch(event.target.value); setLimit(60); setRestPhase(false); setSliderScrollLeft(0); }}
             placeholder="Search games..." className="min-w-0 flex-1 rounded-xl border border-[#3a2470] bg-[#100a21] px-3 py-2 text-sm text-white" />
-          <select aria-label="Game provider" value={provider} onChange={event => { setProvider(event.target.value); setLimit(60); setRestPhase(false); }}
+          <select aria-label="Game provider" value={provider} onChange={event => { setProvider(event.target.value); setLimit(60); setRestPhase(false); setSliderScrollLeft(0); }}
             className="min-w-0 rounded-xl border border-[#3a2470] bg-[#100a21] px-3 py-2 text-sm text-white">
             <option value="">All providers</option>
             {providers.map(name => <option key={name} value={name}>{name}</option>)}
@@ -102,6 +116,7 @@ export function GregmornGames({ category = "All", lobby = false }: { category?: 
       {!loading && !error && filtered.length === 0 && <p className="text-sm text-[#b8a7e6]">No provider games match this selection.</p>}
       {visible.length > 0 && (lobby ? (
         <HotSlider key={`${search}\u0000${provider}`} hot={cards.slice(0, hotCount)} rest={cards.slice(hotCount)}
+          initialScrollLeft={sliderScrollLeft}
           onPhase={setRestPhase} onEnd={() => setLimit(value => Math.min(value + 60, ordered.length))} />
       ) : <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">{cards}</div>)}
       {!lobby && ordered.length > visible.length && <button type="button" onClick={() => setLimit(value => value + 60)} className="btn-violet rounded-xl px-4 py-2 text-sm font-bold">Load more games ({ordered.length - visible.length})</button>}

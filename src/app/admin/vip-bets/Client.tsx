@@ -1,15 +1,14 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
 import { Card, fmt } from "@/components/Shell";
 import { adjustVipBetPointsAction, type ActionState } from "@/lib/actions";
 import { usePage, REDIRECT } from "@/lib/useDb";
+import { useAdminActionState } from "@/lib/adminLiveUpdates";
 
 type Player = { _id: string; name: string; phone: string; username: string | null; vipBetPoints?: number };
 
 function PointsAdjustment({ user }: { user: Player }) {
-    const [state, action, pending] = useActionState<ActionState, FormData>(adjustVipBetPointsAction.bind(null, user._id), undefined);
-    useEffect(() => { if (state?.success) window.location.reload(); }, [state]);
+    const [state, action, pending] = useAdminActionState<ActionState, FormData>(adjustVipBetPointsAction.bind(null, user._id), undefined);
     return (
         <form action={action} className="flex min-w-[260px] items-center gap-2">
             <select name="direction" defaultValue="add" aria-label="Points adjustment" className="rounded-lg border border-[#3a2470] bg-black/30 px-2 py-2 text-xs text-white">

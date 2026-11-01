@@ -1,6 +1,7 @@
 import { dbConnect } from "./mongo";
 import { notifyUser } from "./notifications";
 import { ensurePaymentAccounts } from "./seed";
+import { assignAccounts } from "./paymentAssignments";
 import { Commission, HelpArticle, PaymentAccount, Settings, Transaction, User, type PaymentAccountDoc, type SettingsDoc, type UserDoc, type ObjectId } from "@/models";
 
 // VIP defaults modelled on 9K-style tiers (PKR). Admin can edit in panel.
@@ -130,7 +131,7 @@ export async function withdrawalCountToday(userId: ObjectId) {
   return Transaction.countDocuments({ userId, type: "withdraw", status: { $in: ["approved", "pending"] }, createdAt: { $gte: start } });
 }
 
-/** Pay referral / agent commission on an approved deposit. */
+/** Hold new referral / agent commission until the player claims it. */
 export async function payDepositCommission(depositorId: ObjectId, amount: number) {
   const dep = await User.findById(depositorId, "referredBy name").lean();
   if (!dep?.referredBy) return;
@@ -142,9 +143,9 @@ export async function payDepositCommission(depositorId: ObjectId, amount: number
   if (pct <= 0) return;
   const c = Math.round(amount * pct) / 100;
   if (c <= 0) return;
-  await User.updateOneAtomic({ _id: ref._id }, { $inc: { balance: c, commissionEarned: c } });
+  await User.updateOneAtomic({ _id: ref._id }, { $inc: { pendingReferralCommission: c, commissionEarned: c } });
   await Commission.create({ beneficiaryId: ref._id, fromUserId: depositorId, kind: "deposit", baseAmount: amount, pct, amount: c, note: `First deposit commission from ${dep.name}` });
-  await notifyUser(String(ref._id), "Referral commission received", `Your 1.5% referral commission of Rs. ${c.toLocaleString("en-PK")} has been added for ${dep.name}'s first approved deposit.`, "success", { href: "/player/team" });
+  await notifyUser(String(ref._id), "Referral commission received", `Your 1.5% referral commission of Rs. ${c.toLocaleString("en-PK")} for ${dep.name}'s first approved deposit is ready to claim in Profile. It will enter your balance after you tap Claim.`, "success", { href: "/player/profile" });
 }
 
 export function genReferralCode(name: string) {
@@ -212,35 +213,10 @@ export async function ensureHelp() {
   return helpSeeding;
 }
 
-/**
- * Assign one random active payment account per provider to a client (called on login / signup).
- * Sub-admin owned accounts are included so deposits land to whichever admin the system assigns.
- * Stable: keeps existing assignment while that account is active.
- */
 const oid = (id: string): ObjectId => (String(id).startsWith("oid-") ? (String(id) as unknown as ObjectId) : (id as unknown as ObjectId));
 
 export async function assignPaymentAccounts(userId: string): Promise<Record<string, string>> {
   await dbConnect();
   await ensurePaymentAccounts();
-  const user = await User.findById(oid(userId)).lean<UserDoc>();
-  const existing = (user?.assignedAccounts ?? {}) as Record<string, string>;
-  const accounts = await PaymentAccount.find({ isActive: true }).lean<PaymentAccountDoc[]>();
-  const referrerId = user?.referredBy ? String(user.referredBy) : "";
-  const next: Record<string, string> = {};
-  for (const provider of ["jazzcash", "easypaisa", "raast"]) {
-    // Player pays the admin who referred them; fall back to the super-admin pool.
-    const ofProvider = accounts.filter((a) => a.provider === provider);
-    const own = referrerId ? ofProvider.filter((a) => String(a.ownerId ?? "") === referrerId) : [];
-    const pool = own.length ? own : ofProvider.filter((a) => !a.ownerId);
-    const cur = existing[provider];
-    if (cur && pool.some((a) => String(a._id) === String(cur))) {
-      next[provider] = String(cur);
-      continue;
-    }
-    if (pool.length) next[provider] = String(pool[Math.floor(Math.random() * pool.length)]._id);
-  }
-  if (JSON.stringify(next) !== JSON.stringify(existing)) {
-    await User.updateOne({ _id: oid(userId) }, { $set: { assignedAccounts: next } });
-  }
-  return next;
+  return assignAccounts(String(userId));
 }

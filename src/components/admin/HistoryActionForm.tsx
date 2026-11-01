@@ -3,6 +3,7 @@
 import { useActionState, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { ActionState } from "@/lib/actions";
+import { refreshAdminData } from "@/lib/adminLiveUpdates";
 
 export function HistoryActionForm({ action: serverAction, confirmation, children, label, destination }: {
   action: (state: ActionState, form: FormData) => Promise<ActionState>;
@@ -18,7 +19,7 @@ export function HistoryActionForm({ action: serverAction, confirmation, children
       const result = await serverAction(previous, form);
       if (result?.success) {
         if (destination) router.replace(destination);
-        else window.dispatchEvent(new CustomEvent("wx:admin-refresh"));
+        else refreshAdminData();
       }
       return result;
     } catch (error) {

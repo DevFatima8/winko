@@ -62,11 +62,11 @@ export async function POST(req: Request) {
             vipBetPoints: 100, vipPointsWelcomePending: true,
         });
         void Promise.all([
-            LoginEvent.create({ userId: String(u._id), ip: registrationIp, role: u.role }),
             bonus > 0 && referredBy ? Commission.create({ beneficiaryId: u._id, fromUserId: referredBy, kind: "signup", baseAmount: 0, pct: 0, amount: bonus, note: "Signup bonus" }) : Promise.resolve(),
             ensurePaymentAccounts().then(() => assignPaymentAccounts(String(u._id))),
         ]).catch(() => { });
         const sessionId = await createDeviceSession(String(u._id), req, registrationIp);
+        await LoginEvent.create({ userId: String(u._id), ip: registrationIp, role: u.role });
         return setAuthCookie(NextResponse.json({ id: String(u._id), role: "client", name: u.name }), String(u._id), sessionId);
     } catch (e) {
         console.error("[signup]", e);

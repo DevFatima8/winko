@@ -16,7 +16,7 @@ export function usePendingPayments(userId?: string) {
       if (active) { refreshQueued = true; return; }
       const controller = new AbortController();
       active = controller;
-      const timeout = window.setTimeout(() => controller.abort(), 15000);
+      const timeout = window.setTimeout(() => controller.abort(new DOMException("Pending payment counts request timed out.", "TimeoutError")), 15000);
       try {
         const response = await fetch("/api/admin/pending-payments", { cache: "no-store", signal: controller.signal });
         const data = await response.json();
@@ -28,7 +28,8 @@ export function usePendingPayments(userId?: string) {
       } catch (error) {
         if (!disposed) {
           const message = controller.signal.aborted ? "Payment counts request timed out. Retrying..." : error instanceof Error ? error.message : "Payment counts unavailable. Retrying...";
-          console.error("[Pending payment counts]", error);
+          if (controller.signal.aborted) console.warn("[Pending payment counts] Request timed out; retrying.");
+          else console.error("[Pending payment counts]", error);
           setState((previous) => ({ userId, counts: previous.userId === userId ? previous.counts : null, error: message }));
         }
       } finally {
@@ -47,7 +48,7 @@ export function usePendingPayments(userId?: string) {
     return () => {
       disposed = true;
       window.clearInterval(timer);
-      active?.abort();
+      active?.abort(new DOMException("Pending payment counts request cancelled.", "AbortError"));
       window.removeEventListener("wx:admin-refresh", onRefresh);
       window.removeEventListener("focus", onRefresh);
       window.removeEventListener("online", onRefresh);

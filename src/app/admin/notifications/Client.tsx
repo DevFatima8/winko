@@ -3,6 +3,7 @@ import { Card, fmtDate } from "@/components/Shell";
 import { NotificationForm } from "@/components/admin/Forms";
 import { deleteNotificationAction } from "@/lib/actions";
 import { usePage, NOT_FOUND, REDIRECT } from "@/lib/useDb";
+import { withAdminRefresh } from "@/lib/adminLiveUpdates";
 
 export default function NotificationsPageClient({ params, searchParams }: { params?: Record<string, string>; searchParams?: Record<string, string> }) {
   void params; void searchParams;
@@ -24,7 +25,7 @@ export default function NotificationsPageClient({ params, searchParams }: { para
                   <p className="mt-1 text-sm text-[#e9ddff]">{n.body}</p>
                   <div className="mt-1 text-xs text-[#6f5fa3]">{fmtDate(n.createdAt)} · read by {n.readBy.length}</div>
                 </div>
-                {level >= 2 && <form action={deleteNotificationAction.bind(null, String(n._id))}><button className="rounded-lg bg-red-500/15 px-2.5 py-1 text-xs text-red-300">Delete</button></form>}
+                {level >= 2 && <form action={withAdminRefresh(deleteNotificationAction.bind(null, String(n._id)))}><button className="rounded-lg bg-red-500/15 px-2.5 py-1 text-xs text-red-300">Delete</button></form>}
               </li>
             ))}
             {list.length === 0 && <li className="py-6 text-center text-[#6f5fa3]">Abhi koi notification nahi bheji.</li>}

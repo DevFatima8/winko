@@ -59,8 +59,8 @@ export async function POST(req: Request) {
         } else {
             void assignPaymentAccounts(String(u._id)).catch(() => { });
         }
-        void LoginEvent.create({ userId: String(u._id), ip: loginIp, role: u.role }).catch(() => { });
         const sessionId = await createDeviceSession(String(u._id), req, loginIp);
+        await LoginEvent.create({ userId: String(u._id), ip: loginIp, role: u.role });
         return setAuthCookie(NextResponse.json({ id: String(u._id), role, name: u.name }), String(u._id), sessionId);
     } catch (e) {
         console.error("[login]", e);

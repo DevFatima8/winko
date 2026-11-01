@@ -1,10 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
 import { setUserPaymentLimitAction, type ActionState } from "../../lib/actions";
+import { useAdminActionState } from "@/lib/adminLiveUpdates";
 
 export function PaymentLockForm({ userId, limit }: { userId: string; limit: number }) {
-    const [state, action, pending] = useActionState<ActionState, FormData>(setUserPaymentLimitAction, undefined);
+    const [state, action, pending] = useAdminActionState<ActionState, FormData>(setUserPaymentLimitAction, undefined);
     return (
         <form action={action} className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/5 p-3">
             <input type="hidden" name="id" value={userId} />

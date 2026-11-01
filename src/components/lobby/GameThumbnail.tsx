@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import Image from "next/image";
 
 export function GameThumbnail({ src, alt, className, loading }: {
   src: string;
@@ -20,9 +21,13 @@ export function GameThumbnail({ src, alt, className, loading }: {
 
   return (
     <>
-      <img ref={cachedImage} src={src} alt={alt} loading={loading} className={className}
+      {src.startsWith("/games/") ? <Image ref={cachedImage} src={src} alt={alt} loading={loading} width={1024} height={700}
+        sizes="(max-width: 639px) 45vw, (max-width: 1023px) 30vw, 220px" className={className}
         onLoad={() => setResult({ src, failed: false })}
-        onError={() => setResult({ src, failed: true })} />
+        onError={() => setResult({ src, failed: true })} /> :
+      <img ref={cachedImage} src={src} alt={alt} loading={loading} decoding="async" className={className}
+        onLoad={() => setResult({ src, failed: false })}
+        onError={() => setResult({ src, failed: true })} />}
       {(pending || failed) && (
         <span role="status" aria-label={`${alt}: ${failed ? "image unavailable" : "loading image"}`}
           className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#1b1038]/90 px-1 text-center text-[9px] text-[#d8c8ff] sm:text-xs">

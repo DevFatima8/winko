@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { isGameReturn } from "@/lib/gameNavigation";
 
 const MIN_MS = 900;
 const MAX_MS = 4000;
@@ -10,6 +11,7 @@ export function SplashScreen() {
   const [gone, setGone] = useState(false);
 
   useEffect(() => {
+    if (isGameReturn() || document.documentElement.dataset.wxGameReturn === "true") return;
     const started = Date.now();
     const pageLoaded = new Promise<void>((resolve) => {
       if (document.readyState === "complete") resolve();

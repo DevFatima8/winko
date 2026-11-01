@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState } from "react";
 import { addPaymentAccountAction, type ActionState } from "@/lib/actions";
 import { compressImage } from "@/lib/imageFile";
+import { useAdminActionState } from "@/lib/adminLiveUpdates";
 
 const field = "w-full min-w-0 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white placeholder:text-slate-600 focus:border-yellow-400";
 
@@ -10,7 +11,7 @@ export function PaymentAccountForm() {
   const [qr, setQr] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [qrError, setQrError] = useState("");
-  const [state, action, pending] = useActionState<ActionState, FormData>(async (prev, form) => {
+  const [state, action, pending] = useAdminActionState<ActionState, FormData>(async (prev, form) => {
     const result = await addPaymentAccountAction(prev, form);
     if (result?.success) setQr(null);
     return result;
@@ -46,7 +47,7 @@ export function PaymentAccountForm() {
         <option value="raast">Raast</option>
       </select>
       <input name="accountTitle" required placeholder="Account Title (e.g. Ahmed Ali)" className={field} />
-      <input name="accountNumber" required placeholder="Account number / Raast ID / IBAN" className={field} />
+      <input name="accountNumber" required placeholder="Till ID" className={field} />
       <label className="flex min-w-0 cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-600 bg-slate-950 px-3 py-2 text-sm text-slate-300 hover:border-yellow-400">
         <span className="shrink-0 rounded-lg bg-slate-800 px-2 py-1 text-xs font-bold text-yellow-300">Upload QR</span>
         <span className="truncate text-xs text-slate-500">{uploading ? "Uploading..." : qr ? "QR uploaded ✓" : "PNG / JPG"}</span>

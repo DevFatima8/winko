@@ -12,6 +12,7 @@ export async function POST(request: Request) {
     const form = await request.formData();
     const amount = Number(form.get("amount"));
     const paymentAccountId = String(form.get("paymentAccountId") ?? "").trim();
+    const requestedMethod = String(form.get("paymentMethod") ?? "").trim();
     const senderNumber = String(form.get("senderNumber") ?? "").trim() || "Not provided";
     const referenceId = String(form.get("referenceId") ?? "").trim();
     const proof = form.get("proofImage");
@@ -38,12 +39,18 @@ export async function POST(request: Request) {
       }
     }
 
-    await assignPaymentAccounts(me.id);
+    const assigned = await assignPaymentAccounts(me.id);
     const account = await PaymentAccount.findById(paymentAccountId).lean();
     if (!account?.isActive) return NextResponse.json({ error: "Invalid payment account." }, { status: 400 });
+    const paymentMethod = requestedMethod === "qr" ? "qr" : account.provider;
+    if ((requestedMethod && requestedMethod !== paymentMethod) || assigned[paymentMethod] !== paymentAccountId ||
+        (paymentMethod === "qr" && !account.qrImage)) {
+      return NextResponse.json({ error: "Payment account assignment changed. Deposit page dobara kholein." }, { status: 409 });
+    }
 
     await Transaction.create({
       userId: oid(me.id), type: "deposit", provider: account.provider, amount,
+      paymentMethod,
       paymentAccountId: account._id, assignedAccountId: account._id, accountName: account.accountTitle,
       senderNumber, referenceId: referenceId || null, proofImage, method: "manual",
     });

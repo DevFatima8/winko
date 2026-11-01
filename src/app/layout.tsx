@@ -58,6 +58,8 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   return (
     <html lang={locale} dir={ur ? "rtl" : "ltr"} className={ur ? "lang-ur" : ""} suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: 'try{var r=JSON.parse(sessionStorage.getItem("wx_game_return")||"null");if(r&&r.href===location.pathname+location.search+location.hash&&typeof r.scrollY==="number")document.documentElement.dataset.wxGameReturn="true";}catch(e){console.warn("[game return]",e);}' }} />
+        <style>{'html[data-wx-game-return="true"] .wx-splash{display:none!important}'}</style>
         <script
           dangerouslySetInnerHTML={{
             // Keep Chrome's one-use install event if it arrives before React mounts.

@@ -35,6 +35,7 @@ test("catalogue settings preserve admin OFF/hot choices and never expose saved l
   const saved = [{ slug, isActive: false, isHot: true }, { slug: "aviator", isActive: true, isHot: true }];
   const updates = [];
   const catalog = load("src\\lib\\gregmornCatalog.ts", {
+    "next/cache": { unstable_cache: callback => callback },
     "@/models": { Game: {
       find: () => ({ lean: async () => saved }),
       updateOne: async (...args) => { updates.push(args); },
@@ -43,6 +44,7 @@ test("catalogue settings preserve admin OFF/hot choices and never expose saved l
     "./gregmorn": { getGregmornCatalog: async () => [providerGame] },
     "./gregmornIdentity": identity,
     "./gregmornSelection": selection,
+    "./providerArtwork": { providerArtwork: (_, fallback) => fallback },
   });
   const games = await catalog.getProviderCatalog();
   assert.equal(games.length, 1);
@@ -160,7 +162,7 @@ test("provider launch enforces restrictions before calling provider and maps the
     "@/lib/multiplayer-store": { mysqlMultiplayerStore: { transact: async (_room, fn) => fn({}) } },
     "@/lib/gregmornWallet": { gregmornCallbackRoom: id => id, registerGregmornSession: async (_tx, session) => { sessions.push(session); } },
   });
-  const request = () => new Request("https://site.example/api/gregmorn/launch", { method: "POST", body: JSON.stringify({ gameId: game.id }) });
+  const request = (extra = {}) => new Request("https://site.example/api/gregmorn/launch", { method: "POST", body: JSON.stringify({ gameId: game.id, ...extra }) });
   try {
     assert.equal((await route.POST(request())).status, 403);
     assert.equal(launches.length, 0);
@@ -169,6 +171,16 @@ test("provider launch enforces restrictions before calling provider and maps the
     assert.equal(launches[0].balance, 100);
     assert.equal(sessions[0].userId, player.id);
     assert.equal(sessions[0].catalogGameId, "saved-id");
+    assert.equal(launches[0].exitUrl, "https://site.example/player", "legacy callers keep the configured exit URL");
+    assert.equal((await route.POST(request({ returnTo: "/games-all?cat=Hot#games" }))).status, 200);
+    assert.equal(launches[1].exitUrl, "https://site.example/games-all?cat=Hot#games");
+    assert.equal((await route.POST(request({ returnTo: "/?cat=All" }))).status, 200);
+    assert.equal(launches[2].exitUrl, "https://site.example/?cat=All");
+    const count = launches.length;
+    for (const returnTo of ["//evil.example/", "/\\evil.example/", "https://evil.example/", "/admin", "/api/auth/logout", 123, null]) {
+      assert.equal((await route.POST(request({ returnTo }))).status, 400);
+    }
+    assert.equal(launches.length, count, "invalid destinations cannot launch a provider session");
   } finally {
     if (previousExit === undefined) delete process.env.GREGMORN_EXIT_URL;
     else process.env.GREGMORN_EXIT_URL = previousExit;

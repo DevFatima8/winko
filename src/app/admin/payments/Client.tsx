@@ -4,6 +4,7 @@ import { PaymentAccountForm } from "@/components/PaymentAccountForm";
 import { deletePaymentAccountAction, togglePaymentAccountAction } from "@/lib/actions";
 import { usePage, REDIRECT } from "@/lib/useDb";
 import type { DepositProvider } from "@/models";
+import { refreshAdminData } from "@/lib/adminLiveUpdates";
 
 export default function PaymentsPageClient({ params, searchParams }: { params?: Record<string, string>; searchParams?: Record<string, string> }) {
   void params; void searchParams;
@@ -34,6 +35,7 @@ export default function PaymentsPageClient({ params, searchParams }: { params?: 
                 <div key={id} className={`rounded-2xl border border-slate-800 p-5 ${a.isActive ? "bg-slate-900" : "bg-slate-900/40 opacity-70"}`}>
                   <div className="flex items-center justify-between"><ProviderBadge provider={a.provider} /><StatusBadge status={a.isActive ? "active" : "blocked"} /></div>
                   <div className="mt-3 text-lg font-bold text-white">{a.accountTitle}</div>
+                  <div className="text-xs text-slate-400">Till ID</div>
                   <div className="font-mono text-xl tracking-wider text-yellow-400 break-all">{a.accountNumber}</div>
                   {a.qrImage && (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -42,10 +44,10 @@ export default function PaymentsPageClient({ params, searchParams }: { params?: 
                   <div className="mt-3 text-sm text-slate-400">Received: <b className="text-emerald-400">{fmt(s?.total ?? 0)}</b> · {s?.c ?? 0} deposits</div>
                   <div className="text-xs text-slate-500">Added {fmtDate(a.createdAt)}</div>
                   <div className="mt-4 flex gap-2">
-                    <form onSubmit={async (e) => { e.preventDefault(); await togglePaymentAccountAction(id, !a.isActive); }}>
+                    <form onSubmit={async (e) => { e.preventDefault(); const result = await togglePaymentAccountAction(id, !a.isActive); if (!result?.error) refreshAdminData(); }}>
                       <button className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700">{a.isActive ? "Disable" : "Enable"}</button>
                     </form>
-                    <form onSubmit={async (e) => { e.preventDefault(); await deletePaymentAccountAction(id); }}>
+                    <form onSubmit={async (e) => { e.preventDefault(); const result = await deletePaymentAccountAction(id); if (!result?.error) refreshAdminData(); }}>
                       <button className="rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/25">Remove</button>
                     </form>
                   </div>

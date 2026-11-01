@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState } from "react";
 import { saveVipLevelsAction, saveSettingsAction, sendNotificationAction, saveHelpArticleAction, type ActionState } from "../../lib/actions";
+import { useAdminActionState } from "@/lib/adminLiveUpdates";
 
 const input = "w-full rounded-xl border border-[#3a2470] bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-[#d946ef]";
 const label = "mb-1 block text-xs font-semibold text-[#b8a7e6]";
@@ -13,7 +14,7 @@ function Msg({ s }: { s: ActionState }) {
 /* ---------- VIP ---------- */
 export type VipRow = { level: number; name: string; minDeposit: number; nextLevelBonus: number; dailyWithdrawLimit: number; withdrawalsPerDay: number; perWithdrawMax: number; minWithdraw: number };
 export function VipForm({ levels }: { levels: VipRow[] }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(saveVipLevelsAction, undefined);
+  const [state, action, pending] = useAdminActionState<ActionState, FormData>(saveVipLevelsAction, undefined);
   const [rows, setRows] = useState<VipRow[]>(levels);
   return (
     <form action={action} className="space-y-4">
@@ -56,7 +57,7 @@ export type SettingsShape = {
   fakeGateway: { enabled: boolean; autoWithdraw: boolean; testOtp: string; maxPerTxn: number; dailyLimit: number; label: string };
 };
 export function SettingsForm({ s }: { s: SettingsShape }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(saveSettingsAction, undefined);
+  const [state, action, pending] = useAdminActionState<ActionState, FormData>(saveSettingsAction, undefined);
   const [is247, set247] = useState(s.support.is247);
   return (
     <form action={action} className="space-y-6">
@@ -132,7 +133,7 @@ export function SettingsForm({ s }: { s: SettingsShape }) {
 
 /* ---------- Notification ---------- */
 export function NotificationForm({ level = 2 }: { level?: number }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(sendNotificationAction, undefined);
+  const [state, action, pending] = useAdminActionState<ActionState, FormData>(sendNotificationAction, undefined);
   const [aud, setAud] = useState(level < 2 ? "team" : "all");
   return (
     <form action={action} className="space-y-3">
@@ -152,7 +153,7 @@ export function NotificationForm({ level = 2 }: { level?: number }) {
 /* ---------- Help article ---------- */
 export type HelpShape = { id?: string; title: string; category: string; order: number; isActive: boolean; steps: { text: string; image: string }[] };
 export function HelpArticleForm({ a }: { a: HelpShape }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(saveHelpArticleAction, undefined);
+  const [state, action, pending] = useAdminActionState<ActionState, FormData>(saveHelpArticleAction, undefined);
   const [steps, setSteps] = useState(a.steps.length ? a.steps : [{ text: "", image: "" }]);
   const upd = (i: number, k: "text" | "image", v: string) => setSteps(steps.map((s, j) => (j === i ? { ...s, [k]: v } : s)));
   return (

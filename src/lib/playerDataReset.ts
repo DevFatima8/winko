@@ -81,7 +81,7 @@ export async function resetPlayerData({ userId, deleteAccount = false, actorId, 
       );
     } else {
       await connection.execute(
-        `UPDATE users SET data = JSON_REMOVE(JSON_SET(data, '$.balance', 0, '$.totalDeposited', 0, '$.totalWithdrawn', 0, '$.commissionEarned', 0, '$.vipLevel', 0, '$.vipBetPoints', 0, '$.vipPointsWelcomePending', JSON_EXTRACT('false', '$'), '$.lastLoginAt', NULL, '$.lastLoginIp', NULL, '$.historicalIps', JSON_ARRAY(), '$.updatedAt', ?), '$.firstDepositBonusTransactionId'), updated_at = CURRENT_TIMESTAMP WHERE id IN (${slots})`,
+        `UPDATE users SET data = JSON_REMOVE(JSON_SET(data, '$.balance', 0, '$.totalDeposited', 0, '$.totalWithdrawn', 0, '$.commissionEarned', 0, '$.pendingReferralCommission', 0, '$.vipLevel', 0, '$.vipBetPoints', 0, '$.vipPointsWelcomePending', JSON_EXTRACT('false', '$'), '$.lastLoginAt', NULL, '$.lastLoginIp', NULL, '$.historicalIps', JSON_ARRAY(), '$.updatedAt', ?), '$.firstDepositBonusTransactionId'), updated_at = CURRENT_TIMESTAMP WHERE id IN (${slots})`,
         [new Date().toISOString(), ...ids],
       );
     }

@@ -127,7 +127,8 @@ test("Approve/reject refreshes payment data without reloading and displays proce
   const flatten = (node) => !node || typeof node !== "object" ? [] : Array.isArray(node) ? node.flatMap(flatten) : [node, ...flatten(node.props?.children)];
   const originalWindow = globalThis.window, originalFetch = globalThis.fetch;
   const events = [], decisions = [], stateUpdates = [];
-  let result = { success: "Processed" }, loader;
+  let result = { success: "Processed" };
+  const rows = [{ _id: "fixture-payment", type: "deposit", status: "pending", createdAt: new Date().toISOString(), amount: 25, provider: "jazzcash", userId: { name: "Fixture", phone: "fixture" } }];
   globalThis.window = { dispatchEvent: (event) => events.push(event.type) };
   globalThis.fetch = async () => Response.json({ rows: [{ _id: "fixture-payment", type: "deposit", status: "pending", createdAt: new Date().toISOString(), amount: 25, provider: "jazzcash", userId: { name: "Fixture", phone: "fixture" } }] });
   try {
@@ -137,11 +138,14 @@ test("Approve/reject refreshes payment data without reloading and displays proce
       "next/link": { default: () => {} },
       "@/components/Shell": { Card: () => {}, ProviderBadge: () => {}, StatusBadge: () => {}, fmt: String, fmtDate: String },
       "@/lib/clientActions": { processTransactionAction: async (id, decision) => { decisions.push({ id, decision }); return result; } },
-      "@/lib/useDb": { usePage: (fn) => { loader = fn; } },
+      "@/lib/useDb": { useDb: () => ({ data: { status: "", rows }, error: null, reload: () => {} }) },
+      "next/navigation": { useRouter: () => ({ push: () => {} }) },
+      "react-dom": { createPortal: (node) => node },
       "@/lib/imageFile": {},
+      "@/lib/adminLiveUpdates": { refreshAdminData: () => globalThis.window.dispatchEvent(new Event("wx:admin-refresh")) },
     });
-    loaded.default({ type: "deposit" });
-    const page = await loader();
+    const view = loaded.default({ type: "deposit" });
+    const page = view.type(view.props);
     const controls = flatten(page).find((node) => node.type?.name === "PendingActions");
     assert.ok(controls);
     const nodes = flatten(controls.type(controls.props));
@@ -460,6 +464,7 @@ function formFixture(filename, imports) {
       useState: (initial) => [initial, () => {}],
       useActionState: (action, initial) => { submit = (form) => action(initial, form); return [initial, () => {}, false]; },
     },
+    "@/lib/adminLiveUpdates": { refreshAdminData: () => globalThis.window.dispatchEvent(new Event("wx:admin-refresh")) },
     ...imports,
   });
   return { component, submit: (form = new FormData()) => submit(form) };

@@ -19,7 +19,8 @@ function load(path, imports = {}) {
 const crypto = { createHash, createHmac, timingSafeEqual };
 const api = load("src\\lib\\gregmorn.ts", { "node:crypto": crypto });
 const identity = load("src\\lib\\gregmornIdentity.ts", { "node:crypto": crypto });
-const wallet = load("src\\lib\\gregmornWallet.ts", { "node:crypto": crypto, "./gregmornIdentity": identity });
+const winnings = load("src\\lib\\providerWinnings.ts");
+const wallet = load("src\\lib\\gregmornWallet.ts", { "node:crypto": crypto, "./gregmornIdentity": identity, "./providerWinnings": winnings });
 const envNames = [
   "GREGMORN_OFFICE_API_URL", "GREGMORN_CLIENT_API_URL", "GREGMORN_API_LOGIN",
   "GREGMORN_API_PASSWORD", "GREGMORN_HMAC_SECRET", "GREGMORN_CURRENCY",
@@ -162,6 +163,11 @@ function transaction(initial = {}) {
       if (rows.has(key)) throw new Error("duplicate key");
       rows.set(key, structuredClone(value));
     },
+    async page(table, filters, after = "") {
+      return [...rows.entries()].filter(([key, row]) => key.startsWith(`${table}:`) && row._id > after &&
+        Object.entries(filters).every(([field, value]) => row[field] === value))
+        .map(([, row]) => clone(row)).sort((a, b) => a._id.localeCompare(b._id)).slice(0, 500);
+    },
   };
 }
 
@@ -194,12 +200,16 @@ test("seamless callbacks map sessions and apply exact, replay-safe wallet mutati
   assert.equal([...tx.rows.keys()].filter(key => key.startsWith("gameresults:")).length, 1, "replays do not duplicate history");
 
   const payout = await wallet.processGregmornWalletCallback(tx, write("win-1", 0, 10, session.gameId));
-  assert.equal(payout.balance, 485);
+  assert.equal(payout.balance, 475);
   const refunded = await wallet.processGregmornWalletCallback(tx, rollback("bet-1", 25));
-  assert.equal(refunded.balance, 510);
+  assert.equal(refunded.balance, 500);
   const refundReplay = await wallet.processGregmornWalletCallback(tx, rollback("bet-1", 25));
-  assert.equal(refundReplay.balance, 510);
-  assert.equal(tx.rows.get(`users:${user._id}`).balance, 510);
+  assert.equal(refundReplay.balance, 500);
+  assert.equal(tx.rows.get(`users:${user._id}`).balance, 500);
+  const holds = [...tx.rows.entries()].filter(([key]) => key.startsWith("winholds:")).map(([, value]) => value);
+  assert.equal(holds.length, 1);
+  assert.equal(holds[0].amount, 10);
+  assert.equal(holds[0].claimed, false);
   const results = [...tx.rows.entries()].filter(([key]) => key.startsWith("gameresults:")).map(([, value]) => value);
   assert.equal(results.length, 2);
   assert.equal(results.reduce((sum, result) => sum + result.betAmount, 0), 0, "rolled-back bets do not inflate wagering reports");
@@ -216,12 +226,12 @@ test("provider restrictions stop new bets but allow payouts, replays and refunds
   tx.rows.get(`games:${catalogGameId}`).isActive = false;
   await assert.rejects(wallet.processGregmornWalletCallback(tx, write("disabled", 10, 0)), /restricted/);
   assert.equal((await wallet.processGregmornWalletCallback(tx, write("accepted", 20, 0))).balance, 480);
-  assert.equal((await wallet.processGregmornWalletCallback(tx, write("payout", 0, 5))).balance, 485);
-  assert.equal((await wallet.processGregmornWalletCallback(tx, rollback("accepted", 20))).balance, 505);
+  assert.equal((await wallet.processGregmornWalletCallback(tx, write("payout", 0, 5))).balance, 480);
+  assert.equal((await wallet.processGregmornWalletCallback(tx, rollback("accepted", 20))).balance, 500);
   tx.rows.get(`games:${catalogGameId}`).isActive = true;
   tx.rows.get(`users:${user._id}`).blockedGames = [slug];
   await assert.rejects(wallet.processGregmornWalletCallback(tx, write("player-blocked", 10, 0)), /restricted/);
-  assert.equal(tx.rows.get(`users:${user._id}`).balance, 505);
+  assert.equal(tx.rows.get(`users:${user._id}`).balance, 500);
 });
 
 test("seamless callbacks reject forged sessions, insufficient funds, malformed amounts and mismatched rollback", async () => {
@@ -249,11 +259,133 @@ test("panel balances with float noise or sub-paisa remainders stay usable in eve
   const remainder = transaction({ [`users:${user._id}`]: { ...user, balance: 12.345 } });
   await wallet.registerGregmornSession(remainder, session);
   assert.equal((await wallet.processGregmornWalletCallback(remainder, callback("getBalance"))).balance, 12.34);
-  assert.equal((await wallet.processGregmornWalletCallback(remainder, write("rem-bet", 2, 1))).balance, 11.34);
-  assert.equal(remainder.rows.get(`users:${user._id}`).balance, 11.345, "sub-paisa remainder is kept on the panel balance");
+  assert.equal((await wallet.processGregmornWalletCallback(remainder, write("rem-bet", 2, 1))).balance, 10.34);
+  assert.equal(remainder.rows.get(`users:${user._id}`).balance, 10.345, "sub-paisa remainder is kept on the panel balance");
   const rejected = await wallet.processGregmornWalletCallback(remainder, write("rem-too-large", 12, 0)).catch(error => error);
   assert.match(rejected.message, /insufficient funds/);
-  assert.equal(rejected.balance, 11.34, "failed callbacks report the real panel balance");
+  assert.equal(rejected.balance, 10.34, "failed callbacks report the real panel balance");
+});
+
+test("full provider payouts stay locked until exactly next PKT midnight; claims exclude today's wins and cannot replay", async () => {
+  const tx = transaction({ [`users:${user._id}`]: { ...user, balance: 1000, commissionEarned: 123 } });
+  let now = Date.parse("2026-11-01T18:59:59.999Z");
+  tx.now = async () => now;
+  await wallet.registerGregmornSession(tx, session);
+  const body = write("first-win", 100, 150);
+  assert.equal((await wallet.processGregmornWalletCallback(tx, body)).balance, 900);
+  assert.equal((await wallet.processGregmornWalletCallback(tx, body)).balance, 900);
+  let holds = [...tx.rows.entries()].filter(([key]) => key.startsWith("winholds:")).map(([, value]) => value);
+  assert.equal(holds.length, 1);
+  assert.equal(new Date(holds[0].unlockAt).toISOString(), "2026-11-01T19:00:00.000Z");
+  assert.deepEqual(winnings.summarizeWinHolds(holds, now), { locked: 150, claimable: 0 });
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 0 });
+  now++;
+  assert.deepEqual(winnings.summarizeWinHolds(holds, now), { locked: 0, claimable: 150 });
+  await wallet.processGregmornWalletCallback(tx, write("today-win", 50, 70));
+  holds = [...tx.rows.entries()].filter(([key]) => key.startsWith("winholds:")).map(([, value]) => value);
+  assert.deepEqual(winnings.summarizeWinHolds(holds, now), { locked: 70, claimable: 150 });
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 150 });
+  assert.equal(tx.rows.get(`users:${user._id}`).balance, 1000);
+  assert.equal(tx.rows.get(`users:${user._id}`).commissionEarned, 123);
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 0 });
+  assert.equal((await wallet.processGregmornWalletCallback(tx, body)).balance, 1000);
+  now = Date.parse("2026-11-10T10:00:00Z");
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 70 });
+  assert.equal(tx.rows.get(`users:${user._id}`).balance, 1070);
+});
+
+test("game credit excludes a Rs15 payout before and after midnight until the player claims it", async () => {
+  const tx = transaction({ [`users:${user._id}`]: { ...user, balance: 25 } });
+  let now = Date.parse("2026-11-01T14:55:29.787Z");
+  tx.now = async () => now;
+  await wallet.registerGregmornSession(tx, session);
+  assert.equal((await wallet.processGregmornWalletCallback(tx, write("stake-20", 20, 0))).balance, 5);
+  const payout = write("payout-15", 0, 15);
+  assert.equal((await wallet.processGregmornWalletCallback(tx, payout)).balance, 5);
+  const holds = [...tx.rows.entries()].filter(([key]) => key.startsWith("winholds:")).map(([, row]) => row);
+  assert.deepEqual(winnings.summarizeWinHolds(holds, now), { locked: 15, claimable: 0 });
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 0 });
+  assert.deepEqual(await wallet.processGregmornWalletCallback(tx, callback("getBalance")), { balance: 5, currency: "PKR" });
+
+  now = Date.parse("2026-11-01T19:00:00.000Z");
+  assert.deepEqual(winnings.summarizeWinHolds(holds, now), { locked: 0, claimable: 15 });
+  assert.equal((await wallet.processGregmornWalletCallback(tx, callback("getBalance"))).balance, 5);
+  assert.equal((await wallet.processGregmornWalletCallback(tx, payout)).balance, 5);
+  await assert.rejects(wallet.processGregmornWalletCallback(tx, write("unclaimed-stake", 6, 0)), error => {
+    assert.match(error.message, /insufficient funds/);
+    assert.equal(error.balance, 5);
+    return true;
+  });
+  await wallet.registerGregmornSession(tx, { ...session, sessionId: "reopened-session" });
+  const reopenedBalance = callback("getBalance", { sessionid: "reopened-session" });
+  assert.equal((await wallet.processGregmornWalletCallback(tx, reopenedBalance)).balance, 5);
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 15 });
+  assert.equal((await wallet.processGregmornWalletCallback(tx, callback("getBalance"))).balance, 20);
+  assert.equal((await wallet.processGregmornWalletCallback(tx, reopenedBalance)).balance, 20);
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 0 });
+  assert.equal((await wallet.processGregmornWalletCallback(tx, write("claimed-stake", 6, 0))).balance, 14);
+});
+
+test("legacy holds remain immediately eligible and claims include more than 500 winning records", async () => {
+  const now = Date.parse("2026-11-03T12:00:00Z");
+  const tx = transaction({ [`users:${user._id}`]: user });
+  tx.now = async () => now;
+  for (let i = 0; i < 1201; i++) {
+    const id = `hold-${String(i).padStart(5, "0")}`;
+    await tx.insert("winholds", id, { _id: id, userId: user._id, amount: 0.01, provider: "gregmorn", unlockAt: new Date(now - 1), claimed: false });
+  }
+  await tx.insert("winholds", "legacy", { _id: "legacy", userId: user._id, amount: 2, unlockAt: new Date(now + 999999), claimed: false });
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 14.01 });
+  assert.equal(tx.rows.get(`users:${user._id}`).balance, 514.01);
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 0 });
+});
+
+test("claims reject invalid wallets without consuming winnings, and transaction failures roll back all claim writes", async () => {
+  const hold = { _id: "eligible", userId: user._id, amount: 150, provider: "gregmorn", unlockAt: new Date(0), claimed: false };
+  const rows = { [`users:${user._id}`]: { ...user, balance: -5 }, "winholds:eligible": hold };
+  const invalid = transaction(rows);
+  await assert.rejects(winnings.claimWinningsTransaction(invalid, user._id), /Wallet balance/);
+  assert.equal(invalid.rows.get("winholds:eligible").claimed, false);
+  const committed = transaction({ ...rows, [`users:${user._id}`]: user });
+  const staged = transaction(Object.fromEntries(committed.rows));
+  const put = staged.put;
+  staged.put = async (table, id, value) => {
+    if (table === "users") throw new Error("Injected wallet write failure");
+    await put(table, id, value);
+  };
+  await assert.rejects(winnings.claimWinningsTransaction(staged, user._id), /Injected wallet/);
+  assert.equal(committed.rows.get("winholds:eligible").claimed, false, "failed transaction is discarded");
+  assert.equal(committed.rows.get(`users:${user._id}`).balance, user.balance);
+  assert.deepEqual(await winnings.claimWinningsTransaction(committed, user._id), { claimed: 150 });
+  assert.equal(committed.rows.get(`users:${user._id}`).balance, 650);
+});
+
+test("referral commission claims immediately without unlocking today's winnings or resetting lifetime commission", async () => {
+  const tx = transaction({ [`users:${user._id}`]: { ...user, balance: 900, commissionEarned: 120, pendingReferralCommission: 30 } });
+  const now = Date.parse("2026-11-01T12:00:00Z");
+  tx.now = async () => now;
+  await tx.insert("winholds", "today", { _id: "today", userId: user._id, amount: 150, provider: "gregmorn", unlockAt: winnings.nextPakistanMidnight(now), claimed: false });
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 30 });
+  assert.equal(tx.rows.get(`users:${user._id}`).balance, 930);
+  assert.equal(tx.rows.get(`users:${user._id}`).commissionEarned, 120);
+  assert.equal(tx.rows.get(`users:${user._id}`).pendingReferralCommission, 0);
+  assert.equal(tx.rows.get("winholds:today").claimed, false);
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 0 });
+  await tx.put("users", user._id, { ...tx.rows.get(`users:${user._id}`), pendingReferralCommission: 15 });
+  tx.now = async () => now + 86400000;
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 165 });
+  assert.equal(tx.rows.get(`users:${user._id}`).balance, 1095);
+});
+
+test("old credited commission is not claimed again and malformed pending commission cannot credit a wallet", async () => {
+  const old = transaction({ [`users:${user._id}`]: { ...user, commissionEarned: 10000 } });
+  assert.deepEqual(await winnings.claimWinningsTransaction(old, user._id), { claimed: 0 });
+  assert.equal(old.rows.get(`users:${user._id}`).balance, user.balance);
+  for (const amount of [-1, NaN, Infinity, "30"]) {
+    const tx = transaction({ [`users:${user._id}`]: { ...user, pendingReferralCommission: amount } });
+    await assert.rejects(winnings.claimWinningsTransaction(tx, user._id), /Invalid pending referral commission/);
+    assert.equal(tx.rows.get(`users:${user._id}`).balance, user.balance);
+  }
 });
 
 test.after(() => {

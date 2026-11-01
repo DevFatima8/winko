@@ -44,11 +44,19 @@ export async function changePasswordAction(_: ActionState, form: FormData): Prom
 // ---------- CLIENT WALLET ----------
 export async function claimWinHoldsAction(_: ActionState, _form: FormData): Promise<ActionState> {
   const me = await getServerSessionUser();
-  if (!me) return { error: "Login required." };
+  if (!me || me.role !== "client" || !me.isActive) return { error: "Active player login required." };
   const { claimWinHolds } = await import("./winHold");
-  const { claimed } = await claimWinHolds(me.id);
+  let claimed: number;
+  try {
+    ({ claimed } = await claimWinHolds(me.id));
+  } catch (error) {
+    console.error("[Claim winnings]", error);
+    return { error: "Winnings ya referral commission claim nahi ho sakin. Dobara try karein." };
+  }
   if (claimed <= 0) return { error: "Abhi koi claimable amount nahi hai." };
   revalidatePath("/player/wallet");
+  revalidatePath("/player/profile");
+  revalidatePath("/player/team");
   return { success: `Rs. ${claimed.toLocaleString()} wallet mein claim ho gaya.` };
 }
 
@@ -167,7 +175,7 @@ export async function addPaymentAccountAction(_: ActionState, form: FormData): P
   const accountTitle = str(form, "accountTitle");
   const accountNumber = str(form, "accountNumber").replace(/\s|-/g, "");
   if (provider !== "jazzcash" && provider !== "easypaisa" && provider !== "raast") return { error: "Provider select karein." };
-  if (!accountTitle || !accountNumber) return { error: "Account holder name aur number zaroori hain." };
+  if (!accountTitle || !accountNumber) return { error: "Account holder name aur Till ID zaroori hain." };
   // sub-admin accounts belong to them; super-admin accounts go into the shared pool (ownerId null)
   const ownerId = me.level >= 2 ? null : me.id;
   const qrImage = str(form, "qrImage");

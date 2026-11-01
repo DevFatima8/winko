@@ -8,6 +8,7 @@ import { useMemo, useState } from "react";
 import { setUserGameBlockAction } from "@/lib/actions";
 import { usePage, NOT_FOUND } from "@/lib/useDb";
 import { GameGridSkeleton } from "@/components/lobby/GameGridSkeleton";
+import { refreshAdminData } from "@/lib/adminLiveUpdates";
 
 type RestrictionData = {
   user: { id: string; name: string; username: string | null; phone: string };
@@ -66,6 +67,7 @@ function RestrictionsManager({ data }: { data: RestrictionData }) {
       });
       setNotice(`${selected.name} ${selectedIsRestricted ? "access restored for" : "restricted for"} ${data.user.name}.`);
       setSelected(null);
+      refreshAdminData();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Game restriction update nahi ho saki. Dobara try karein.");
     } finally {

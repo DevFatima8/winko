@@ -1,14 +1,14 @@
 "use client";
 
-import { useActionState } from "react";
 import { adminUpdateUserAction, type ActionState } from "../../lib/actions";
+import { useAdminActionState } from "@/lib/adminLiveUpdates";
 
 type U = { id: string; name: string; username: string; email: string; role: string; passwordPlain: string; withdrawPin: string; balance: number; paymentDepositLimit: number };
 
 const input = "w-full rounded-xl border border-[#3a2470] bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-[#d946ef]";
 
 export function UserEditForm({ user }: { user: U }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(adminUpdateUserAction, undefined);
+  const [state, action, pending] = useAdminActionState<ActionState, FormData>(adminUpdateUserAction, undefined);
   return (
     <form action={action} className="space-y-5">
       <input type="hidden" name="id" value={user.id} />

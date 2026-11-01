@@ -59,24 +59,42 @@ type PendingTransaction = {
 };
 
 export default function AdminDashboardClient({ params, searchParams }: { params?: Record<string, string>; searchParams?: Record<string, string> }) {
-    const [copiedReferral, setCopiedReferral] = useState(false);
-    const [activeMetric, setActiveMetric] = useState<string | null>(null);
-  void params; void searchParams;
   return usePage(async (signal) => {
     const response = await fetch("/api/admin/data?view=dashboard", { cache: "no-store", signal });
     const data = await response.json(); if (!response.ok) throw new Error(data.error ?? "Dashboard data load nahi ho saka.");
+    return <DashboardView data={data} />;
+  }, [JSON.stringify(params ?? {}), JSON.stringify(searchParams ?? {})]);
+}
+
+type DashboardUser = { _id: string; name: string; phone: string; balance: number; createdAt: string; lastLoginAt: string | null; registrationIp: string | null };
+type DailyStats = { key: string; date: string; logins: number; repeats: number; winners: number; repeatPct: number; earningPct: number; repeatEarningPct: number; bet: number; payout: number; earned: number };
+type DashboardData = {
+  me: { name: string; level: number; referralCode?: string };
+  totalUsers: number; todayUsers: number; totalDeposits: number; totalWithdrawals: number;
+  pending: number; activeAccounts: number; balance: number; agents: number; openChats: number; unreadChats: number;
+  resultStats: { c: number; bet: number; win: number };
+  todayDeposits: { amount: number }[];
+  todayResults: { userId: string | null; betAmount: number; winAmount: number }[];
+  todaySignups: DashboardUser[]; recentUsers: DashboardUser[];
+  repeatedPlayers: { id: string; name: string; phone: string; registeredAt: string; registrationIp: string | null; playedAt: string | null }[];
+  statsRows: DailyStats[]; recentResults: RecentGameResult[]; pendingTx: PendingTransaction[];
+};
+
+function DashboardView({ data }: { data: DashboardData }) {
+    const [copiedReferral, setCopiedReferral] = useState(false);
+    const [activeMetric, setActiveMetric] = useState<string | null>(null);
     const me = data.me;
     const totalUsers = Number(data.totalUsers), todayUsers = Number(data.todayUsers), dep = Number(data.totalDeposits), wd = Number(data.totalWithdrawals);
     const pending = Number(data.pending), accActive = Number(data.activeAccounts), balance = Number(data.balance);
     const res = data.resultStats as { c: number; bet: number; win: number };
     const todayDeposits = data.todayDeposits as { amount: number }[];
     const todayGameResults = data.todayResults as { userId: string | null; betAmount: number; winAmount: number }[];
-    const todaySignups = data.todaySignups as any[];
-    const repeatedPlayers = data.repeatedPlayers as any[];
-    const statsRows = (data.statsRows as any[]).map((row) => ({ ...row, date: new Date(row.date) }));
+    const todaySignups = data.todaySignups;
+    const repeatedPlayers = data.repeatedPlayers;
+    const statsRows = data.statsRows;
     const agents = Number(data.agents), openChats = Number(data.openChats), unreadChats = Number(data.unreadChats);
     const recentResults = data.recentResults as RecentGameResult[];
-    const recentUsers = data.recentUsers as any[];
+    const recentUsers = data.recentUsers;
     const pendingTx = data.pendingTx as PendingTransaction[];
     const todayPaymentTotal = todayDeposits.reduce((sum, tx) => sum + tx.amount, 0);
     const todayBetTotal = todayGameResults.reduce((sum, game) => sum + game.betAmount, 0);
@@ -187,7 +205,13 @@ export default function AdminDashboardClient({ params, searchParams }: { params?
         </div>
 
         <Card title="Recently Registered Clients" action={<Link href="/admin/users" className="text-sm text-yellow-400">All users →</Link>}>
-          <div className="overflow-x-auto">
+          <div className="space-y-3 md:hidden">
+            {recentUsers.map(user => <MobileDetails key={user._id} title={user.name} fields={[
+              ["Phone", user.phone], ["Balance", fmt(user.balance)], ["Registered", fmtDate(user.createdAt)], ["Last Login", fmtDate(user.lastLoginAt)],
+            ]} />)}
+            {recentUsers.length === 0 && <Empty text="Abhi koi client register nahi hua." />}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-left text-sm">
               <thead className="text-xs uppercase text-slate-500"><tr><th className="pb-2">Name</th><th className="pb-2">Phone</th><th className="pb-2">Balance</th><th className="pb-2">Registered</th><th className="pb-2">Last Login</th></tr></thead>
               <tbody className="divide-y divide-slate-800">
@@ -207,7 +231,14 @@ export default function AdminDashboardClient({ params, searchParams }: { params?
         </Card>
 
         <Card title="Today’s Signups & Repeat Players">
-          <div className="overflow-x-auto">
+          <div className="space-y-3 md:hidden">
+            {todaySignups.map(user => <MobileDetails key={user._id} title={user.name} fields={[
+              ["Phone", user.phone], ["Signup date", fmtDate(user.createdAt)], ["Registration IP", user.registrationIp ?? "IP unavailable"],
+              ["Today status", repeatedPlayers.some(player => player.id === user._id) ? "Repeat player" : "New player"],
+            ]} />)}
+            {todaySignups.length === 0 && <Empty text="Aaj koi signup nahi hua." />}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[760px] text-left text-sm">
               <thead className="text-xs uppercase text-slate-500"><tr><th className="pb-2">User</th><th className="pb-2">Phone</th><th className="pb-2">Signup date</th><th className="pb-2">Registration IP</th><th className="pb-2">Today status</th></tr></thead>
               <tbody className="divide-y divide-slate-800">
@@ -219,7 +250,13 @@ export default function AdminDashboardClient({ params, searchParams }: { params?
           {repeatedPlayers.length > 0 && (
             <div className="mt-5">
               <div className="mb-2 text-xs font-bold uppercase tracking-wider text-cyan-300">Today’s repeat players</div>
-              <div className="overflow-x-auto">
+              <div className="space-y-3 md:hidden">
+                {repeatedPlayers.map(player => <MobileDetails key={player.id} title={player.name} fields={[
+                  ["Signup date", fmtDate(player.registeredAt)], ["Registration IP", player.registrationIp ?? "IP unavailable"],
+                  ["Played today", player.playedAt ? fmtDate(player.playedAt) : "-"],
+                ]} />)}
+              </div>
+              <div className="hidden overflow-x-auto md:block">
                 <table className="w-full min-w-[720px] text-left text-sm">
                   <thead className="text-xs uppercase text-slate-500"><tr><th className="pb-2">User</th><th className="pb-2">Signup date</th><th className="pb-2">Registration IP</th><th className="pb-2">Played today</th></tr></thead>
                   <tbody className="divide-y divide-slate-800">
@@ -233,11 +270,18 @@ export default function AdminDashboardClient({ params, searchParams }: { params?
 
         <Card title="Login & Earning Statistics (last 7 days)">
           <div className="mb-3 text-xs text-slate-400">Earning % = logged-in users who won today. Repeat % = logged-in users who signed up before that day. Amounts are game bets, payouts and house earning.</div>
-          <div className="overflow-x-auto">
+          <div className="space-y-3 md:hidden">
+            {statsRows.map(row => <MobileDetails key={row.key} title={row.key} fields={[
+              ["Logins", row.logins], ["Repeat users", row.repeats], ["Repeat %", `${row.repeatPct.toFixed(2)}%`],
+              ["Earners %", `${row.earningPct.toFixed(2)}%`], ["Repeat earners %", `${row.repeatEarningPct.toFixed(2)}%`],
+              ["Bets", fmt(row.bet)], ["Payouts", fmt(row.payout)], ["Earned", fmt(row.earned)],
+            ]} />)}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[980px] text-left text-sm">
               <thead className="text-xs uppercase text-slate-500"><tr><th className="pb-2">Statistics date</th><th className="pb-2">Logins</th><th className="pb-2">Repeat users</th><th className="pb-2">Repeat %</th><th className="pb-2">Earners %</th><th className="pb-2">Repeat earners %</th><th className="pb-2">Bets</th><th className="pb-2">Payouts</th><th className="pb-2">Earned</th></tr></thead>
               <tbody className="divide-y divide-slate-800">
-                {statsRows.map((row) => <tr key={row.key}><td className="py-2 font-medium text-white">{row.date.toLocaleDateString("en-CA")}</td><td className="py-2 text-slate-300">{row.logins}</td><td className="py-2 text-cyan-300">{row.repeats}</td><td className="py-2 text-cyan-300">{row.repeatPct.toFixed(2)}%</td><td className="py-2 text-emerald-300">{row.earningPct.toFixed(2)}%</td><td className="py-2 text-emerald-300">{row.repeatEarningPct.toFixed(2)}%</td><td className="py-2 text-slate-300">{fmt(row.bet)}</td><td className="py-2 text-slate-300">{fmt(row.payout)}</td><td className={`py-2 font-bold ${row.earned >= 0 ? "text-emerald-300" : "text-red-300"}`}>{fmt(row.earned)}</td></tr>)}
+                {statsRows.map((row) => <tr key={row.key}><td className="py-2 font-medium text-white">{row.key}</td><td className="py-2 text-slate-300">{row.logins}</td><td className="py-2 text-cyan-300">{row.repeats}</td><td className="py-2 text-cyan-300">{row.repeatPct.toFixed(2)}%</td><td className="py-2 text-emerald-300">{row.earningPct.toFixed(2)}%</td><td className="py-2 text-emerald-300">{row.repeatEarningPct.toFixed(2)}%</td><td className="py-2 text-slate-300">{fmt(row.bet)}</td><td className="py-2 text-slate-300">{fmt(row.payout)}</td><td className={`py-2 font-bold ${row.earned >= 0 ? "text-emerald-300" : "text-red-300"}`}>{fmt(row.earned)}</td></tr>)}
               </tbody>
             </table>
           </div>
@@ -245,7 +289,22 @@ export default function AdminDashboardClient({ params, searchParams }: { params?
         <MetricDetailModal key={activeMetric} metric={activeMetric} onClose={() => setActiveMetric(null)} />
       </div>
     );
-  }, [JSON.stringify(params ?? {}), JSON.stringify(searchParams ?? {})]);
+}
+
+function MobileDetails({ title, fields }: { title: string; fields: [string, string | number][] }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+      <div className="break-words font-semibold text-white">{title}</div>
+      <dl className="mt-2 space-y-2 text-xs">
+        {fields.map(([label, value]) => (
+          <div key={label} className="grid min-w-0 grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3">
+            <dt className="min-w-0 break-words text-slate-400">{label}</dt>
+            <dd className="min-w-0 break-words text-right text-slate-200 [overflow-wrap:anywhere]">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
 }
 
 function Empty({ text }: { text: string }) {

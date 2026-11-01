@@ -11,6 +11,7 @@ function harness() {
   const jsx = (type, props) => ({ type, props });
   const loaded = { exports: {} };
   new Function("require", "module", "exports", code)(name => {
+    if (name === "next/image") return { default: "optimized-image" };
     if (name === "react") return {
       useState: () => [result, value => { result = typeof value === "function" ? value(result) : value; }],
       useCallback: fn => fn,
@@ -39,6 +40,15 @@ test("cached images immediately clear their loader", () => {
   const render = harness();
   render()[0].props.ref({ complete: true, naturalWidth: 500 });
   assert.equal(render()[1], false);
+});
+
+test("matching public artwork uses responsive optimized images instead of full-size remote downloads", () => {
+  const image = harness()("/games/01_Aviator_1024x700.jpg")[0];
+  assert.equal(image.type, "optimized-image");
+  assert.equal(image.props.width, 1024);
+  assert.equal(image.props.height, 700);
+  assert.ok(image.props.sizes.includes("45vw"));
+  assert.equal(image.props.loading, "lazy");
 });
 
 test("failed images show an explicit message instead of an endless loader", () => {

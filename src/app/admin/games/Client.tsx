@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toggleGameAction, toggleGameHotAction } from "@/lib/actions";
 import { usePage } from "@/lib/useDb";
 import { GameGridSkeleton } from "@/components/lobby/GameGridSkeleton";
+import { refreshAdminData } from "@/lib/adminLiveUpdates";
 
 type ProviderGame = { _id: string; name: string; slug: string; category: string; isActive: boolean; isHot?: boolean; icon: string; imageUrl: string; stats: { c: number; bet: number; win: number } };
 type GamesData = { games: ProviderGame[]; blocked: { _id: string; c: number }[]; level: number };
@@ -34,7 +35,7 @@ function ProviderGamesManager({ data }: { data: GamesData }) {
       try {
         if (hot) await toggleGameHotAction(game.slug, !game.isHot);
         else await toggleGameAction(game.slug, !game.isActive);
-        window.dispatchEvent(new CustomEvent("wx:admin-refresh"));
+        refreshAdminData();
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "Provider game settings could not be saved.");
       } finally {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { refreshAdminData } from "@/lib/adminLiveUpdates";
 
 const input = "w-full rounded-lg border border-[#3a2470] bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-[#d946ef]";
 
@@ -33,6 +34,7 @@ function AnnouncementEditor() {
       if (!response.ok) throw new Error(data.error ?? "Announcement save nahi hui.");
       setItems(list);
       setDraft("");
+      refreshAdminData();
       setMessage("Announcement save ho gayi. Open pages par chand seconds mein update hogi.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Announcement save nahi hui.");

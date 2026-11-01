@@ -4,6 +4,7 @@ import { Card, StatusBadge, fmtDate } from "@/components/Shell";
 import { CreateStaffForm, EditStaffForm } from "@/components/admin/StaffForms";
 import { deleteStaffAction, toggleStaffAction } from "@/lib/actions";
 import { usePage, NOT_FOUND, REDIRECT } from "@/lib/useDb";
+import { withAdminRefresh } from "@/lib/adminLiveUpdates";
 
 export default function StaffPageClient({ params, searchParams }: { params?: Record<string, string>; searchParams?: Record<string, string> }) {
   void params; void searchParams;
@@ -42,8 +43,8 @@ export default function StaffPageClient({ params, searchParams }: { params?: Rec
                       {u.adminNote && <div className="mt-1 text-xs text-[#6f5fa3]">Note: {u.adminNote}</div>}
                     </div>
                     <div className="flex gap-2">
-                      <form action={toggleStaffAction.bind(null, String(u._id), !u.isActive)}><button className={`rounded-lg px-3 py-1.5 text-xs font-bold ${u.isActive ? "bg-red-500/15 text-red-300" : "bg-emerald-500/15 text-emerald-300"}`}>{u.isActive ? "Block" : "Unblock"}</button></form>
-                      <form action={deleteStaffAction.bind(null, String(u._id))}><button className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white">Delete</button></form>
+                      <form action={withAdminRefresh(toggleStaffAction.bind(null, String(u._id), !u.isActive))}><button className={`rounded-lg px-3 py-1.5 text-xs font-bold ${u.isActive ? "bg-red-500/15 text-red-300" : "bg-emerald-500/15 text-emerald-300"}`}>{u.isActive ? "Block" : "Unblock"}</button></form>
+                      <form action={withAdminRefresh(deleteStaffAction.bind(null, String(u._id)))}><button className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white">Delete</button></form>
                     </div>
                   </div>
                   <div className="mt-3"><EditStaffForm id={String(u._id)} name={u.name} note={u.adminNote ?? ""} /></div>
