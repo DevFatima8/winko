@@ -3,15 +3,15 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 
-function load(path, imports) {
+function load(path, imports, browser = {}) {
   const loaded = { exports: {} };
   const code = ts.transpileModule(readFileSync(path, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
-  new Function("require", "module", "exports", code)(name => {
+  new Function("require", "module", "exports", "window", "document", code)(name => {
     assert.ok(name in imports, `Unexpected import ${name}`);
     return imports[name];
-  }, loaded, loaded.exports);
+  }, loaded, loaded.exports, browser.window, browser.document);
   return loaded.exports;
 }
 
@@ -49,10 +49,28 @@ test("warm catalog cache avoids provider latency but re-reads admin settings and
     const warm = await catalog.getProviderCatalog("PKR");
     assert.ok(performance.now() - start < 100, "warm cache must not wait for the 150ms provider");
     assert.equal(warm[0].isActive, false);
-    assert.equal(warm[0].isHot, true);
+    assert.equal(warm[0].isHot, false);
     assert.deepEqual(calls, ["PKR"]);
+    settings[0].isActive = true;
+    assert.equal((await catalog.getProviderCatalog("PKR"))[0].isHot, true);
+    settings[0].isHot = false;
+    assert.equal((await catalog.getProviderCatalog("PKR"))[0].isHot, false);
     assert.equal((await catalog.getProviderCatalog("USD"))[0].id, `${game.id}-USD`);
     assert.deepEqual(calls, ["PKR", "USD"]);
+  } finally { catalog.restore(); }
+});
+
+test("catalog retains unavailable provider entries separately from admin-hidden entries", async () => {
+  const catalog = cachedCatalog(async () => [
+    game, { ...game, id: "unavailable", isEnabled: false },
+    { ...game, id: "hidden-unavailable", isEnabled: false },
+  ], [{ slug: "slug-hidden-unavailable", isActive: false }]);
+  try {
+    const games = await catalog.getProviderCatalog();
+    assert.equal(games.length, 3);
+    assert.equal(games[1].isActive, false);
+    assert.equal(games[1].isHiddenByAdmin, false);
+    assert.equal(games[2].isHiddenByAdmin, true);
   } finally { catalog.restore(); }
 });
 
@@ -111,8 +129,33 @@ test("catalogs over 2MB retain every game and cache without Next data-cache size
   } finally { catalog.restore(); }
 });
 
+test("future API games join the cached catalogue without registration or an allowlist", async () => {
+  let games = [game];
+  const settings = [{ slug: `slug-${game.id}`, isActive: false }];
+  const catalog = cachedCatalog(async () => games, settings);
+  try {
+    await catalog.getProviderCatalog();
+    const added = { ...game, id: "future-provider:new-game", title: "Future Sports Game", provider: "New Provider", category: "sports" };
+    games = [game, added];
+    catalog.advance(60_001);
+    await catalog.getProviderCatalog();
+    await new Promise(resolve => setImmediate(resolve));
+    const updated = await catalog.getProviderCatalog();
+    assert.equal(updated.length, 2);
+    assert.equal(updated[0].isHiddenByAdmin, true, "refresh preserves existing admin OFF");
+    assert.deepEqual(updated[1], { ...added, slug: `slug-${added.id}`, isActive: true, isHiddenByAdmin: false, isHot: false });
+    assert.equal(updated[1].imageUrl, added.imageUrl, "new titles keep the provider artwork fallback");
+  } finally { catalog.restore(); }
+});
+
 function hookHarness(cache = {}) {
   let state, effect, cleanup, dependencies;
+  const timers = new Map();
+  const window = new EventTarget();
+  window.setInterval = (callback, delay) => { assert.equal(delay, 60_000); timers.set(callback, delay); return callback; };
+  window.clearInterval = callback => timers.delete(callback);
+  const document = new EventTarget();
+  document.hidden = false;
   const hook = load("src\\lib\\useProviderCatalog.ts", {
     react: {
       useState: initial => {
@@ -128,7 +171,7 @@ function hookHarness(cache = {}) {
     },
     "./gameNavigation": { isGameReturn: () => cache.returning === true },
     "./providerCatalogCache": { warmProviderCatalog: () => cache.warm ?? null, readReturnCatalog: async () => cache.saved ?? null, saveProviderCatalog: async () => {} },
-  });
+  }, { window, document });
   return {
     render: enabled => {
       const result = hook.useProviderCatalog(enabled);
@@ -136,8 +179,53 @@ function hookHarness(cache = {}) {
       return result;
     },
     unmount: () => cleanup?.(),
+    tick: () => { for (const callback of timers.keys()) callback(); },
+    focus: () => window.dispatchEvent(new Event("focus")),
+    visibility: hidden => { document.hidden = hidden; document.dispatchEvent(new Event("visibilitychange")); },
+    timerCount: () => timers.size,
   };
 }
+
+test("mounted player panels receive future games on visible refresh without clearing the current catalogue", async () => {
+  const previous = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = () => new Promise(resolve => requests.push(resolve));
+  const hook = hookHarness();
+  try {
+    hook.render(true);
+    requests[0](Response.json({ games: [game] }));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(hook.timerCount(), 1);
+    hook.tick();
+    hook.focus();
+    assert.equal(requests.length, 2, "focus must not duplicate an in-flight periodic refresh");
+    assert.deepEqual(hook.render(true), { games: [game], loading: false, error: "" });
+    const added = { ...game, id: "future-game" };
+    requests[1](Response.json({ games: [game, added] }));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(hook.render(true).games.map(game => game.id), [game.id, added.id]);
+    hook.visibility(true);
+    hook.tick();
+    hook.focus();
+    assert.equal(requests.length, 2, "hidden tabs do not fetch");
+    hook.visibility(false);
+    assert.equal(requests.length, 3, "returning to the tab refreshes");
+    requests[2](Response.json({ error: "Refresh failed" }, { status: 503 }));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(hook.render(true).games.length, 2);
+    assert.equal(hook.render(true).error, "Refresh failed");
+    hook.focus();
+    requests[3](Response.json({ games: [added] }));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(hook.render(true), { games: [added], loading: false, error: "" });
+    hook.unmount();
+    assert.equal(hook.timerCount(), 0);
+    hook.tick();
+    hook.focus();
+    hook.visibility(false);
+    assert.equal(requests.length, 4, "unmount removes timers and listeners");
+  } finally { hook.unmount(); globalThis.fetch = previous; }
+});
 
 test("returning panels display cached games before the network completes and fresh restrictions replace the cache", async () => {
   const previous = globalThis.fetch;

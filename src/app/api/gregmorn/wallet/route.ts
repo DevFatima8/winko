@@ -37,13 +37,19 @@ export async function POST(request: Request) {
   if (!body || typeof body !== "object" || !("cmd" in body) ||
       !["getBalance", "writeBet", "rollback"].includes(String(body.cmd)) ||
       !("login" in body) || typeof body.login !== "string" ||
-      !("sessionid" in body) || typeof body.sessionid !== "string") {
+      (body.cmd !== "getBalance" && (!("sessionid" in body) || typeof body.sessionid !== "string")) ||
+      ("sessionid" in body && body.sessionid !== null && body.sessionid !== undefined && typeof body.sessionid !== "string")) {
     return failure(login, Date.now() - startedAt, "invalid callback request");
   }
 
+  const callback = {
+    ...body,
+    sessionid: "sessionid" in body && typeof body.sessionid === "string" ? body.sessionid : "",
+  } as GregmornCallbackBody;
   try {
-    const result = await mysqlMultiplayerStore.transact(gregmornCallbackRoom(body.sessionid), tx =>
-      processGregmornWalletCallback(tx, body as GregmornCallbackBody));
+    const room = callback.sessionid ? gregmornCallbackRoom(callback.sessionid) : gregmornCallbackRoom(`balance:${login}`);
+    const result = await mysqlMultiplayerStore.transact(room, tx =>
+      processGregmornWalletCallback(tx, callback));
     return NextResponse.json({
       balance: result.balance,
       currency: result.currency,

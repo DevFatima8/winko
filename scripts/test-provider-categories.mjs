@@ -54,6 +54,21 @@ test("All and Hot preserve games regardless of category, and categories are excl
   }
 });
 
+test("Sports includes confirmed sports themes without removing their original gameplay categories", () => {
+  for (const [title, category, primary] of [
+    ["Boxing King", "Slot", "Slot"], ["Cricket King 18", "Slot", "Slot"],
+    ["Cricket Sah 75", "Slot", "Slot"], ["Goal", "Instant Win", "Mini Games"],
+    ["Football Studio", "live", "Live"], ["e-Horse Racing", "virtual sport", "Sports"],
+  ]) {
+    const game = { title, category, provider: "Studio", isHot: false };
+    assert.equal(categories.matchesProviderCategory(game, "Sports"), true, title);
+    assert.equal(categories.providerCategory(game), primary);
+    assert.equal(categories.matchesProviderCategory(game, primary), true);
+  }
+  for (const title of ["3 Coin Wild Horse", "Big Bass Crash", "Sweet Bonanza", "Unknown Football Slot"]) {
+    assert.equal(categories.matchesProviderCategory({ title, category: "slots", provider: "Studio", isHot: false }, "Sports"), false);
+  }
+});
 test("shared panel filters rendered cards by category, provider and search together", () => {
   const jsx = (type, props) => ({ type, props });
   let stateOverrides = [];
@@ -79,7 +94,12 @@ test("shared panel filters rendered cards by category, provider and search toget
     { id: "b", title: "Mines", category: "minigame", provider: "SPRIBE", isHot: false },
     { id: "c", title: "Roulette", category: "live", provider: "Evolution", isHot: true },
     { id: "d", title: "Sweet Bonanza", category: "slots", provider: "PP", isHot: false },
-  ].map(game => ({ ...game, imageUrl: "https://cdn.example/game.jpg" }));
+    { id: "e", title: "Cricket King 18", category: "slots", provider: "Jili", isHot: false },
+    { id: "f", title: "Unavailable Slot", category: "slots", provider: "PP", isHot: false, isEnabled: false },
+  ].map(game => ({
+    ...game,
+    imageUrl: game.id === "e" ? "/games/Cricket-King-18.png" : game.id === "a" ? "/games/01_Aviator_1024x700.jpg" : "https://cdn.example/game.jpg",
+  }));
   function titles(category, search = "", provider = "") {
     stateIndex = 0;
     stateOverrides = [search, provider];
@@ -88,7 +108,14 @@ test("shared panel filters rendered cards by category, provider and search toget
     function visit(node) {
       if (Array.isArray(node)) node.forEach(visit);
       else if (node && typeof node === "object") {
-        if (node.type === "thumbnail") result.push(node.props.alt);
+        if (node.type === "thumbnail") {
+          result.push(node.props.alt);
+          assert.equal(node.props.className, node.props.src.endsWith("_1024x700.jpg") ? "h-full w-full object-cover object-center" : "h-full w-full object-contain");
+        }
+        if (node.type === "button" && node.props.title === "This game is currently unavailable from the provider.") {
+          assert.equal(node.props.disabled, true);
+          assert.match(JSON.stringify(node.props.children), /Unavailable/);
+        }
         visit(node.props?.children);
       }
     }
@@ -99,7 +126,10 @@ test("shared panel filters rendered cards by category, provider and search toget
   assert.deepEqual(titles("Mini Games", "mine", "SPRIBE"), ["Mines"]);
   assert.deepEqual(titles("Mini Games", "", "Evolution"), []);
   assert.deepEqual(titles("Live"), ["Roulette"]);
-  assert.deepEqual(titles("Slot"), ["Sweet Bonanza"]);
+  assert.deepEqual(titles("Slot"), ["Sweet Bonanza", "Cricket King 18", "Unavailable Slot"]);
+  assert.deepEqual(titles("Sports"), ["Cricket King 18"]);
+  assert.deepEqual(titles("Sports", "cricket", "Jili"), ["Cricket King 18"]);
+  assert.deepEqual(titles("Sports", "", "PP"), []);
   assert.deepEqual(titles("Hot"), ["Aviator", "Roulette"]);
   assert.equal(titles("All").length, games.length);
 });

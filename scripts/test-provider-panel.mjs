@@ -25,6 +25,45 @@ const slug = identity.gregmornGameSlug(providerGame.id);
 const game = { ...providerGame, slug, isActive: true, isHot: true };
 const player = { id: "player-id", dbRole: "client", role: "client", isActive: true, blockedGames: [], balance: 100, displayId: "1234567" };
 
+test("admin ON/OFF badges cannot shrink or wrap beside long game titles", async () => {
+  const jsx = (type, props) => ({ type, props });
+  const page = load("src\\app\\admin\\games\\Client.tsx", {
+    "react/jsx-runtime": { jsx, jsxs: jsx },
+    react: { useState: value => [value, () => {}] },
+    "@/components/Shell": { Card: "card" },
+    "@/lib/actions": {},
+    "@/lib/adminLiveUpdates": {},
+    "@/components/lobby/GameGridSkeleton": { GameGridSkeleton: "skeleton" },
+    "@/lib/useDb": { usePage: loader => loader() },
+  });
+  const previous = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({ games: [
+    { ...game, name: "40 Super Fruits Bell Link with a very long title", stats: {} },
+    { ...game, slug: "off", name: "Another very long title", isActive: false, stats: {} },
+  ], blocked: [], level: 3 });
+  try {
+    const manager = await page.default({});
+    const tree = manager.type(manager.props);
+    const badges = [], titles = [];
+    function visit(node) {
+      if (Array.isArray(node)) node.forEach(visit);
+      else if (node && typeof node === "object") {
+        if (node.type === "span" && ["ON", "OFF"].includes(node.props.children)) badges.push(node);
+        if (node.type === "div" && node.props.className?.includes("truncate")) titles.push(node);
+        visit(node.props?.children);
+      }
+    }
+    visit(tree);
+    assert.equal(badges.length, 2);
+    for (const badge of badges) {
+      assert.match(badge.props.className, /\bshrink-0\b/);
+      assert.match(badge.props.className, /\bwhitespace-nowrap\b/);
+    }
+    assert.equal(titles.length, 2);
+    for (const title of titles) assert.match(title.props.className, /\bmin-w-0 flex-1 truncate\b/);
+  } finally { globalThis.fetch = previous; }
+});
+
 test("provider identities preserve case and cannot collide with local slugs", () => {
   assert.equal(identity.isGregmornSlug(slug), true);
   assert.notEqual(slug, identity.gregmornGameSlug(providerGame.id.toLowerCase()));
@@ -49,7 +88,7 @@ test("catalogue settings preserve admin OFF/hot choices and never expose saved l
   const games = await catalog.getProviderCatalog();
   assert.equal(games.length, 1);
   assert.equal(games[0].isActive, false);
-  assert.equal(games[0].isHot, true);
+  assert.equal(games[0].isHot, false, "admin-hidden games cannot appear in player Hot Games");
   await catalog.saveProviderGame(games[0]);
   assert.equal(updates[0][1].$set.isActive, undefined);
   assert.equal(updates[0][1].$set.isHot, undefined);
@@ -131,6 +170,56 @@ test("admin on/off and hot actions persist provider choices without changing loc
     await assert.rejects(actions.toggleGameHotAction(slug, true), /Unauthorized/);
 });
 
+test("admin ON/OFF and Hot choices reach player catalogues without waiting for the provider cache", async () => {
+  const saved = [];
+  const categories = load("src\\lib\\providerCategories.ts");
+  const dbGame = {
+    find: () => ({ lean: async () => saved }),
+    updateOne: async (filter, update) => {
+      if (!saved.some(row => row.slug === filter.slug)) saved.push({ _id: "saved", slug: filter.slug, ...update.$setOnInsert });
+    },
+    findOne: filter => ({ lean: async () => saved.find(row => row.slug === filter.slug) }),
+    updateMany: async (filter, update) => {
+      for (const row of saved) {
+        if (filter.slug.$regex.test(row.slug) && (!filter.isActive || row.isActive !== false)) Object.assign(row, update.$set);
+      }
+    },
+  };
+  let fetches = 0;
+  const catalog = load("src\\lib\\gregmornCatalog.ts", {
+    "@/models": { Game: dbGame },
+    "./gregmorn": { getGregmornCatalog: async () => { fetches++; return [providerGame]; } },
+    "./gregmornIdentity": identity,
+    "./providerArtwork": { providerArtwork: (_, fallback) => fallback },
+  });
+  const actions = load("src\\lib\\actions.ts", {
+    "next/cache": { revalidatePath: () => {} },
+    "@/models": { Game: dbGame },
+    "./auth": {}, "./serverAuth": { getServerSessionUser: async () => ({ role: "admin", level: 3 }) },
+    "./platform": {}, "./notifications": {}, "./cloudinary": {},
+    "./gregmornCatalog": catalog,
+  });
+  const route = load("src\\app\\api\\gregmorn\\catalog\\route.ts", {
+    "next/server": next,
+    "@/lib/serverAuth": { getServerSessionUser: async () => player },
+    "@/lib/gregmornCatalog": catalog,
+  });
+  const listed = async () => (await (await route.GET(new Request("https://site.example/api/gregmorn/catalog"))).json()).games;
+  assert.equal((await listed()).length, 1);
+  await actions.toggleGameHotAction(slug, true);
+  assert.equal((await listed()).filter(game => categories.matchesProviderCategory(game, "Hot")).length, 1);
+  await actions.toggleGameAction(slug, false);
+  assert.equal((await listed()).length, 0);
+  await actions.toggleGameAction(slug, true);
+  assert.equal((await listed()).length, 1);
+  assert.equal((await listed())[0].isHot, false);
+  await actions.toggleGameHotAction(slug, true);
+  assert.equal((await listed())[0].isHot, true);
+  await actions.toggleGameHotAction(slug, false);
+  assert.equal((await listed()).filter(game => categories.matchesProviderCategory(game, "Hot")).length, 0);
+  assert.equal(fetches, 1, "admin changes apply even when the upstream catalogue stays cached");
+});
+
 test("public catalogue hides switched-off and player-restricted provider games", async () => {
   let user = player;
   const route = load("src\\app\\api\\gregmorn\\catalog\\route.ts", {
@@ -143,6 +232,21 @@ test("public catalogue hides switched-off and player-restricted provider games",
   assert.equal((await (await route.GET(new Request("https://site.example/api/gregmorn/catalog"))).json()).games.length, 0);
   user = null;
   assert.equal((await (await route.GET(new Request("https://site.example/api/gregmorn/catalog"))).json()).games.length, 1);
+});
+
+test("unavailable provider games remain listed but admin-hidden and player-restricted games stay hidden", async () => {
+  const unavailable = { ...game, id: "unavailable", slug: "unavailable", isEnabled: false, isActive: false, isHiddenByAdmin: false };
+  const route = load("src\\app\\api\\gregmorn\\catalog\\route.ts", {
+    "next/server": next,
+    "@/lib/serverAuth": { getServerSessionUser: async () => ({ ...player, blockedGames: ["restricted"] }) },
+    "@/lib/gregmornCatalog": { getProviderCatalog: async () => [
+      game, unavailable,
+      { ...unavailable, id: "hidden", slug: "hidden", isHiddenByAdmin: true },
+      { ...unavailable, id: "restricted", slug: "restricted" },
+    ] },
+  });
+  const response = await route.GET(new Request("https://site.example/api/gregmorn/catalog"));
+  assert.deepEqual((await response.json()).games.map(game => game.id), [game.id, "unavailable"]);
 });
 
 test("provider launch enforces restrictions before calling provider and maps the existing wallet", async () => {
@@ -229,6 +333,23 @@ test("provider unfinished-round rejection opens a view-only demo without player 
   }
 });
 
+test("direct launch cannot open a provider-disabled game even if a caller marks it active", async () => {
+  let launched = false;
+  const route = load("src\\app\\api\\gregmorn\\launch\\route.ts", {
+    "next/server": next,
+    "@/lib/serverAuth": { getServerSessionUser: async () => player },
+    "@/lib/gregmorn": { openGregmornGame: async () => { launched = true; } },
+    "@/lib/gregmornCatalog": { getProviderCatalog: async () => [{ ...game, isEnabled: false, isActive: true }] },
+    "@/lib/gameAccess": {},
+    "@/lib/multiplayer-store": {},
+    "@/lib/gregmornWallet": {},
+  });
+  const response = await route.POST(new Request("https://site.example/api/gregmorn/launch", {
+    method: "POST", body: JSON.stringify({ gameId: game.id }),
+  }));
+  assert.equal(response.status, 404);
+  assert.equal(launched, false);
+});
 test("both local game URL entrypoints redirect before rendering preserved engines", async () => {
   for (const path of ["src\\app\\games\\[slug]\\page.tsx", "src\\app\\player\\games\\[slug]\\page.tsx"]) {
     const route = load(path, {

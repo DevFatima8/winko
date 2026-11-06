@@ -1,9 +1,9 @@
 import { GAME_IMAGES } from "./gameCatalog";
 
-const normalize = (title: string) => title.toLowerCase().replace(/[^a-z0-9]/g, "");
+const normalize = (title: string) => title.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 const artwork = new Map(Object.entries(GAME_IMAGES).flatMap(([slug, path]) => [
   [normalize(slug), path],
-  [normalize(path.split("/").pop()!.replace(/^\d+_/, "").replace(/_1024x700\.jpg$/, "")), path],
+  [normalize(path.split("/").pop()!.replace(/^\d+_/, "").replace(/(?:_1024x700)?\.(?:jpg|png)$/, "")), path],
 ] as [string, string][]));
 const aliases: Record<string, string> = {
   "blackjack": "blackjack", "andr bahar": "andar-bahar", "chicken road 2.0": "chicken-road-2",
@@ -22,5 +22,9 @@ for (const [title, slug] of Object.entries(aliases)) artwork.set(normalize(title
 
 export function providerArtwork(title: string, fallback: string) {
   if (fallback.startsWith("/")) return fallback;
-  return artwork.get(normalize(title)) ?? fallback;
+  // These two provider titles have separate artwork but normalize to the same key.
+  if (title.trim().toLowerCase() === "hi-lo") return GAME_IMAGES["hi-lo"];
+  if (title.trim().toLowerCase() === "hilo") return GAME_IMAGES.hilo;
+  const local = artwork.get(normalize(title));
+  return local ? local.replaceAll("#", "%23") : fallback;
 }

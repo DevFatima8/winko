@@ -3,7 +3,7 @@ import { getGregmornCatalog, type GregmornGame } from "./gregmorn";
 import { gregmornGameSlug } from "./gregmornIdentity";
 import { providerArtwork } from "./providerArtwork";
 
-export type ProviderCatalogGame = GregmornGame & { slug: string; isActive: boolean; isHot: boolean };
+export type ProviderCatalogGame = GregmornGame & { slug: string; isActive: boolean; isHot: boolean; isHiddenByAdmin?: boolean };
 
 const catalogRequests = new Map<string, Promise<GregmornGame[]>>();
 const catalogs = new Map<string, { games: GregmornGame[]; expiresAt: number }>();
@@ -38,7 +38,10 @@ export async function getProviderCatalog(currency?: string): Promise<ProviderCat
   return catalog.map(game => {
     const slug = gregmornGameSlug(game.id);
     const saved = bySlug.get(slug);
-    return { ...game, imageUrl: providerArtwork(game.title, game.imageUrl), slug, isActive: saved?.isActive !== false, isHot: saved?.isHot === true };
+    const isHiddenByAdmin = saved?.isActive === false;
+    return { ...game, imageUrl: providerArtwork(game.title, game.imageUrl), slug,
+      isActive: game.isEnabled && !isHiddenByAdmin, isHiddenByAdmin,
+      isHot: game.isEnabled && !isHiddenByAdmin && saved?.isHot === true };
   });
 }
 

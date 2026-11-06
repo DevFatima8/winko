@@ -18,6 +18,7 @@ export function useProviderCatalog(enabled = true): ProviderCatalogState {
     if (!enabled) return;
     const controller = new AbortController();
     let fresh = false;
+    let pending = false;
     const warm = warmProviderCatalog();
     if (warm) {
       void Promise.resolve().then(() => {
@@ -28,7 +29,10 @@ export function useProviderCatalog(enabled = true): ProviderCatalogState {
         if (games && !controller.signal.aborted && !fresh) setState({ games, loading: false, error: "" });
       });
     }
-    void fetch("/api/gregmorn/catalog", { cache: "no-store", signal: controller.signal })
+    const refresh = () => {
+      if (pending || controller.signal.aborted) return;
+      pending = true;
+      void fetch("/api/gregmorn/catalog", { cache: "no-store", signal: controller.signal })
       .then(async response => {
         const data = await response.json() as { games?: ProviderCatalogGame[]; error?: string };
         if (!response.ok) throw new Error(data.error ?? "Provider games could not be loaded.");
@@ -44,8 +48,20 @@ export function useProviderCatalog(enabled = true): ProviderCatalogState {
           fresh = true;
           setState(previous => ({ ...previous, loading: false, error: reason instanceof Error ? reason.message : "Provider games could not be loaded." }));
         }
-      });
-    return () => controller.abort();
+      })
+      .finally(() => { pending = false; });
+    };
+    const refreshVisible = () => { if (!document.hidden) refresh(); };
+    refresh();
+    const interval = window.setInterval(refreshVisible, 60_000);
+    window.addEventListener("focus", refreshVisible);
+    document.addEventListener("visibilitychange", refreshVisible);
+    return () => {
+      controller.abort();
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshVisible);
+      document.removeEventListener("visibilitychange", refreshVisible);
+    };
   }, [enabled]);
 
   return state;

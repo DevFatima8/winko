@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 export type GregmornGame = {
   id: string;
-  isEnabled: true;
+  isEnabled: boolean;
   title: string;
   imageUrl: string;
   provider: string;
@@ -137,7 +137,7 @@ export async function getGregmornCatalog(currency = process.env.GREGMORN_CURRENC
   return data.flatMap((item): GregmornGame[] => {
     if (!item || typeof item !== "object") return [];
     const game = item as Record<string, unknown>;
-    if (game.isEnabled !== true || typeof game.id !== "string" || !game.id.trim() ||
+    if ((game.isEnabled !== undefined && typeof game.isEnabled !== "boolean") || typeof game.id !== "string" || !game.id.trim() ||
         typeof game.title !== "string" || !game.title.trim() ||
         typeof game.provider !== "string" || !game.provider.trim() ||
         typeof game.imageUrl !== "string") return [];
@@ -145,7 +145,7 @@ export async function getGregmornCatalog(currency = process.env.GREGMORN_CURRENC
     try { imageUrl = new URL(game.imageUrl); } catch { return []; }
     if (imageUrl.protocol !== "https:") return [];
     return [{
-      id: game.id, isEnabled: true, title: game.title, provider: game.provider, imageUrl: imageUrl.toString(),
+      id: game.id, isEnabled: game.isEnabled !== false, title: game.title, provider: game.provider, imageUrl: imageUrl.toString(),
       ...(typeof game.category === "string" && game.category.trim() ? { category: game.category.trim() } : {}),
     }];
   });

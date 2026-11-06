@@ -24,7 +24,7 @@ export async function POST(request: Request) {
   try {
     const currency = process.env.GREGMORN_CURRENCY ?? "PKR";
     const games = await getProviderCatalog(currency);
-    const game = games.find(game => game.id === body.gameId && game.isActive);
+    const game = games.find(game => game.id === body.gameId && game.isActive && game.isEnabled !== false);
     if (!game) {
       return NextResponse.json({ error: "This provider game is not enabled for your currency." }, { status: 404 });
     }

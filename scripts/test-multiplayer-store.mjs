@@ -44,6 +44,36 @@ test("successful transactions commit and release the connection", async () => {
   assert.deepEqual(db.calls, ["ping", "query", "beginTransaction", "execute", "query", "commit", "release"]);
 });
 
+test("player login resolves through the permanent random_id mapping, not user JSON", async () => {
+  const lookups = [];
+  const db = connection({ query(sql, params) {
+    if (sql.startsWith("SELECT user_id")) {
+      lookups.push({ sql, params });
+      return [[{ user_id: "mapped-player" }]];
+    }
+  } });
+  await fixture([db]).transact("test", async tx => {
+    assert.equal(await tx.playerUserId("5006817"), "mapped-player");
+    assert.equal(await tx.playerUserId("invalid"), null);
+  });
+  assert.deepEqual(lookups, [{
+    sql: "SELECT user_id FROM player_display_ids WHERE random_id = ? LIMIT 2",
+    params: [5006817],
+  }]);
+});
+
+test("missing player display mapping returns null and ambiguous mappings fail explicitly", async () => {
+  for (const rows of [[], [{ user_id: "a" }, { user_id: "b" }]]) {
+    const db = connection({ query(sql) {
+      if (sql.startsWith("SELECT user_id")) return [rows];
+    } });
+    if (!rows.length) {
+      assert.equal(await fixture([db]).transact("test", tx => tx.playerUserId("5006817")), null);
+    } else {
+      await assert.rejects(fixture([db]).transact("test", tx => tx.playerUserId("5006817")), /ambiguous/);
+    }
+  }
+});
 test("a stale connection is replaced before transaction work starts", async () => {
   const stale = connection({ ping() { throw Object.assign(new Error("closed state"), { fatal: true }); } });
   const fresh = connection();

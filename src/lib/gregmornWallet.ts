@@ -103,23 +103,38 @@ async function playerWallet(tx: MultiplayerTransaction, userId: string) {
 }
 
 export async function processGregmornWalletCallback(tx: MultiplayerTransaction, body: GregmornCallbackBody) {
-  if (!body.login || body.login.length > 64 || !body.sessionid || body.sessionid.length > 255) {
+  if (!body.login || body.login.length > 64 || body.sessionid.length > 255 ||
+      (body.cmd !== "getBalance" && !body.sessionid)) {
+    console.warn("[gregmorn wallet] Rejected callback identity", {
+      cmd: body.cmd, hasLogin: Boolean(body.login), hasSession: Boolean(body.sessionid),
+      loginTooLong: body.login.length > 64, sessionTooLong: body.sessionid.length > 255,
+    });
     throw new GregmornWalletError("Unknown Gregmorn player session.");
   }
-  const session = await tx.get<GregmornSession>("gregmornsessions", sessionKey(body.sessionid));
+  const session = body.sessionid ? await tx.get<GregmornSession>("gregmornsessions", sessionKey(body.sessionid)) : null;
   // Signed getBalance can arrive inside openGame, before its session ID is returned.
   if (!session && body.cmd === "getBalance") {
     const demo = body.login.startsWith("demo.");
     const displayId = demo ? body.login.slice(5) : body.login;
-    const accounts = await tx.findWhere<UserDoc>("users", { displayId, role: "client" }, 2);
-    if (accounts.length !== 1 || !accounts[0].isActive) {
+    const userId = await tx.playerUserId(displayId);
+    const account = userId ? await tx.get<UserDoc>("users", userId, true) : null;
+    if (!account || account.role !== "client" || !account.isActive) {
+      console.warn("[gregmorn wallet] Player lookup rejected", {
+        mappingFound: Boolean(userId), accountFound: Boolean(account),
+        isPlayer: account?.role === "client", active: account?.isActive === true,
+      });
       throw new GregmornWalletError("Unknown or unavailable Gregmorn player.");
     }
     if (demo) return { balance: 0, currency: process.env.GREGMORN_CURRENCY ?? "PKR" };
-    const { currentCents } = await playerWallet(tx, accounts[0]._id);
+    const { currentCents } = await playerWallet(tx, account._id);
     return { balance: currentCents / 100, currency: process.env.GREGMORN_CURRENCY ?? "PKR" };
   }
   if (!session || session.sessionId !== body.sessionid || session.playerLogin !== body.login) {
+    console.warn("[gregmorn wallet] Rejected session mapping", {
+      cmd: body.cmd, sessionFound: Boolean(session),
+      sessionMatches: session?.sessionId === body.sessionid,
+      loginMatches: session?.playerLogin === body.login,
+    });
     throw new GregmornWalletError("Unknown Gregmorn player session.");
   }
   if (session.demo) {

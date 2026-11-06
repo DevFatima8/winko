@@ -7,6 +7,7 @@ export type MultiplayerFilters = Record<string, string | number | boolean | null
 export type MultiplayerSort = { field: string; direction: "asc" | "desc" };
 export interface MultiplayerTransaction {
   now(): Promise<number>;
+  playerUserId(displayId: string): Promise<string | null>;
   get<T extends JsonDocument>(table: MultiplayerTable, id: string, lock?: boolean): Promise<T | null>;
   put<T extends JsonDocument>(table: MultiplayerTable, id: string, document: T): Promise<void>;
   insert<T extends JsonDocument>(table: MultiplayerTable, id: string, document: T): Promise<void>;
@@ -57,6 +58,15 @@ async function readyConnection(pool: Pool): Promise<PoolConnection> {
 }
 function transaction(connection: PoolConnection): MultiplayerTransaction {
   return {
+    async playerUserId(displayId) {
+      if (!/^[1-9]\d{6}$/.test(displayId)) return null;
+      const [rows] = await connection.query<(RowDataPacket & { user_id: string })[]>(
+        "SELECT user_id FROM player_display_ids WHERE random_id = ? LIMIT 2",
+        [Number(displayId)],
+      );
+      if (rows.length > 1) throw new Error("Player display ID mapping is ambiguous.");
+      return rows[0]?.user_id ?? null;
+    },
     async now() {
       const [rows] = await connection.query<(RowDataPacket & { now: number })[]>("SELECT UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000 AS now");
       return Number(rows[0].now);

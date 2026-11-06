@@ -67,7 +67,7 @@ test("failed images show an explicit message instead of an endless loader", () =
 test("provider artwork frames preserve the central square without blurred side padding or hover cropping", () => {
   const source = readFileSync("src\\components\\lobby\\GregmornGames.tsx", "utf8");
   assert.match(source, /relative block aspect-square overflow-hidden/);
-  assert.match(source, /startsWith\("\/games\/"\) \? "object-cover object-center" : "object-contain"/);
+  assert.match(source, /startsWith\("\/games\/"\) && game\.imageUrl\.endsWith\("_1024x700\.jpg"\) \? "object-cover object-center" : "object-contain"/);
   assert.doesNotMatch(source, /group-hover:scale/);
   const image = harness()("/games/21_Fortune_Ox_1024x700.jpg")[0];
   const squareSide = image.props.height;

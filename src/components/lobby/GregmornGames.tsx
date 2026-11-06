@@ -80,11 +80,13 @@ export function GregmornGames({ category = "All", lobby = false, catalog }: { ca
   const ordered = lobby ? [...filtered.filter(game => game.isHot), ...filtered.filter(game => !game.isHot)] : filtered;
   const visible = ordered.slice(0, limit);
   const cards = visible.map((game, index) => (
-    <button key={game.id} type="button" onClick={() => void launch(game)} disabled={launching !== null}
+    <button key={game.id} type="button" onClick={() => void launch(game)} disabled={launching !== null || game.isEnabled === false}
+      title={game.isEnabled === false ? "This game is currently unavailable from the provider." : undefined}
       className="group block w-full min-w-0 overflow-hidden rounded-xl border border-[#3a2470] bg-[#1b1038] text-left transition hover:border-[#8b5cf6] disabled:cursor-wait disabled:opacity-70">
       <span className="relative block aspect-square overflow-hidden bg-[#100a21]">
-        <GameThumbnail src={game.imageUrl} alt={game.title} loading={index < 6 ? "eager" : "lazy"} className={`h-full w-full ${game.imageUrl.startsWith("/games/") ? "object-cover object-center" : "object-contain"}`} />
+        <GameThumbnail src={game.imageUrl} alt={game.title} loading={index < 6 ? "eager" : "lazy"} className={`h-full w-full ${game.imageUrl.startsWith("/games/") && game.imageUrl.endsWith("_1024x700.jpg") ? "object-cover object-center" : "object-contain"}`} />
         {game.isHot && <span className="absolute left-1 top-1 rounded bg-orange-600 px-2 py-1 text-[10px] font-black text-white">HOT</span>}
+        {game.isEnabled === false && <span className="absolute left-1 top-1 rounded bg-slate-800 px-2 py-1 text-[10px] font-bold text-white">Unavailable</span>}
         {launching === game.id && <span className="absolute inset-0 flex items-center justify-center bg-black/70 text-xs font-bold text-white" role="status">Opening…</span>}
       </span>
       <span className="block truncate px-2 pt-2 text-sm font-bold text-white">{game.title}</span>
@@ -98,7 +100,7 @@ export function GregmornGames({ category = "All", lobby = false, catalog }: { ca
       <div className="flex items-center justify-between gap-2">
         <div>
           <h2 id={titleId} className="text-base font-black text-white md:text-lg">{category === "Hot" ? "Hot Games" : lobby ? restPhase || hotCount === 0 ? "All Games" : "Hot Games" : "Provider Games"}</h2>
-          <p className="text-xs text-[#b8a7e6]">Provider games available for your account</p>
+          <p className="text-xs text-[#b8a7e6]">{loading ? "Provider games" : `Showing ${visible.length} of ${ordered.length} games`}</p>
         </div>
         {loading && <span className="text-xs text-[#b8a7e6]" role="status">Loading…</span>}
       </div>

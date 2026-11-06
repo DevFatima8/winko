@@ -9,6 +9,13 @@ const miniGames = new Set([
   "tower", "plinkofootball", "ludo", "ludoquick", "limbo", "chickendash", "chickendash10000",
   "taixiu", "7up7down", "7updown",
 ]);
+const sportsGames = new Set([
+  "boxingking", "cricketking18", "cricketsah75", "goal",
+  "footballstudio", "footballstudiocards", "footballstudiodice", "footballstudioroulette",
+  "firstpersonfootballstudio", "crashcricket", "crashfootball", "crashgoal", "jackpotfootball",
+  "plinkofootball", "minesfootball", "ehorseracing",
+  "9wickerssports", "9wicketssports", "race2020",
+]);
 
 export function providerCategory(game: CategorizedGame): ProviderCategory | null {
   const title = normalize(game.title);
@@ -32,5 +39,6 @@ export function providerCategory(game: CategorizedGame): ProviderCategory | null
 export function matchesProviderCategory(game: CategorizedGame & { isHot: boolean }, category: string) {
   if (category === "All") return true;
   if (category === "Hot") return game.isHot;
+  if (category === "Sports" && sportsGames.has(normalize(game.title))) return true;
   return providerCategory(game) === category;
 }

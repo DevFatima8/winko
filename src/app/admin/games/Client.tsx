@@ -68,8 +68,8 @@ function ProviderGamesManager({ data }: { data: GamesData }) {
                   <img src={g.imageUrl} alt="" loading="lazy" className="h-16 w-16 rounded-xl object-cover" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="truncate font-bold text-white">{g.name}</div>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${g.isActive ? "bg-emerald-500/20 text-emerald-300" : "bg-red-500/20 text-red-300"}`}>{g.isActive ? "ON" : "OFF"}</span>
+                      <div className="min-w-0 flex-1 truncate font-bold text-white">{g.name}</div>
+                      <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-black ${g.isActive ? "bg-emerald-500/20 text-emerald-300" : "bg-red-500/20 text-red-300"}`}>{g.isActive ? "ON" : "OFF"}</span>
                     </div>
                     <div className="break-all text-xs text-[#b8a7e6]">{g.category}</div>
                     <div className="mt-1 text-xs text-[#b8a7e6]">{s?.c ?? 0} transactions · Bets Rs. {(s?.bet ?? 0).toLocaleString()} · Payout Rs. {(s?.win ?? 0).toLocaleString()}</div>

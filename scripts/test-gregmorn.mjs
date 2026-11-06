@@ -50,7 +50,7 @@ function response(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 }
 
-test("catalog uses server credentials, form login, bearer auth and filters disabled/unsafe entries", async () => {
+test("catalog uses server credentials, retains unavailable games and rejects unsafe entries", async () => {
   configure();
   const requests = [];
   globalThis.fetch = async (url, init) => {
@@ -60,12 +60,15 @@ test("catalog uses server credentials, form login, bearer auth and filters disab
       { id: "provider:slot:a", isEnabled: true, title: "Fortune Gem", provider: "Jili", category: " slots ", imageUrl: "https://cdn.example/game.jpg" },
       { id: "provider:slot:b", isEnabled: false, title: "Disabled", provider: "Jili", imageUrl: "https://cdn.example/off.jpg" },
       { id: "provider:slot:c", isEnabled: true, title: "Unsafe image", provider: "Jili", imageUrl: "http://cdn.example/off.jpg" },
+      { id: "provider:slot:d", title: "Status unspecified", provider: "Jili", imageUrl: "https://cdn.example/unknown.jpg" },
     ]);
   };
   try {
     const games = await api.getGregmornCatalog();
-    assert.equal(games.length, 1);
+    assert.equal(games.length, 3);
     assert.equal(games[0].id, "provider:slot:a");
+    assert.equal(games[1].isEnabled, false);
+    assert.equal(games[2].isEnabled, true, "missing availability must not turn off games present in the API catalogue");
     assert.equal(games[0].category, "slots");
     assert.equal(requests.length, 2);
     assert.equal(requests[0].url, "https://office-api-dev.helcenac.com/auth/login");
@@ -200,11 +203,12 @@ test("HMAC verification rejects absent, malformed and incorrect signatures", () 
   assert.equal(api.verifyGregmornSignature(`${raw} `, signed, secret), false);
 });
 
-function transaction(initial = {}) {
+function transaction(initial = {}, displayIds = {}) {
   const rows = new Map(Object.entries(initial));
   const clone = value => value === undefined ? null : structuredClone(value);
   return {
     rows,
+    async playerUserId(displayId) { return displayIds[displayId] ?? null; },
     async now() { return Date.now(); },
     async get(table, id) { return clone(rows.get(`${table}:${id}`)); },
     async put(table, id, value) { rows.set(`${table}:${id}`, structuredClone(value)); },
@@ -302,8 +306,8 @@ test("seamless callbacks reject forged sessions, insufficient funds, malformed a
 });
 
 test("pre-launch getBalance resolves an active player before session registration", async () => {
-  const player = { ...user, displayId: session.playerLogin, balance: 12.345, pendingReferralCommission: 7 };
-  const tx = transaction({ [`users:${user._id}`]: player });
+  const player = { ...user, balance: 12.345, pendingReferralCommission: 7 };
+  const tx = transaction({ [`users:${user._id}`]: player }, { [session.playerLogin]: user._id });
   assert.deepEqual(await wallet.processGregmornWalletCallback(tx, callback("getBalance")), { balance: 12.34, currency: "PKR" });
   assert.equal(tx.rows.get(`users:${user._id}`).balance, 12.345);
   assert.equal(tx.rows.get(`users:${user._id}`).pendingReferralCommission, 7);
@@ -314,21 +318,22 @@ test("pre-launch getBalance resolves an active player before session registratio
   assert.equal((await wallet.processGregmornWalletCallback(tx, write("after-registration", 10, 0))).balance, 2.34);
 });
 
-test("pre-launch balance rejects unknown, inactive, duplicate and non-player accounts", async () => {
+test("pre-launch balance rejects missing mappings, inactive, deleted and non-player accounts", async () => {
   for (const accounts of [
     [],
-    [{ ...user, displayId: session.playerLogin, isActive: false }],
-    [{ ...user, displayId: session.playerLogin, role: "admin" }],
-    [{ ...user, displayId: session.playerLogin }, { ...user, _id: "duplicate", displayId: session.playerLogin }],
-    [{ ...user, displayId: session.playerLogin, balance: -1 }],
+    [{ ...user, isActive: false }],
+    [{ ...user, role: "admin" }],
+    [{ ...user, balance: -1 }],
   ]) {
-    const tx = transaction(Object.fromEntries(accounts.map(account => [`users:${account._id}`, account])));
+    const tx = transaction(Object.fromEntries(accounts.map(account => [`users:${account._id}`, account])), { [session.playerLogin]: user._id });
     await assert.rejects(wallet.processGregmornWalletCallback(tx, callback("getBalance")), /unavailable|Unknown/i);
   }
+  const tx = transaction({ [`users:${user._id}`]: { ...user, displayId: session.playerLogin } });
+  await assert.rejects(wallet.processGregmornWalletCallback(tx, callback("getBalance")), /Unknown/);
 });
 
 test("pre-launch demo balance stays zero and existing sessions cannot be accessed with a different login", async () => {
-  const tx = transaction({ [`users:${user._id}`]: { ...user, displayId: session.playerLogin } });
+  const tx = transaction({ [`users:${user._id}`]: user }, { [session.playerLogin]: user._id });
   assert.deepEqual(await wallet.processGregmornWalletCallback(tx, callback("getBalance", {
     login: `demo.${session.playerLogin}`, sessionid: "not-registered-demo",
   })), { balance: 0, currency: "PKR" });
@@ -341,7 +346,7 @@ test("pre-launch demo balance stays zero and existing sessions cannot be accesse
 
 test("signed HTTP getBalance succeeds inside openGame, while unsigned calls and early bets fail", async () => {
   configure();
-  const tx = transaction({ [`users:${user._id}`]: { ...user, displayId: session.playerLogin } });
+  const tx = transaction({ [`users:${user._id}`]: user }, { [session.playerLogin]: user._id });
   const route = load("src\\app\\api\\gregmorn\\wallet\\route.ts", {
     "next/server": { NextResponse: { json: (body, options) => Response.json(body, options) } },
     "@/lib/gregmorn": api,
@@ -358,6 +363,23 @@ test("signed HTTP getBalance succeeds inside openGame, while unsigned calls and 
   const unsigned = await httpCallback(callback("getBalance"), false);
   assert.equal(unsigned.status, 400);
   assert.equal((await unsigned.json()).error, "invalid signature");
+  for (const sessionid of [undefined, null, ""]) {
+    const balance = await httpCallback({ cmd: "getBalance", login: session.playerLogin, sessionid });
+    assert.equal(balance.status, 200);
+    const data = await balance.json();
+    assert.equal(data.balance, 500);
+    assert.equal(data.status, "success");
+    const bet = await httpCallback({ ...write("missing-session", 10, 0), sessionid });
+    assert.equal(bet.status, 400);
+    const refund = await httpCallback({ ...rollback("missing-session", 10), sessionid });
+    assert.equal(refund.status, 400);
+    const unsignedBalance = await httpCallback({ cmd: "getBalance", login: session.playerLogin, sessionid }, false);
+    assert.equal(unsignedBalance.status, 400);
+  }
+  const malformedSession = await httpCallback({ cmd: "getBalance", login: session.playerLogin, sessionid: 123 });
+  assert.equal(malformedSession.status, 400);
+  const demoBalance = await httpCallback({ cmd: "getBalance", login: `demo.${session.playerLogin}` });
+  assert.equal((await demoBalance.json()).balance, 0);
   globalThis.fetch = async url => {
     if (String(url).endsWith("/auth/login")) return response({ accessToken: token, user: { id: "merchant-456" } });
     const balanceResponse = await httpCallback(callback("getBalance"));

@@ -380,14 +380,14 @@ export async function toggleGameAction(slug: string, isActive: boolean) {
   await requireSuper();
   await saveProviderGame(await requireProviderGame(slug));
   await Game.updateMany({ slug: { $regex: new RegExp(`^${slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") } }, { $set: { isActive, ...(isActive ? {} : { isHot: false }) } });
-  revalidatePath("/admin/games"); revalidatePath("/"); revalidatePath("/player");
+  revalidatePath("/admin/games"); revalidatePath("/"); revalidatePath("/player"); revalidatePath("/games-all");
 }
 
 export async function toggleGameHotAction(slug: string, isHot: boolean) {
   await requireSuper();
   await saveProviderGame(await requireProviderGame(slug));
   await Game.updateMany({ slug: { $regex: new RegExp(`^${slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }, isActive: { $ne: false } }, { $set: { isHot } });
-  revalidatePath("/admin/games"); revalidatePath("/"); revalidatePath("/games-all");
+  revalidatePath("/admin/games"); revalidatePath("/"); revalidatePath("/games-all"); revalidatePath("/player");
 }
 
 // settings
