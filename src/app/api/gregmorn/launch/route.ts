@@ -60,7 +60,7 @@ export async function POST(request: Request) {
       console.info("[gregmorn launch] Opening a view-only demo after the provider reported an unfinished session.");
       session = await openGregmornGame({
         gameId: body.gameId,
-        playerLogin: me.displayId,
+        playerLogin: `demo.${me.displayId}`,
         balance: 0,
         exitUrl,
         demo: true,

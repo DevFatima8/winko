@@ -213,6 +213,11 @@ function transaction(initial = {}) {
       if (rows.has(key)) throw new Error("duplicate key");
       rows.set(key, structuredClone(value));
     },
+    async findWhere(table, filters, limit = 1000) {
+      return [...rows.entries()].filter(([key, row]) => key.startsWith(`${table}:`) &&
+        Object.entries(filters).every(([field, value]) => row[field] === value))
+        .map(([, row]) => clone(row)).slice(0, limit);
+    },
     async page(table, filters, after = "") {
       return [...rows.entries()].filter(([key, row]) => key.startsWith(`${table}:`) && row._id > after &&
         Object.entries(filters).every(([field, value]) => row[field] === value))
@@ -294,6 +299,87 @@ test("seamless callbacks reject forged sessions, insufficient funds, malformed a
   await assert.rejects(wallet.processGregmornWalletCallback(tx, rollback("bet-2", 19)), /not found/);
   await assert.rejects(wallet.processGregmornWalletCallback(tx, write("bet-2", 20, 0, "another-game")), /Invalid Gregmorn transaction/);
   assert.equal(tx.rows.get(`users:${user._id}`).balance, 480);
+});
+
+test("pre-launch getBalance resolves an active player before session registration", async () => {
+  const player = { ...user, displayId: session.playerLogin, balance: 12.345, pendingReferralCommission: 7 };
+  const tx = transaction({ [`users:${user._id}`]: player });
+  assert.deepEqual(await wallet.processGregmornWalletCallback(tx, callback("getBalance")), { balance: 12.34, currency: "PKR" });
+  assert.equal(tx.rows.get(`users:${user._id}`).balance, 12.345);
+  assert.equal(tx.rows.get(`users:${user._id}`).pendingReferralCommission, 7);
+  assert.equal(tx.rows.size, 1, "balance lookup must not invent a provider session");
+  await assert.rejects(wallet.processGregmornWalletCallback(tx, write("before-registration", 10, 0)), /Unknown.*session/);
+  await assert.rejects(wallet.processGregmornWalletCallback(tx, rollback("before-registration", 10)), /Unknown.*session/);
+  await wallet.registerGregmornSession(tx, session);
+  assert.equal((await wallet.processGregmornWalletCallback(tx, write("after-registration", 10, 0))).balance, 2.34);
+});
+
+test("pre-launch balance rejects unknown, inactive, duplicate and non-player accounts", async () => {
+  for (const accounts of [
+    [],
+    [{ ...user, displayId: session.playerLogin, isActive: false }],
+    [{ ...user, displayId: session.playerLogin, role: "admin" }],
+    [{ ...user, displayId: session.playerLogin }, { ...user, _id: "duplicate", displayId: session.playerLogin }],
+    [{ ...user, displayId: session.playerLogin, balance: -1 }],
+  ]) {
+    const tx = transaction(Object.fromEntries(accounts.map(account => [`users:${account._id}`, account])));
+    await assert.rejects(wallet.processGregmornWalletCallback(tx, callback("getBalance")), /unavailable|Unknown/i);
+  }
+});
+
+test("pre-launch demo balance stays zero and existing sessions cannot be accessed with a different login", async () => {
+  const tx = transaction({ [`users:${user._id}`]: { ...user, displayId: session.playerLogin } });
+  assert.deepEqual(await wallet.processGregmornWalletCallback(tx, callback("getBalance", {
+    login: `demo.${session.playerLogin}`, sessionid: "not-registered-demo",
+  })), { balance: 0, currency: "PKR" });
+  assert.equal(tx.rows.size, 1);
+  await wallet.registerGregmornSession(tx, session);
+  await assert.rejects(wallet.processGregmornWalletCallback(tx, callback("getBalance", {
+    login: `demo.${session.playerLogin}`,
+  })), /Unknown.*session/);
+});
+
+test("signed HTTP getBalance succeeds inside openGame, while unsigned calls and early bets fail", async () => {
+  configure();
+  const tx = transaction({ [`users:${user._id}`]: { ...user, displayId: session.playerLogin } });
+  const route = load("src\\app\\api\\gregmorn\\wallet\\route.ts", {
+    "next/server": { NextResponse: { json: (body, options) => Response.json(body, options) } },
+    "@/lib/gregmorn": api,
+    "@/lib/gregmornWallet": wallet,
+    "@/lib/multiplayer-store": { mysqlMultiplayerStore: { transact: async (_room, fn) => fn(tx) } },
+  });
+  const httpCallback = async (body, signed = true) => {
+    const raw = JSON.stringify(body);
+    return route.POST(new Request("https://winkox.example/api/gregmorn/wallet", {
+      method: "POST", body: raw,
+      headers: signed ? { "x-signature": createHmac("sha256", secret).update(raw).digest("hex") } : {},
+    }));
+  };
+  const unsigned = await httpCallback(callback("getBalance"), false);
+  assert.equal(unsigned.status, 400);
+  assert.equal((await unsigned.json()).error, "invalid signature");
+  globalThis.fetch = async url => {
+    if (String(url).endsWith("/auth/login")) return response({ accessToken: token, user: { id: "merchant-456" } });
+    const balanceResponse = await httpCallback(callback("getBalance"));
+    assert.equal(balanceResponse.status, 200);
+    const data = await balanceResponse.json();
+    assert.equal(data.status, "success");
+    assert.equal(data.balance, 500);
+    assert.equal(data.error, "");
+    const earlyBet = await httpCallback(write("too-early", 10, 0));
+    assert.equal(earlyBet.status, 400);
+    return response({ status: "success", content: { game: { url: "https://game.example/play" }, gameRes: { sessionId: session.sessionId } } });
+  };
+  try {
+    const opened = await api.openGregmornGame({
+      gameId: session.gameId, playerLogin: session.playerLogin, balance: 500, exitUrl: "https://winkox.example/player",
+    });
+    await wallet.registerGregmornSession(tx, { ...session, sessionId: opened.sessionId });
+    assert.equal((await httpCallback(write("registered-bet", 10, 0))).status, 200);
+    assert.equal(tx.rows.get(`users:${user._id}`).balance, 490);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
 });
 
 test("view-only demo sessions never read or change the real player wallet", async () => {

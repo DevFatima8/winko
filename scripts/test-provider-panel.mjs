@@ -221,6 +221,7 @@ test("provider unfinished-round rejection opens a view-only demo without player 
     assert.equal(opens[0].demo, undefined);
     assert.equal(opens[1].demo, true);
     assert.equal(opens[1].balance, 0);
+    assert.equal(opens[1].playerLogin, `demo.${player.displayId}`);
     assert.equal(sessions[0].demo, true);
   } finally {
     if (previousExit === undefined) delete process.env.GREGMORN_EXIT_URL;

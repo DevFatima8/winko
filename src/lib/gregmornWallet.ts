@@ -88,11 +88,37 @@ function requestHash(body: GregmornCallbackBody) {
   }));
 }
 
+async function playerWallet(tx: MultiplayerTransaction, userId: string) {
+  const account = await tx.get<UserDoc>("users", userId, true);
+  if (!account || account.role !== "client" || !account.isActive ||
+      !Number.isFinite(account.balance) || account.balance < 0) {
+    throw new GregmornWalletError("Player wallet is unavailable.");
+  }
+  await claimWinningsTransaction(tx, userId);
+  const user = await tx.get<UserDoc>("users", userId, true);
+  if (!user) throw new GregmornWalletError("Player wallet is unavailable.");
+  const currentCents = walletCents(user.balance);
+  if (!Number.isSafeInteger(currentCents)) throw new Error("Stored player balance is outside wallet limits.");
+  return { user, currentCents };
+}
+
 export async function processGregmornWalletCallback(tx: MultiplayerTransaction, body: GregmornCallbackBody) {
   if (!body.login || body.login.length > 64 || !body.sessionid || body.sessionid.length > 255) {
     throw new GregmornWalletError("Unknown Gregmorn player session.");
   }
   const session = await tx.get<GregmornSession>("gregmornsessions", sessionKey(body.sessionid));
+  // Signed getBalance can arrive inside openGame, before its session ID is returned.
+  if (!session && body.cmd === "getBalance") {
+    const demo = body.login.startsWith("demo.");
+    const displayId = demo ? body.login.slice(5) : body.login;
+    const accounts = await tx.findWhere<UserDoc>("users", { displayId, role: "client" }, 2);
+    if (accounts.length !== 1 || !accounts[0].isActive) {
+      throw new GregmornWalletError("Unknown or unavailable Gregmorn player.");
+    }
+    if (demo) return { balance: 0, currency: process.env.GREGMORN_CURRENCY ?? "PKR" };
+    const { currentCents } = await playerWallet(tx, accounts[0]._id);
+    return { balance: currentCents / 100, currency: process.env.GREGMORN_CURRENCY ?? "PKR" };
+  }
   if (!session || session.sessionId !== body.sessionid || session.playerLogin !== body.login) {
     throw new GregmornWalletError("Unknown Gregmorn player session.");
   }
@@ -100,13 +126,7 @@ export async function processGregmornWalletCallback(tx: MultiplayerTransaction, 
     if (body.cmd !== "getBalance") throw new GregmornWalletError("This is a view-only demo session.", 0);
     return { balance: 0, currency: session.currency };
   }
-  await claimWinningsTransaction(tx, session.userId);
-  const user = await tx.get<UserDoc>("users", session.userId, true);
-  if (!user || user.role !== "client" || !user.isActive || !Number.isFinite(user.balance) || user.balance < 0) {
-    throw new GregmornWalletError("Player wallet is unavailable.");
-  }
-  const currentCents = walletCents(user.balance);
-  if (!Number.isSafeInteger(currentCents)) throw new Error("Stored player balance is outside wallet limits.");
+  const { user, currentCents } = await playerWallet(tx, session.userId);
   if (body.cmd === "getBalance") {
     return { balance: currentCents / 100, currency: session.currency };
   }
