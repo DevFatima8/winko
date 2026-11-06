@@ -247,6 +247,7 @@ test("initial provider thumbnails load eagerly without changing the displayed ga
   const jsx = (type, props) => ({ type, props });
   const enabled = [];
   const component = load("src\\components\\lobby\\GregmornGames.tsx", {
+    "@/lib/providerCategories": load("src\\lib\\providerCategories.ts"),
     react: { useId: () => "title", useState: initial => [initial, () => {}], useEffect: () => {}, useRef: () => ({ current: null }) },
     "react/jsx-runtime": { jsx, jsxs: jsx },
     "next/navigation": { useRouter: () => ({}) },

@@ -116,6 +116,61 @@ test("stored player amounts are loaded when the game preset module initializes",
   assert.equal(api.activateBetPresets("player-a", [10, 25, 75, 100, 500]), false);
 });
 
+test("separate bet settings page retains existing amounts and saves without reloading or promising API support", async () => {
+  const { api, values } = createStore();
+  const state = [];
+  let index = 0;
+  const code = ts.transpileModule(readFileSync("src\\app\\player\\profile\\bet-amounts\\Client.tsx", "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  const loaded = { exports: {} };
+  new Function("require", "module", "exports", code)(name => {
+    if (name === "react/jsx-runtime") return jsxRuntime;
+    if (name === "next/link") return { default: "a" };
+    if (name === "@/lib/betPresets") return api;
+    if (name === "@/lib/useDb") return {};
+    assert.equal(name, "react");
+    return { useState: initial => {
+      const key = index++;
+      if (!(key in state)) state[key] = typeof initial === "function" ? initial() : initial;
+      return [state[key], value => { state[key] = typeof value === "function" ? value(state[key]) : value; }];
+    } };
+  }, loaded, loaded.exports);
+  const nodes = () => {
+    index = 0;
+    const result = [];
+    const visit = node => {
+      if (Array.isArray(node)) return node.forEach(visit);
+      if (!node || typeof node !== "object") return;
+      result.push(node);
+      visit(node.props?.children);
+    };
+    visit(loaded.exports.BetPresetSettings({ userId: "settings-player", initial: [10000, 20, 50, 100, 200] }));
+    return result;
+  };
+  const inputs = () => nodes().filter(node => node.type === "input");
+  assert.deepEqual(inputs().map(node => node.props.value), ["10000", "20", "50", "100", "200"]);
+  inputs()[0].props.onChange({ target: { value: "500" } });
+  const oldFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    assert.equal(url, "/api/player/bet-presets");
+    assert.deepEqual(JSON.parse(init.body).betPresets, [500, 20, 50, 100, 200]);
+    return new Response(JSON.stringify({ betPresets: [500, 20, 50, 100, 200] }));
+  };
+  try {
+    await nodes().find(node => node.type === "button").props.onClick();
+    assert.deepEqual(JSON.parse(values.get("wx:bet-presets:settings-player")), [500, 20, 50, 100, 200]);
+    assert.equal(nodes().find(node => node.props?.role === "status").props.children, "Bet amounts saved.");
+    assert.match(renderToStaticMarkup(loaded.exports.BetPresetSettings({ userId: "settings-player" })), /these settings do not change them/);
+    inputs()[0].props.onChange({ target: { value: "5" } });
+    assert.equal(nodes().find(node => node.type === "button").props.disabled, true);
+  } finally {
+    globalThis.fetch = oldFetch;
+  }
+  assert.match(readFileSync("src\\app\\player\\profile\\Client.tsx", "utf8"), /href: "\/player\/profile\/bet-amounts"/);
+  assert.doesNotMatch(readFileSync("src\\app\\player\\profile\\bet-amounts\\Client.tsx", "utf8"), /location\.reload|Used in every game/);
+});
+
 test("Rummy chips render default, saved and legacy amounts without missing labels or colors", () => {
   const path = "src\\components\\rummy\\RummyGame.tsx";
   const text = readFileSync(path, "utf8");

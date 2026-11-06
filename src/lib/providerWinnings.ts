@@ -12,6 +12,25 @@ export function pendingReferralCommission(user: Pick<UserDoc, "pendingReferralCo
   return Math.round(amount * 100) / 100;
 }
 
+export function summarizeReferralCommission(user: Pick<UserDoc, "pendingReferralCommission" | "pendingReferralCommissionByUnlock">, now: number) {
+  const total = pendingReferralCommission(user);
+  const remaining: Record<string, number> = {};
+  let trackedCents = 0, lockedCents = 0;
+  for (const [unlock, amount] of Object.entries(user.pendingReferralCommissionByUnlock ?? {})) {
+    if (!/^\d+$/.test(unlock) || !Number.isSafeInteger(Number(unlock)) || !Number.isFinite(amount) || amount < 0 || amount > Number.MAX_SAFE_INTEGER / 100) {
+      throw new Error("Invalid referral commission unlock bucket.");
+    }
+    const cents = Math.round(amount * 100);
+    trackedCents += cents;
+    if (Number(unlock) > now) {
+      lockedCents += cents;
+      remaining[unlock] = amount;
+    }
+  }
+  if (!Number.isSafeInteger(trackedCents) || trackedCents > Math.round(total * 100)) throw new Error("Referral commission buckets exceed pending amount.");
+  return { locked: lockedCents / 100, claimable: (Math.round(total * 100) - lockedCents) / 100, remaining };
+}
+
 export function summarizeWinHolds(rows: readonly WinHoldDoc[], now: number) {
   let locked = 0, claimable = 0;
   for (const row of rows) {
@@ -28,28 +47,37 @@ export function summarizeWinHolds(rows: readonly WinHoldDoc[], now: number) {
   return { locked: Math.round(locked * 100) / 100, claimable: Math.round(claimable * 100) / 100 };
 }
 
-export async function claimWinningsTransaction(tx: MultiplayerTransaction, userId: string) {
+export type ClaimKind = "winnings" | "referral";
+
+export async function claimWinningsTransaction(tx: MultiplayerTransaction, userId: string, kind: ClaimKind = "winnings") {
   const user = await tx.get<UserDoc>("users", userId, true);
   if (!user || !user.isActive || (user.role !== "client" && user.role !== "agent")) throw new Error("Active player account required.");
   if (!Number.isFinite(user.balance) || user.balance < 0 || user.balance > Number.MAX_SAFE_INTEGER / 100) throw new Error("Wallet balance is outside claim limits.");
   const now = await tx.now();
   const eligible: WinHoldDoc[] = [];
-  let after = "";
-  for (;;) {
-    const page = await tx.page<WinHoldDoc>("winholds", { userId }, after);
-    for (const row of page) {
-      if (!row.claimed && summarizeWinHolds([row], now).claimable > 0) eligible.push(row);
+  if (kind === "winnings") {
+    let after = "";
+    for (;;) {
+      const page = await tx.page<WinHoldDoc>("winholds", { userId }, after);
+      for (const row of page) {
+        if (!row.claimed) eligible.push(row);
+      }
+      if (page.length < 500) break;
+      after = String(page[page.length - 1]._id);
     }
-    if (page.length < 500) break;
-    after = String(page[page.length - 1]._id);
   }
-  const total = Math.round((summarizeWinHolds(eligible, now).claimable + pendingReferralCommission(user)) * 100) / 100;
+  const amounts = kind === "winnings" ? summarizeWinHolds(eligible, now) : { locked: 0, claimable: 0 };
+  const referral = kind === "referral" ? summarizeReferralCommission(user, now) : null;
+  const total = referral ? referral.claimable : Math.round((amounts.locked + amounts.claimable) * 100) / 100;
   if (!total) return { claimed: 0 };
   const balance = Number((user.balance + total).toFixed(6));
   if (!Number.isFinite(balance) || balance < 0 || balance > Number.MAX_SAFE_INTEGER / 100) throw new Error("Wallet balance is outside claim limits.");
   for (const row of eligible) {
     await tx.put("winholds", row._id, { ...row, claimed: true, claimedAt: new Date(now), updatedAt: new Date(now) });
   }
-  await tx.put("users", userId, { ...user, balance, pendingReferralCommission: 0, updatedAt: new Date(now) });
+  await tx.put("users", userId, {
+    ...user, balance, updatedAt: new Date(now),
+    ...(referral ? { pendingReferralCommission: referral.locked, pendingReferralCommissionByUnlock: referral.remaining } : {}),
+  });
   return { claimed: total };
 }

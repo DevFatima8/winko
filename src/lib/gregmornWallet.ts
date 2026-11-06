@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
-import type { GameDoc, GameResultDoc, UserDoc, WinHoldDoc } from "@/models";
+import type { GameDoc, GameResultDoc, UserDoc } from "@/models";
 import type { MultiplayerTransaction } from "./multiplayer-store";
 import { gregmornGameSlug } from "./gregmornIdentity";
-import { nextPakistanMidnight } from "./providerWinnings";
+import { claimWinningsTransaction } from "./providerWinnings";
 
 export type GregmornSession = {
   _id: string;
@@ -12,6 +12,7 @@ export type GregmornSession = {
   gameId: string;
   currency: string;
   catalogGameId?: string;
+  demo?: boolean;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -69,7 +70,8 @@ export async function registerGregmornSession(tx: MultiplayerTransaction, sessio
   const existing = await tx.get<GregmornSession>("gregmornsessions", id, true);
   if (existing) {
     if (existing.userId !== session.userId || existing.playerLogin !== session.playerLogin ||
-        existing.gameId !== session.gameId || existing.currency !== session.currency) {
+        existing.gameId !== session.gameId || existing.currency !== session.currency ||
+        Boolean(existing.demo) !== Boolean(session.demo)) {
       throw new GregmornWalletError("Gregmorn returned a session identity already in use.");
     }
     return;
@@ -94,6 +96,11 @@ export async function processGregmornWalletCallback(tx: MultiplayerTransaction, 
   if (!session || session.sessionId !== body.sessionid || session.playerLogin !== body.login) {
     throw new GregmornWalletError("Unknown Gregmorn player session.");
   }
+  if (session.demo) {
+    if (body.cmd !== "getBalance") throw new GregmornWalletError("This is a view-only demo session.", 0);
+    return { balance: 0, currency: session.currency };
+  }
+  await claimWinningsTransaction(tx, session.userId);
   const user = await tx.get<UserDoc>("users", session.userId, true);
   if (!user || user.role !== "client" || !user.isActive || !Number.isFinite(user.balance) || user.balance < 0) {
     throw new GregmornWalletError("Player wallet is unavailable.");
@@ -132,19 +139,11 @@ export async function processGregmornWalletCallback(tx: MultiplayerTransaction, 
       }
     }
     if (currentCents < betCents) throw new GregmornWalletError("insufficient funds", currentCents / 100);
-    const nextCents = currentCents - betCents;
+    const nextCents = currentCents - betCents + winCents;
     if (!Number.isSafeInteger(nextCents)) throw new GregmornWalletError("Transaction amount exceeds wallet limits.", currentCents / 100);
     user.balance = withRemainder(user.balance, currentCents, nextCents);
     await tx.put("users", session.userId, user);
     const now = new Date(await tx.now());
-    if (winCents > 0) {
-      await tx.insert<WinHoldDoc>("winholds", `gregmorn-${key}`, {
-        _id: `gregmorn-${key}`, userId: session.userId, amount: winCents / 100,
-        provider: "gregmorn", gameId: session.catalogGameId ?? gregmornGameSlug(session.gameId),
-        transactionId: body.transactionId, unlockAt: nextPakistanMidnight(now.getTime()),
-        claimed: false, claimedAt: null, createdAt: now, updatedAt: now,
-      });
-    }
     await tx.insert("gregmorntransactions", key, {
       _id: key, sessionId: body.sessionid, transactionId: body.transactionId,
       requestHash: fingerprint, betCents, winCents, rolledBack: false, createdAt: now, updatedAt: now,

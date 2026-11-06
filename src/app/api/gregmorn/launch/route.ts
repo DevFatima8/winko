@@ -47,12 +47,25 @@ export async function POST(request: Request) {
       exitUrl = target.toString();
     }
     stage = "provider_launch";
-    const session = await openGregmornGame({
-      gameId: body.gameId,
-      playerLogin: me.displayId,
-      balance: me.balance,
-      exitUrl,
-    });
+    let session: Awaited<ReturnType<typeof openGregmornGame>>;
+    try {
+      session = await openGregmornGame({
+        gameId: body.gameId,
+        playerLogin: me.displayId,
+        balance: me.balance,
+        exitUrl,
+      });
+    } catch (error) {
+      if (!(error instanceof GregmornLaunchError) || error.reason !== "session_in_progress") throw error;
+      console.info("[gregmorn launch] Opening a view-only demo after the provider reported an unfinished session.");
+      session = await openGregmornGame({
+        gameId: body.gameId,
+        playerLogin: me.displayId,
+        balance: 0,
+        exitUrl,
+        demo: true,
+      });
+    }
     stage = "session_registration";
     await mysqlMultiplayerStore.transact(gregmornCallbackRoom(session.sessionId), tx => registerGregmornSession(tx, {
       sessionId: session.sessionId,
@@ -61,6 +74,7 @@ export async function POST(request: Request) {
       gameId: session.gameId,
       currency: session.currency,
       catalogGameId: String(saved._id),
+      ...(session.demo ? { demo: true } : {}),
     }));
     return NextResponse.json({ url: session.url }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

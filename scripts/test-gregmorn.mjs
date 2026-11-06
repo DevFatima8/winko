@@ -57,7 +57,7 @@ test("catalog uses server credentials, form login, bearer auth and filters disab
     requests.push({ url: String(url), init });
     if (String(url).endsWith("/auth/login")) return response({ accessToken: token, user: { id: "merchant-123" } });
     return response([
-      { id: "provider:slot:a", isEnabled: true, title: "Fortune Gem", provider: "Jili", imageUrl: "https://cdn.example/game.jpg" },
+      { id: "provider:slot:a", isEnabled: true, title: "Fortune Gem", provider: "Jili", category: " slots ", imageUrl: "https://cdn.example/game.jpg" },
       { id: "provider:slot:b", isEnabled: false, title: "Disabled", provider: "Jili", imageUrl: "https://cdn.example/off.jpg" },
       { id: "provider:slot:c", isEnabled: true, title: "Unsafe image", provider: "Jili", imageUrl: "http://cdn.example/off.jpg" },
     ]);
@@ -66,6 +66,7 @@ test("catalog uses server credentials, form login, bearer auth and filters disab
     const games = await api.getGregmornCatalog();
     assert.equal(games.length, 1);
     assert.equal(games[0].id, "provider:slot:a");
+    assert.equal(games[0].category, "slots");
     assert.equal(requests.length, 2);
     assert.equal(requests[0].url, "https://office-api-dev.helcenac.com/auth/login");
     assert.equal(requests[0].init.headers["Content-Type"], "application/x-www-form-urlencoded");
@@ -101,7 +102,32 @@ test("game launch signs the exact raw payload and validates the provider respons
     assert.equal(payload.currency, "PKR");
     assert.equal(payload.user_id, "merchant-456");
     assert.equal(payload.player_login, "1234567");
+    assert.equal(payload.demo, "0");
     assert.equal(payload.callbackUrl, undefined);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("view-only demo launches sign the demo mode and never use the player's wallet balance", async () => {
+  configure();
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url: String(url), init });
+    if (String(url).endsWith("/auth/login")) return response({ accessToken: token, user: { id: "merchant-456" } });
+    return response({ status: "success", content: { game: { url: "https://client-api-dev.helcenac.com/game/demo" }, gameRes: { sessionId: "demo-session" } } });
+  };
+  try {
+    const opened = await api.openGregmornGame({
+      gameId: "provider:slot:one", playerLogin: "1234567", balance: 0,
+      exitUrl: "https://winkox.example/player", demo: true,
+    });
+    const payload = JSON.parse(requests[1].init.body);
+    assert.equal(payload.demo, "1");
+    assert.equal(payload.balance, 0);
+    assert.equal(opened.demo, true);
+    assert.equal(requests[1].init.headers["X-Signature"],
+      createHmac("sha256", secret).update(requests[1].init.body).digest("hex"));
   } finally {
     globalThis.fetch = previousFetch;
   }
@@ -135,6 +161,30 @@ test("launch failures classify provider rejection without exposing raw responses
     }
     globalThis.fetch = async () => new Response("<html>Unavailable</html>", { status: 502 });
     await assert.rejects(api.openGregmornGame(input), error => error.reason === "invalid_provider_response");
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("provider unfinished-round responses are classified for safe demo fallback", async () => {
+  configure();
+  const input = { gameId: "provider:slot:one", playerLogin: "1234567", balance: 500, exitUrl: "https://winkox.example/player" };
+  try {
+    for (const message of [
+      "An active session is already running",
+      "previous_round_not_finished",
+      "round is not completed",
+    ]) {
+      globalThis.fetch = async url => String(url).endsWith("/auth/login")
+        ? response({ accessToken: token, user: { id: "merchant-456" } })
+        : response({ status: "fail", message }, 409);
+      await assert.rejects(api.openGregmornGame(input), error =>
+        error instanceof api.GregmornLaunchError && error.reason === "session_in_progress");
+    }
+    globalThis.fetch = async url => String(url).endsWith("/auth/login")
+      ? response({ accessToken: token, user: { id: "merchant-456" } })
+      : response({ status: "fail", message: "Currency not enabled" }, 409);
+    await assert.rejects(api.openGregmornGame(input), error => error.reason === "currency_rejected");
   } finally {
     globalThis.fetch = previousFetch;
   }
@@ -200,16 +250,14 @@ test("seamless callbacks map sessions and apply exact, replay-safe wallet mutati
   assert.equal([...tx.rows.keys()].filter(key => key.startsWith("gameresults:")).length, 1, "replays do not duplicate history");
 
   const payout = await wallet.processGregmornWalletCallback(tx, write("win-1", 0, 10, session.gameId));
-  assert.equal(payout.balance, 475);
+  assert.equal(payout.balance, 485);
   const refunded = await wallet.processGregmornWalletCallback(tx, rollback("bet-1", 25));
-  assert.equal(refunded.balance, 500);
+  assert.equal(refunded.balance, 510);
   const refundReplay = await wallet.processGregmornWalletCallback(tx, rollback("bet-1", 25));
-  assert.equal(refundReplay.balance, 500);
-  assert.equal(tx.rows.get(`users:${user._id}`).balance, 500);
+  assert.equal(refundReplay.balance, 510);
+  assert.equal(tx.rows.get(`users:${user._id}`).balance, 510);
   const holds = [...tx.rows.entries()].filter(([key]) => key.startsWith("winholds:")).map(([, value]) => value);
-  assert.equal(holds.length, 1);
-  assert.equal(holds[0].amount, 10);
-  assert.equal(holds[0].claimed, false);
+  assert.equal(holds.length, 0);
   const results = [...tx.rows.entries()].filter(([key]) => key.startsWith("gameresults:")).map(([, value]) => value);
   assert.equal(results.length, 2);
   assert.equal(results.reduce((sum, result) => sum + result.betAmount, 0), 0, "rolled-back bets do not inflate wagering reports");
@@ -226,12 +274,12 @@ test("provider restrictions stop new bets but allow payouts, replays and refunds
   tx.rows.get(`games:${catalogGameId}`).isActive = false;
   await assert.rejects(wallet.processGregmornWalletCallback(tx, write("disabled", 10, 0)), /restricted/);
   assert.equal((await wallet.processGregmornWalletCallback(tx, write("accepted", 20, 0))).balance, 480);
-  assert.equal((await wallet.processGregmornWalletCallback(tx, write("payout", 0, 5))).balance, 480);
-  assert.equal((await wallet.processGregmornWalletCallback(tx, rollback("accepted", 20))).balance, 500);
+  assert.equal((await wallet.processGregmornWalletCallback(tx, write("payout", 0, 5))).balance, 485);
+  assert.equal((await wallet.processGregmornWalletCallback(tx, rollback("accepted", 20))).balance, 505);
   tx.rows.get(`games:${catalogGameId}`).isActive = true;
   tx.rows.get(`users:${user._id}`).blockedGames = [slug];
   await assert.rejects(wallet.processGregmornWalletCallback(tx, write("player-blocked", 10, 0)), /restricted/);
-  assert.equal(tx.rows.get(`users:${user._id}`).balance, 500);
+  assert.equal(tx.rows.get(`users:${user._id}`).balance, 505);
 });
 
 test("seamless callbacks reject forged sessions, insufficient funds, malformed amounts and mismatched rollback", async () => {
@@ -248,6 +296,23 @@ test("seamless callbacks reject forged sessions, insufficient funds, malformed a
   assert.equal(tx.rows.get(`users:${user._id}`).balance, 480);
 });
 
+test("view-only demo sessions never read or change the real player wallet", async () => {
+  const tx = transaction({ [`users:${user._id}`]: user });
+  await wallet.registerGregmornSession(tx, session);
+  await assert.rejects(wallet.registerGregmornSession(tx, { ...session, demo: true }), /identity already in use/);
+  const demoSession = { ...session, sessionId: "provider-demo-session", demo: true };
+  await wallet.registerGregmornSession(tx, demoSession);
+  assert.deepEqual(await wallet.processGregmornWalletCallback(tx, callback("getBalance", { sessionid: demoSession.sessionId })), {
+    balance: 0, currency: "PKR",
+  });
+  await assert.rejects(wallet.processGregmornWalletCallback(tx, callback("writeBet", {
+    sessionid: demoSession.sessionId, transactionId: "demo-bet", bet: 10, win: 0, round_finished: false, info: "",
+  })), /view-only demo/);
+  assert.equal(tx.rows.get(`users:${user._id}`).balance, 500);
+  assert.equal([...tx.rows.keys()].some(key => key.startsWith("gregmorntransactions:")), false);
+  assert.equal([...tx.rows.keys()].some(key => key.startsWith("gameresults:")), false);
+});
+
 test("panel balances with float noise or sub-paisa remainders stay usable in every provider game", async () => {
   const noisy = { ...user, balance: 0.8599999940488487 };
   const tx = transaction({ [`users:${noisy._id}`]: noisy });
@@ -259,71 +324,37 @@ test("panel balances with float noise or sub-paisa remainders stay usable in eve
   const remainder = transaction({ [`users:${user._id}`]: { ...user, balance: 12.345 } });
   await wallet.registerGregmornSession(remainder, session);
   assert.equal((await wallet.processGregmornWalletCallback(remainder, callback("getBalance"))).balance, 12.34);
-  assert.equal((await wallet.processGregmornWalletCallback(remainder, write("rem-bet", 2, 1))).balance, 10.34);
-  assert.equal(remainder.rows.get(`users:${user._id}`).balance, 10.345, "sub-paisa remainder is kept on the panel balance");
+  assert.equal((await wallet.processGregmornWalletCallback(remainder, write("rem-bet", 2, 1))).balance, 11.34);
+  assert.equal(remainder.rows.get(`users:${user._id}`).balance, 11.345, "sub-paisa remainder is kept on the panel balance");
   const rejected = await wallet.processGregmornWalletCallback(remainder, write("rem-too-large", 12, 0)).catch(error => error);
   assert.match(rejected.message, /insufficient funds/);
-  assert.equal(rejected.balance, 10.34, "failed callbacks report the real panel balance");
+  assert.equal(rejected.balance, 11.34, "failed callbacks report the real panel balance");
 });
 
-test("full provider payouts stay locked until exactly next PKT midnight; claims exclude today's wins and cannot replay", async () => {
-  const tx = transaction({ [`users:${user._id}`]: { ...user, balance: 1000, commissionEarned: 123 } });
-  let now = Date.parse("2026-11-01T18:59:59.999Z");
-  tx.now = async () => now;
-  await wallet.registerGregmornSession(tx, session);
-  const body = write("first-win", 100, 150);
-  assert.equal((await wallet.processGregmornWalletCallback(tx, body)).balance, 900);
-  assert.equal((await wallet.processGregmornWalletCallback(tx, body)).balance, 900);
-  let holds = [...tx.rows.entries()].filter(([key]) => key.startsWith("winholds:")).map(([, value]) => value);
-  assert.equal(holds.length, 1);
-  assert.equal(new Date(holds[0].unlockAt).toISOString(), "2026-11-01T19:00:00.000Z");
-  assert.deepEqual(winnings.summarizeWinHolds(holds, now), { locked: 150, claimable: 0 });
-  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 0 });
-  now++;
-  assert.deepEqual(winnings.summarizeWinHolds(holds, now), { locked: 0, claimable: 150 });
-  await wallet.processGregmornWalletCallback(tx, write("today-win", 50, 70));
-  holds = [...tx.rows.entries()].filter(([key]) => key.startsWith("winholds:")).map(([, value]) => value);
-  assert.deepEqual(winnings.summarizeWinHolds(holds, now), { locked: 70, claimable: 150 });
-  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 150 });
-  assert.equal(tx.rows.get(`users:${user._id}`).balance, 1000);
-  assert.equal(tx.rows.get(`users:${user._id}`).commissionEarned, 123);
-  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 0 });
-  assert.equal((await wallet.processGregmornWalletCallback(tx, body)).balance, 1000);
-  now = Date.parse("2026-11-10T10:00:00Z");
-  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 70 });
-  assert.equal(tx.rows.get(`users:${user._id}`).balance, 1070);
+test("provider payouts credit immediately with no holds, midnight delay or replay credit", async () => {
+ const tx=transaction({[`users:${user._id}`]:{...user,balance:1000,pendingReferralCommission:30}});
+ await wallet.registerGregmornSession(tx,session);
+ const body=write("instant-win",100,150);
+ assert.equal((await wallet.processGregmornWalletCallback(tx,body)).balance,1050);
+ assert.equal((await wallet.processGregmornWalletCallback(tx,body)).balance,1050);
+ assert.equal((await wallet.processGregmornWalletCallback(tx,callback("getBalance"))).balance,1050);
+ assert.equal([...tx.rows.keys()].filter(k=>k.startsWith("winholds:")).length,0);
+ assert.equal(tx.rows.get(`users:${user._id}`).pendingReferralCommission,30);
 });
 
-test("game credit excludes a Rs15 payout before and after midnight until the player claims it", async () => {
-  const tx = transaction({ [`users:${user._id}`]: { ...user, balance: 25 } });
-  let now = Date.parse("2026-11-01T14:55:29.787Z");
-  tx.now = async () => now;
-  await wallet.registerGregmornSession(tx, session);
-  assert.equal((await wallet.processGregmornWalletCallback(tx, write("stake-20", 20, 0))).balance, 5);
-  const payout = write("payout-15", 0, 15);
-  assert.equal((await wallet.processGregmornWalletCallback(tx, payout)).balance, 5);
-  const holds = [...tx.rows.entries()].filter(([key]) => key.startsWith("winholds:")).map(([, row]) => row);
-  assert.deepEqual(winnings.summarizeWinHolds(holds, now), { locked: 15, claimable: 0 });
-  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 0 });
-  assert.deepEqual(await wallet.processGregmornWalletCallback(tx, callback("getBalance")), { balance: 5, currency: "PKR" });
-
-  now = Date.parse("2026-11-01T19:00:00.000Z");
-  assert.deepEqual(winnings.summarizeWinHolds(holds, now), { locked: 0, claimable: 15 });
-  assert.equal((await wallet.processGregmornWalletCallback(tx, callback("getBalance"))).balance, 5);
-  assert.equal((await wallet.processGregmornWalletCallback(tx, payout)).balance, 5);
-  await assert.rejects(wallet.processGregmornWalletCallback(tx, write("unclaimed-stake", 6, 0)), error => {
-    assert.match(error.message, /insufficient funds/);
-    assert.equal(error.balance, 5);
-    return true;
-  });
-  await wallet.registerGregmornSession(tx, { ...session, sessionId: "reopened-session" });
-  const reopenedBalance = callback("getBalance", { sessionid: "reopened-session" });
-  assert.equal((await wallet.processGregmornWalletCallback(tx, reopenedBalance)).balance, 5);
-  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 15 });
-  assert.equal((await wallet.processGregmornWalletCallback(tx, callback("getBalance"))).balance, 20);
-  assert.equal((await wallet.processGregmornWalletCallback(tx, reopenedBalance)).balance, 20);
-  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 0 });
-  assert.equal((await wallet.processGregmornWalletCallback(tx, write("claimed-stake", 6, 0))).balance, 14);
+test("old locked and eligible payouts release once on wallet callbacks, leaving claimed holds and referral untouched", async () => {
+ const tx=transaction({[`users:${user._id}`]:{...user,balance:25,pendingReferralCommission:7.5}});
+ await wallet.registerGregmornSession(tx,session);
+ for(const [id,amount,claimed,unlockAt] of [["locked",15,false,new Date(Date.now()+86400000)],["eligible",20,false,new Date(0)],["paid",50,true,new Date(0)]]) {
+ await tx.insert("winholds",id,{_id:id,userId:user._id,provider:"gregmorn",amount,claimed,unlockAt});
+ }
+ assert.equal((await wallet.processGregmornWalletCallback(tx,callback("getBalance"))).balance,60);
+ assert.equal((await wallet.processGregmornWalletCallback(tx,callback("getBalance"))).balance,60);
+ assert.equal(tx.rows.get("winholds:locked").claimed,true);
+ assert.equal(tx.rows.get("winholds:eligible").claimed,true);
+ assert.equal(tx.rows.get(`users:${user._id}`).pendingReferralCommission,7.5);
+ assert.equal((await wallet.processGregmornWalletCallback(tx,write("new-win",20,15))).balance,55);
+ assert.equal((await wallet.processGregmornWalletCallback(tx,write("new-win",20,15))).balance,55);
 });
 
 test("legacy holds remain immediately eligible and claims include more than 500 winning records", async () => {
@@ -360,32 +391,89 @@ test("claims reject invalid wallets without consuming winnings, and transaction 
   assert.equal(committed.rows.get(`users:${user._id}`).balance, 650);
 });
 
-test("referral commission claims immediately without unlocking today's winnings or resetting lifetime commission", async () => {
+test("legacy pending referral claims remain eligible without resetting lifetime commission", async () => {
   const tx = transaction({ [`users:${user._id}`]: { ...user, balance: 900, commissionEarned: 120, pendingReferralCommission: 30 } });
   const now = Date.parse("2026-11-01T12:00:00Z");
   tx.now = async () => now;
   await tx.insert("winholds", "today", { _id: "today", userId: user._id, amount: 150, provider: "gregmorn", unlockAt: winnings.nextPakistanMidnight(now), claimed: false });
-  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 30 });
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id, "referral"), { claimed: 30 });
   assert.equal(tx.rows.get(`users:${user._id}`).balance, 930);
   assert.equal(tx.rows.get(`users:${user._id}`).commissionEarned, 120);
   assert.equal(tx.rows.get(`users:${user._id}`).pendingReferralCommission, 0);
   assert.equal(tx.rows.get("winholds:today").claimed, false);
-  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 0 });
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id, "referral"), { claimed: 0 });
   await tx.put("users", user._id, { ...tx.rows.get(`users:${user._id}`), pendingReferralCommission: 15 });
   tx.now = async () => now + 86400000;
-  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 165 });
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id), { claimed: 150 });
+  assert.equal(tx.rows.get(`users:${user._id}`).pendingReferralCommission, 15, "winning claims leave referral commission untouched");
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id, "referral"), { claimed: 15 });
   assert.equal(tx.rows.get(`users:${user._id}`).balance, 1095);
+});
+
+test("new referral commission unlocks exactly at next PKT midnight; later claims keep today's commission locked", async () => {
+  let now = Date.parse("2026-11-05T18:59:59.999Z");
+  const firstUnlock = winnings.nextPakistanMidnight(now).getTime();
+  assert.equal(firstUnlock, Date.parse("2026-11-05T19:00:00Z"));
+  const tx = transaction({ [`users:${user._id}`]: {
+    ...user, balance: 100, pendingReferralCommission: 15,
+    pendingReferralCommissionByUnlock: { [firstUnlock]: 15 }, commissionEarned: 15,
+  } });
+  tx.now = async () => now;
+  assert.equal(winnings.summarizeReferralCommission(tx.rows.get(`users:${user._id}`), now).locked, 15);
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id, "referral"), { claimed: 0 });
+  assert.equal(tx.rows.get(`users:${user._id}`).balance, 100);
+  now++;
+  assert.equal(winnings.summarizeReferralCommission(tx.rows.get(`users:${user._id}`), now).claimable, 15);
+  const secondUnlock = winnings.nextPakistanMidnight(now).getTime();
+  await tx.put("users", user._id, {
+    ...tx.rows.get(`users:${user._id}`), pendingReferralCommission: 22.5,
+    pendingReferralCommissionByUnlock: { [firstUnlock]: 15, [secondUnlock]: 7.5 }, commissionEarned: 22.5,
+  });
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id, "referral"), { claimed: 15 });
+  assert.equal(tx.rows.get(`users:${user._id}`).balance, 115);
+  assert.equal(tx.rows.get(`users:${user._id}`).pendingReferralCommission, 7.5);
+  assert.deepEqual(tx.rows.get(`users:${user._id}`).pendingReferralCommissionByUnlock, { [secondUnlock]: 7.5 });
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id, "referral"), { claimed: 0 });
+  now = Date.parse("2026-11-12T08:30:00Z");
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id, "referral"), { claimed: 7.5 });
+  assert.equal(tx.rows.get(`users:${user._id}`).balance, 122.5);
+  assert.equal(tx.rows.get(`users:${user._id}`).commissionEarned, 22.5);
+  assert.deepEqual(tx.rows.get(`users:${user._id}`).pendingReferralCommissionByUnlock, {});
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id, "referral"), { claimed: 0 });
+});
+
+test("legacy pending plus new locked commission claims only the legacy portion and malformed buckets fail closed", async () => {
+  const future = Date.now() + 86400000;
+  const tx = transaction({ [`users:${user._id}`]: {
+    ...user, pendingReferralCommission: 35, pendingReferralCommissionByUnlock: { [future]: 15 },
+  } });
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id, "referral"), { claimed: 20 });
+  assert.equal(tx.rows.get(`users:${user._id}`).pendingReferralCommission, 15);
+  for (const buckets of [{ invalid: 15 }, { [future]: -1 }, { [future]: 40 }, { [future]: "15" }]) {
+    assert.throws(() => winnings.summarizeReferralCommission({ pendingReferralCommission: 15, pendingReferralCommissionByUnlock: buckets }, Date.now()), /referral commission|Referral commission/);
+  }
 });
 
 test("old credited commission is not claimed again and malformed pending commission cannot credit a wallet", async () => {
   const old = transaction({ [`users:${user._id}`]: { ...user, commissionEarned: 10000 } });
-  assert.deepEqual(await winnings.claimWinningsTransaction(old, user._id), { claimed: 0 });
+  assert.deepEqual(await winnings.claimWinningsTransaction(old, user._id, "referral"), { claimed: 0 });
   assert.equal(old.rows.get(`users:${user._id}`).balance, user.balance);
   for (const amount of [-1, NaN, Infinity, "30"]) {
     const tx = transaction({ [`users:${user._id}`]: { ...user, pendingReferralCommission: amount } });
-    await assert.rejects(winnings.claimWinningsTransaction(tx, user._id), /Invalid pending referral commission/);
+    await assert.rejects(winnings.claimWinningsTransaction(tx, user._id, "referral"), /Invalid pending referral commission/);
     assert.equal(tx.rows.get(`users:${user._id}`).balance, user.balance);
   }
+});
+
+test("referral Claim never consumes eligible winnings and rejects replay without changing the wallet", async () => {
+  const tx = transaction({ [`users:${user._id}`]: { ...user, balance: 100, pendingReferralCommission: 7.5 } });
+  await tx.insert("winholds", "eligible", { _id: "eligible", userId: user._id, amount: 15, provider: "gregmorn", unlockAt: new Date(0), claimed: false });
+  tx.page = async () => { throw new Error("Referral claims must not read winning holds"); };
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id, "referral"), { claimed: 7.5 });
+  assert.equal(tx.rows.get("winholds:eligible").claimed, false);
+  assert.equal(tx.rows.get(`users:${user._id}`).balance, 107.5);
+  assert.deepEqual(await winnings.claimWinningsTransaction(tx, user._id, "referral"), { claimed: 0 });
+  assert.equal(tx.rows.get(`users:${user._id}`).balance, 107.5);
 });
 
 test.after(() => {

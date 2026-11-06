@@ -18,6 +18,12 @@ test("every mapped image exists; exact titles and aliases match without replacin
   }
   assert.equal(artwork.providerArtwork("Aviator Bonus 999", "remote"), "remote");
   assert.equal(artwork.providerArtwork("Unknown API Game", "remote"), "remote");
+  assert.equal(artwork.providerArtwork("Top Card Trumps (Casino War)", "remote"), images.GAME_IMAGES["casino-war"]);
+  assert.equal(artwork.providerArtwork("e-Horse Racing", "remote"), images.GAME_IMAGES["derby-race"]);
+  assert.equal(artwork.providerArtwork("Aviator", "/games/already-assigned.jpg"), "/games/already-assigned.jpg");
+  for (const title of ["Chicken Dash 10000", "Lucky 7777", "Speed Super Sic Bo", "Teen Patti 20-20", "Gates of Olympus 1000", "Sweet Bonanza 1000"]) {
+    assert.equal(artwork.providerArtwork(title, "remote"), "remote", title);
+  }
 });
 
 test("tab-local return cache handles full catalogues above 2MB, survives a remount, and clears on account changes", async () => {

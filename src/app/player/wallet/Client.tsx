@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowLeft, RefreshCw, Headset, History } from "lucide-react";
 import { DepositFlow } from "@/components/DepositFlow";
 import { WithdrawRequest } from "@/components/WithdrawRequest";
+import { ReferralCommissionCard } from "@/components/ReferralCommissionCard";
 import { useI18n } from "@/lib/i18n/client";
 import { getCurrentUser } from "@/lib/auth";
 import { usePage } from "@/lib/useDb";
@@ -50,8 +51,9 @@ export default function WalletPageClient({ mode = "deposit", params, searchParam
     if (!response.ok) throw new Error(data.error ?? "Wallet data load nahi ho saka.");
     const { me, accounts, limits, minDeposit, withdrawalAccounts } = data;
     if (mode === "withdraw") return (
-      <div className="mx-auto w-full max-w-2xl pb-6">
-        <WithdrawRequest balance={me.balance} hasPin={me.hasPin} limits={limits} initialAccounts={withdrawalAccounts} />
+      <div className="mx-auto w-full max-w-2xl space-y-4 pb-6">
+        <WithdrawRequest key={me.balance} balance={me.balance} hasPin={me.hasPin} limits={limits} initialAccounts={withdrawalAccounts} />
+        <ReferralCommissionCard initial={data.holds.referralClaimable} locked={data.holds.referralLocked} earned={me.commissionEarned} />
       </div>
     );
     return (

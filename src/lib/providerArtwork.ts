@@ -15,9 +15,12 @@ const aliases: Record<string, string> = {
   "ludo quick": "ludo", "race 20-20": "race-betting", "super fruits slot": "super-fruits",
   "teen patti best of four": "teen-patti-best-of-four", "tower": "tower-betting",
   "treasure bowl x-huge": "treasure-bowl", "wheel": "wheel-betting", "win three cards": "three-cards",
+  "top card trumps (casino war)": "casino-war",
+  "e-horse racing": "derby-race",
 };
 for (const [title, slug] of Object.entries(aliases)) artwork.set(normalize(title), GAME_IMAGES[slug]);
 
 export function providerArtwork(title: string, fallback: string) {
+  if (fallback.startsWith("/")) return fallback;
   return artwork.get(normalize(title)) ?? fallback;
 }

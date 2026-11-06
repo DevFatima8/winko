@@ -144,6 +144,7 @@ test("provider game departure and full page remount restore search, provider, lo
   };
   function panel(runtime) {
     return load("src\\components\\lobby\\GregmornGames.tsx", {
+      "@/lib/providerCategories": load("src\\lib\\providerCategories.ts"),
       react: runtime.react,
       "react/jsx-runtime": { jsx, jsxs: jsx },
       "next/navigation": { useRouter: () => ({ push: () => {} }) },

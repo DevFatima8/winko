@@ -51,13 +51,33 @@ export async function claimWinHoldsAction(_: ActionState, _form: FormData): Prom
     ({ claimed } = await claimWinHolds(me.id));
   } catch (error) {
     console.error("[Claim winnings]", error);
-    return { error: "Winnings ya referral commission claim nahi ho sakin. Dobara try karein." };
+    return { error: "Winnings claim nahi ho sakin. Dobara try karein." };
   }
   if (claimed <= 0) return { error: "Abhi koi claimable amount nahi hai." };
   revalidatePath("/player/wallet");
   revalidatePath("/player/profile");
+  revalidatePath("/player/profile/winnings");
   revalidatePath("/player/team");
   return { success: `Rs. ${claimed.toLocaleString()} wallet mein claim ho gaya.` };
+}
+
+export async function claimReferralCommissionAction(_: ActionState, _form: FormData): Promise<ActionState> {
+  const me = await getServerSessionUser();
+  if (!me || me.role !== "client" || !me.isActive) return { error: "Active player login required." };
+  const { claimWinHolds } = await import("./winHold");
+  let claimed: number;
+  try {
+    ({ claimed } = await claimWinHolds(me.id, "referral"));
+  } catch (error) {
+    console.error("[Claim referral commission]", error);
+    return { error: "Referral commission claim nahi ho saki. Dobara try karein." };
+  }
+  if (claimed <= 0) return { error: "Abhi koi claimable referral commission nahi hai." };
+  revalidatePath("/player/withdraw");
+  revalidatePath("/player/wallet");
+  revalidatePath("/player/profile");
+  revalidatePath("/player/team");
+  return { success: `Commission claimed. Rs. ${claimed.toLocaleString()} balance mein add ho gaye.` };
 }
 
 // ---------- SUPPORT (user side, server actions) ----------

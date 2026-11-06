@@ -6,6 +6,7 @@ export type GregmornGame = {
   title: string;
   imageUrl: string;
   provider: string;
+  category?: string;
 };
 
 type GregmornAuth = {
@@ -143,7 +144,10 @@ export async function getGregmornCatalog(currency = process.env.GREGMORN_CURRENC
     let imageUrl: URL;
     try { imageUrl = new URL(game.imageUrl); } catch { return []; }
     if (imageUrl.protocol !== "https:") return [];
-    return [{ id: game.id, isEnabled: true, title: game.title, provider: game.provider, imageUrl: imageUrl.toString() }];
+    return [{
+      id: game.id, isEnabled: true, title: game.title, provider: game.provider, imageUrl: imageUrl.toString(),
+      ...(typeof game.category === "string" && game.category.trim() ? { category: game.category.trim() } : {}),
+    }];
   });
 }
 
@@ -152,6 +156,7 @@ export async function openGregmornGame(input: {
   playerLogin: string;
   balance: number;
   exitUrl: string;
+  demo?: boolean;
 }) {
   if (!input.gameId || input.gameId.length > 255) throw new Error("Invalid Gregmorn game identity.");
   if (!/^[a-zA-Z0-9_.-]{1,64}$/.test(input.playerLogin)) throw new Error("Invalid Gregmorn player login.");
@@ -165,7 +170,7 @@ export async function openGregmornGame(input: {
   const auth = await getAuth();
   const payload = {
     currency,
-    demo: "0" as const,
+    demo: input.demo ? "1" : "0",
     exitUrl: exitUrl.toString(),
     gameId: input.gameId,
     language: process.env.GREGMORN_LANGUAGE ?? "en",
@@ -211,14 +216,16 @@ export async function openGregmornGame(input: {
   const sessionId = data.content?.gameRes?.sessionId;
   if (!response.ok || data.status !== "success" || typeof gameUrl !== "string" ||
       typeof sessionId !== "string" || !sessionId) {
-    const detail = `${typeof data.error === "string" ? data.error : ""} ${typeof data.message === "string" ? data.message : ""}`.toLowerCase();
-    const reason = /signature|hmac/.test(detail) ? "signature_rejected"
-      : /网络异常|vendor open game/.test(detail) ? "game_vendor_unavailable"
-      : /callback|wallet/.test(detail) ? "wallet_callback_rejected"
-      : /currency/.test(detail) ? "currency_rejected"
-      : /\bip\b|whitelist|allowlist/.test(detail) ? "ip_rejected"
-      : /balance|fund|credit/.test(detail) ? "balance_rejected"
-      : /unauthori[sz]ed|user_id|merchant/.test(detail) ? "account_rejected"
+    const rawDetail = `${typeof data.error === "string" ? data.error : ""} ${typeof data.message === "string" ? data.message : ""}`.toLowerCase();
+    const detail = rawDetail.replace(/[_-]+/g, " ");
+    const reason = /\b(?:active|unfinished|uncompleted|pending|open|ongoing)\s+(?:game\s+)?(?:session|round)\b|\b(?:session|round)\s+(?:is\s+)?(?:active|unfinished|uncompleted|pending|open|ongoing|already\s+(?:open|running|ongoing))\b|\bround\s+(?:is\s+)?not\s+(?:complete|completed|finished|closed)\b|\bprevious\s+(?:game|round|session)\b.{0,40}\b(?:active|open|unfinished|pending|finish|complete|close|not\s+(?:finished|complete|completed|closed))\b/.test(detail) ? "session_in_progress"
+      : /signature|hmac/.test(rawDetail) ? "signature_rejected"
+      : /网络异常|vendor open game/.test(rawDetail) ? "game_vendor_unavailable"
+      : /callback|wallet/.test(rawDetail) ? "wallet_callback_rejected"
+      : /currency/.test(rawDetail) ? "currency_rejected"
+      : /\bip\b|whitelist|allowlist/.test(rawDetail) ? "ip_rejected"
+      : /balance|fund|credit/.test(rawDetail) ? "balance_rejected"
+      : /unauthori[sz]ed|user_id|merchant/.test(rawDetail) ? "account_rejected"
       : "provider_rejected";
     throw new GregmornLaunchError(reason, response.status, typeof data.code === "number" ? data.code : undefined);
   }
@@ -227,7 +234,7 @@ export async function openGregmornGame(input: {
   if (parsedUrl.protocol !== "https:" || parsedUrl.username || parsedUrl.password) {
     throw new Error("Gregmorn returned an unsafe game URL.");
   }
-  return { url: parsedUrl.toString(), sessionId, gameId: input.gameId, playerLogin: input.playerLogin, currency };
+  return { url: parsedUrl.toString(), sessionId, gameId: input.gameId, playerLogin: input.playerLogin, currency, demo: input.demo === true };
 }
 
 function validateCallbackUrl(value: string) {

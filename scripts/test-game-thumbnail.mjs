@@ -63,3 +63,13 @@ test("failed images show an explicit message instead of an endless loader", () =
     assert.equal(loader.props.children[1].props.children, "Image unavailable");
   }
 });
+
+test("provider artwork frames preserve the central square without blurred side padding or hover cropping", () => {
+  const source = readFileSync("src\\components\\lobby\\GregmornGames.tsx", "utf8");
+  assert.match(source, /relative block aspect-square overflow-hidden/);
+  assert.match(source, /startsWith\("\/games\/"\) \? "object-cover object-center" : "object-contain"/);
+  assert.doesNotMatch(source, /group-hover:scale/);
+  const image = harness()("/games/21_Fortune_Ox_1024x700.jpg")[0];
+  const squareSide = image.props.height;
+  assert.equal((image.props.width - squareSide) / 2, 162, "square cover removes exactly the 162px side padding");
+});

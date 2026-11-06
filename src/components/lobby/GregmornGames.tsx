@@ -9,6 +9,7 @@ import { GameGridSkeleton } from "./GameGridSkeleton";
 import { HotSlider } from "./HotSlider";
 import { useProviderCatalog, type ProviderCatalogState } from "@/lib/useProviderCatalog";
 import { readProviderGameReturn, rememberGameReturn, useGameReturnScroll } from "@/lib/gameNavigation";
+import { matchesProviderCategory } from "@/lib/providerCategories";
 
 export function GregmornGames({ category = "All", lobby = false, catalog }: { category?: string; lobby?: boolean; catalog?: ProviderCatalogState }) {
   const ownCatalog = useProviderCatalog(catalog === undefined);
@@ -73,7 +74,7 @@ export function GregmornGames({ category = "All", lobby = false, catalog }: { ca
 
   const providers = [...new Set(games.map(game => game.provider))].sort();
   const filtered = games.filter(game =>
-    (category !== "Hot" || game.isHot) &&
+    matchesProviderCategory(game, category) &&
     (!provider || game.provider === provider) &&
     (!search.trim() || `${game.title} ${game.provider}`.toLowerCase().includes(search.trim().toLowerCase())));
   const ordered = lobby ? [...filtered.filter(game => game.isHot), ...filtered.filter(game => !game.isHot)] : filtered;
@@ -81,8 +82,8 @@ export function GregmornGames({ category = "All", lobby = false, catalog }: { ca
   const cards = visible.map((game, index) => (
     <button key={game.id} type="button" onClick={() => void launch(game)} disabled={launching !== null}
       className="group block w-full min-w-0 overflow-hidden rounded-xl border border-[#3a2470] bg-[#1b1038] text-left transition hover:border-[#8b5cf6] disabled:cursor-wait disabled:opacity-70">
-      <span className="relative block aspect-[1.2] overflow-hidden bg-[#100a21]">
-        <GameThumbnail src={game.imageUrl} alt={game.title} loading={index < 6 ? "eager" : "lazy"} className="h-full w-full object-cover transition group-hover:scale-105" />
+      <span className="relative block aspect-square overflow-hidden bg-[#100a21]">
+        <GameThumbnail src={game.imageUrl} alt={game.title} loading={index < 6 ? "eager" : "lazy"} className={`h-full w-full ${game.imageUrl.startsWith("/games/") ? "object-cover object-center" : "object-contain"}`} />
         {game.isHot && <span className="absolute left-1 top-1 rounded bg-orange-600 px-2 py-1 text-[10px] font-black text-white">HOT</span>}
         {launching === game.id && <span className="absolute inset-0 flex items-center justify-center bg-black/70 text-xs font-bold text-white" role="status">Opening…</span>}
       </span>
@@ -112,7 +113,6 @@ export function GregmornGames({ category = "All", lobby = false, catalog }: { ca
         </div>
       {error && <p className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-3 text-xs text-amber-100" role="status">{error}</p>}
       {loading && <GameGridSkeleton />}
-      {category !== "All" && category !== "Hot" && <p className="text-xs text-[#b8a7e6]" role="status">Category assignments are not available in the provider catalogue yet. Showing all enabled provider games; use search or the provider filter to narrow the list.</p>}
       {!loading && !error && filtered.length === 0 && <p className="text-sm text-[#b8a7e6]">No provider games match this selection.</p>}
       {visible.length > 0 && (lobby ? (
         <HotSlider key={`${search}\u0000${provider}`} hot={cards.slice(0, hotCount)} rest={cards.slice(hotCount)}

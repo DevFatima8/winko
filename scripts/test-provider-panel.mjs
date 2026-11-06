@@ -187,6 +187,47 @@ test("provider launch enforces restrictions before calling provider and maps the
   }
 });
 
+test("provider unfinished-round rejection opens a view-only demo without player funds", async () => {
+  const opens = [], sessions = [];
+  const previousExit = process.env.GREGMORN_EXIT_URL;
+  process.env.GREGMORN_EXIT_URL = "https://site.example/player";
+  class GregmornLaunchError extends Error {
+    constructor(reason) { super(reason); this.reason = reason; }
+  }
+  const route = load("src\\app\\api\\gregmorn\\launch\\route.ts", {
+    "next/server": next,
+    "@/lib/serverAuth": { getServerSessionUser: async () => player },
+    "@/lib/gregmorn": {
+      GregmornLaunchError,
+      openGregmornGame: async input => {
+        opens.push(input);
+        if (!input.demo) throw new GregmornLaunchError("session_in_progress");
+        return { sessionId: "demo-session", url: "https://game.example/demo", gameId: input.gameId, playerLogin: input.playerLogin, currency: "PKR", demo: true };
+      },
+    },
+    "@/lib/gregmornCatalog": { getProviderCatalog: async () => [game], saveProviderGame: async () => ({ _id: "saved-id" }) },
+    "@/lib/gameAccess": { checkGameAccess: async () => null },
+    "@/lib/multiplayer-store": { mysqlMultiplayerStore: { transact: async (_room, fn) => fn({}) } },
+    "@/lib/gregmornWallet": { gregmornCallbackRoom: id => id, registerGregmornSession: async (_tx, session) => { sessions.push(session); } },
+  });
+  try {
+    const response = await route.POST(new Request("https://site.example/api/gregmorn/launch", {
+      method: "POST", body: JSON.stringify({ gameId: game.id }),
+    }));
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).url, "https://game.example/demo");
+    assert.equal(opens.length, 2);
+    assert.equal(opens[0].balance, player.balance);
+    assert.equal(opens[0].demo, undefined);
+    assert.equal(opens[1].demo, true);
+    assert.equal(opens[1].balance, 0);
+    assert.equal(sessions[0].demo, true);
+  } finally {
+    if (previousExit === undefined) delete process.env.GREGMORN_EXIT_URL;
+    else process.env.GREGMORN_EXIT_URL = previousExit;
+  }
+});
+
 test("both local game URL entrypoints redirect before rendering preserved engines", async () => {
   for (const path of ["src\\app\\games\\[slug]\\page.tsx", "src\\app\\player\\games\\[slug]\\page.tsx"]) {
     const route = load(path, {

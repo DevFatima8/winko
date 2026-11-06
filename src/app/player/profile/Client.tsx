@@ -11,8 +11,7 @@ import { PlayerBalance } from "@/components/PlayerBalance";
 import { getCurrentUser } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n/client";
 import { usePage } from "@/lib/useDb";
-import { DEFAULT_BET_PRESETS, MAX_BET_PRESET, normalizeBetPresets, saveBetPresets } from "@/lib/betPresets";
-import { WinHoldCard } from "@/components/WinHoldCard";
+import { DEFAULT_BET_PRESETS, normalizeBetPresets } from "@/lib/betPresets";
 
 const ico = (dir: string, file: string) => <img src={`/Website-Icons/Website-Icons/${dir}/png/${file}-128.png`} alt="" width={32} height={32} draggable={false} className="h-full w-full object-contain" />;
 const disc = (bg: string, node: ReactNode) => <span className={`flex h-full w-full items-center justify-center rounded-full text-white ${bg}`}>{node}</span>;
@@ -77,75 +76,6 @@ function AvatarHeader({ me }: { me: { id: string; name: string; avatar?: string 
   );
 }
 
-function BetPresetSettings({ userId, initial }: { userId: string; initial?: number[] }) {
-  const [amounts, setAmounts] = useState<string[]>(() => (normalizeBetPresets(initial) ?? [...DEFAULT_BET_PRESETS]).map(String));
-  const [open, setOpen] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState("");
-  const invalid = !normalizeBetPresets(amounts);
-  const save = async () => {
-    const betPresets = normalizeBetPresets(amounts);
-    if (!betPresets || pending) return;
-    setPending(true);
-    setMessage("");
-    try {
-      const response = await fetch("/api/player/bet-presets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ betPresets }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Bet amounts save nahi ho sakin.");
-      saveBetPresets(userId, result.betPresets);
-      setMessage("Saved. Updated amounts will appear in every game.");
-      window.location.reload();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Bet amounts save nahi ho sakin.");
-      setPending(false);
-    }
-  };
-  return (
-    <section className="wx-card overflow-hidden rounded-xl">
-      <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className="flex w-full flex-wrap items-center justify-between gap-2 p-3 text-left">
-        <span>
-          <span className="block text-sm font-bold text-white">Customize bet amounts</span>
-          <span className="mt-1 block text-xs text-slate-400">Used in every game</span>
-        </span>
-        <span className="text-xs font-semibold text-[#ffb800]">{amounts.join(" · ")}</span>
-        <span aria-hidden="true" className="text-lg leading-none text-white">{open ? "−" : "+"}</span>
-      </button>
-      {open && (
-        <div className="space-y-3 border-t border-white/10 p-3">
-          <p className="text-xs text-slate-400">Enter five different amounts from 10 to Rs. {MAX_BET_PRESET.toLocaleString()}.</p>
-          <div className="grid grid-cols-5 gap-2">
-            {amounts.map((amount, index) => (
-              <label key={index} className="min-w-0">
-                <span className="mb-1 block text-[10px] font-semibold text-slate-400">Amount {index + 1}</span>
-                <input
-                  type="number"
-                  min="10"
-                  max={MAX_BET_PRESET}
-                  step="0.01"
-                  inputMode="decimal"
-                  value={amount}
-                  onChange={(event) => setAmounts((current) => current.map((value, i) => i === index ? event.target.value : value))}
-                  className="w-full rounded-lg border border-[#3a2470] bg-black/30 px-2 py-2 text-center text-xs font-bold text-white outline-none focus:border-[#d946ef]"
-                  aria-label={`Quick bet amount ${index + 1}`}
-                />
-              </label>
-            ))}
-          </div>
-          {invalid && <p role="alert" className="text-xs text-red-300">Enter five different amounts from 0.01 to Rs. {MAX_BET_PRESET.toLocaleString()}.</p>}
-          {message && <p role="status" className={`text-xs ${message.startsWith("Saved.") ? "text-emerald-300" : "text-red-300"}`}>{message}</p>}
-          <button type="button" onClick={save} disabled={pending || invalid} className="btn-gold w-full rounded-lg py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50">
-            {pending ? "Saving..." : "Save bet amounts"}
-          </button>
-        </div>
-      )}
-    </section>
-  );
-}
-
 export default function ProfilePageClient({ params, searchParams }: { params?: Record<string, string>; searchParams?: Record<string, string> }) {
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -172,7 +102,7 @@ export default function ProfilePageClient({ params, searchParams }: { params?: R
 
     return (
       <div className="mx-auto w-full max-w-2xl space-y-2.5 pb-6">
-        <div className="flex items-center gap-3 px-1">
+        <div className="flex flex-wrap items-center gap-3 px-1">
           <AvatarHeader me={me} />
           <div className="min-w-0 space-y-0.5">
             <div className="flex items-center gap-1 text-[15px] font-bold text-white"><span className="truncate">{me.name}</span><CopyBtn value={String(me.name)} /></div>
@@ -196,8 +126,9 @@ export default function ProfilePageClient({ params, searchParams }: { params?: R
           </div>
         </div>
 
-        <BetPresetSettings userId={me.id} initial={me.betPresets} />
-        <WinHoldCard locked={data.holds?.locked ?? 0} claimable={data.holds?.claimable ?? 0} referralClaimable={data.holds?.referralClaimable ?? 0} />
+        <div className="wx-card overflow-hidden rounded-xl">
+          <MenuRow r={{ href: "/player/profile/bet-amounts", icon: <span className="flex h-full items-center justify-center font-bold">+</span>, label: "Customize bet amounts", hint: <span className="max-w-[45%] text-right text-xs text-[#ffb800]">{(normalizeBetPresets(me.betPresets) ?? DEFAULT_BET_PRESETS).join(" · ")}</span> }} />
+        </div>
 
         <div className="wx-card rounded-xl">
           <Link href="/player/withdraw" className="flex flex-col items-center gap-1.5 py-4 text-[13px] font-medium text-white">
@@ -219,8 +150,8 @@ export default function ProfilePageClient({ params, searchParams }: { params?: R
           <div className="grid grid-cols-[auto_1fr_1fr_auto] items-end gap-x-3 pt-2 text-[10px] leading-tight text-slate-400">
             <div className="min-w-0"><div className="text-[17px] font-semibold text-slate-300">{teamMembers}<span className="text-slate-300">({teamMembers})</span></div>Direct<br />subordinates</div>
             <div className="min-w-0"><div className="text-[17px] font-semibold text-slate-300">{money(teamPerformance)}</div>Direct<br />performance</div>
-            <div className="min-w-0"><div className="text-[17px] font-semibold text-[#ffb800]">{money(commission)}</div>Commission not<br />claimed</div>
-            <Link href="/player/withdraw" className="self-center rounded-md bg-white/20 px-3 py-1.5 text-[12px] font-medium text-white">Claim</Link>
+            <div className="min-w-0"><div className="text-[17px] font-semibold text-[#ffb800]">{money(commission)}</div>{commission === 0 && me.commissionEarned > 0 ? <>Commission<br />claimed</> : <>Commission not<br />claimed</>}</div>
+            <Link href="/player/withdraw#referral-commission" className="self-center rounded-md bg-white/20 px-3 py-1.5 text-[12px] font-medium text-white">Claim</Link>
           </div>
         </div>
 

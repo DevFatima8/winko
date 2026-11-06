@@ -2,6 +2,7 @@ import { dbConnect } from "./mongo";
 import { notifyUser } from "./notifications";
 import { ensurePaymentAccounts } from "./seed";
 import { assignAccounts } from "./paymentAssignments";
+import { nextPakistanMidnight } from "./providerWinnings";
 import { Commission, HelpArticle, PaymentAccount, Settings, Transaction, User, type PaymentAccountDoc, type SettingsDoc, type UserDoc, type ObjectId } from "@/models";
 
 // VIP defaults modelled on 9K-style tiers (PKR). Admin can edit in panel.
@@ -143,9 +144,12 @@ export async function payDepositCommission(depositorId: ObjectId, amount: number
   if (pct <= 0) return;
   const c = Math.round(amount * pct) / 100;
   if (c <= 0) return;
-  await User.updateOneAtomic({ _id: ref._id }, { $inc: { pendingReferralCommission: c, commissionEarned: c } });
+  const unlockAt = nextPakistanMidnight(Date.now()).getTime();
+  await User.updateOneAtomic({ _id: ref._id }, { $inc: {
+    pendingReferralCommission: c, commissionEarned: c, [`pendingReferralCommissionByUnlock.${unlockAt}`]: c,
+  } });
   await Commission.create({ beneficiaryId: ref._id, fromUserId: depositorId, kind: "deposit", baseAmount: amount, pct, amount: c, note: `First deposit commission from ${dep.name}` });
-  await notifyUser(String(ref._id), "Referral commission received", `Your 1.5% referral commission of Rs. ${c.toLocaleString("en-PK")} for ${dep.name}'s first approved deposit is ready to claim in Profile. It will enter your balance after you tap Claim.`, "success", { href: "/player/profile" });
+  await notifyUser(String(ref._id), "Referral commission received", `Your 1.5% referral commission of Rs. ${c.toLocaleString("en-PK")} for ${dep.name}'s first approved deposit is visible on the withdrawal page. Claim it any time after the next 12 AM Pakistan time. It will enter your balance after you tap Claim.`, "success", { href: "/player/withdraw#referral-commission" });
 }
 
 export function genReferralCode(name: string) {

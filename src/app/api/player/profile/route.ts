@@ -15,7 +15,7 @@ export async function GET() {
         ]);
         const teamMembers = team.length;
         const teamPerformance = team.reduce((sum, member) => sum + Number(member.totalDeposited ?? 0), 0);
-        const commission = Number(me.commissionEarned ?? 0);
+        const commission = Math.round((holds.referralClaimable + holds.referralLocked) * 100) / 100;
         return NextResponse.json({ me, settings, teamMembers, teamPerformance, commission, holds }, { headers: { "Cache-Control": "no-store" } });
     } catch (error) {
         console.error("[player profile]", error);

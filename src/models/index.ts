@@ -16,6 +16,7 @@ export type UserDoc = Base & {
   paymentAssignmentTransactions?: Record<string, string>;
   firstDepositBonusTransactionId?: string;
   betPresets?: number[];
+  pendingReferralCommissionByUnlock?: Record<string, number>;
   totpSecret?: string | null; totpPendingSecret?: string | null; totpPendingUntil?: number; totpLastStep?: number;
   securityQuestion?: string | null; securityAnswerHash?: string | null;
   securityFailures?: number; securityLockedUntil?: number;

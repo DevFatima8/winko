@@ -1,7 +1,8 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import type { NextResponse } from "next/server";
-import { DeviceSession, User } from "@/models";
+import { DeviceSession, User, WinHold } from "@/models";
+import { claimWinHolds } from "./winHold";
 import { dbConnect } from "./mongo";
 import { toCurrentUser, type CurrentUser } from "./auth";
 import { getPlayerDisplayId } from "./playerDisplayId";
@@ -102,8 +103,13 @@ export async function getServerSessionUser(): Promise<CurrentUser | null> {
     if (!session) return null;
     await dbConnect();
     if (session.sessionId && !await DeviceSession.findOne({ userId: session.userId, sessionId: session.sessionId, revokedAt: null }, "_id").lean()) return null;
-    const user = await User.findById(session.userId).lean();
+    let user = await User.findById(session.userId).lean();
     if (!user || user.isActive === false) return null;
+    if ((user.role === "client" || user.role === "agent") && await WinHold.findOne({ userId: session.userId, claimed: false }, "_id").lean()) {
+        await claimWinHolds(session.userId);
+        user = await User.findById(session.userId).lean();
+        if (!user || user.isActive === false) return null;
+    }
     const current = toCurrentUser(user);
     if (current.role === "client") current.displayId = await getPlayerDisplayId(current.id);
     return current;
