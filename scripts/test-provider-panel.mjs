@@ -19,10 +19,11 @@ function load(path, imports = {}) {
 const availability = load("src\\lib\\gameAvailability.ts");
 const identity = load("src\\lib\\gregmornIdentity.ts", { "node:crypto": { createHash } });
 const selection = load("src\\lib\\gregmornSelection.ts");
+const order = load("src\\lib\\providerOrder.ts");
 const next = { NextResponse: { json: (body, options) => Response.json(body, options) } };
 const providerGame = { id: "JILI:game:One", isEnabled: true, title: "Aviator", provider: "JILI", imageUrl: "https://cdn.example/one.jpg" };
 const slug = identity.gregmornGameSlug(providerGame.id);
-const game = { ...providerGame, slug, isActive: true, isHot: true };
+const game = { ...providerGame, currency: "PKR", slug, isActive: true, isHot: true };
 const player = { id: "player-id", dbRole: "client", role: "client", isActive: true, blockedGames: [], balance: 100, displayId: "1234567" };
 
 test("admin ON/OFF badges cannot shrink or wrap beside long game titles", async () => {
@@ -33,13 +34,14 @@ test("admin ON/OFF badges cannot shrink or wrap beside long game titles", async 
     "@/components/Shell": { Card: "card" },
     "@/lib/actions": {},
     "@/lib/adminLiveUpdates": {},
+    "@/lib/providerOrder": order,
     "@/components/lobby/GameGridSkeleton": { GameGridSkeleton: "skeleton" },
     "@/lib/useDb": { usePage: loader => loader() },
   });
   const previous = globalThis.fetch;
   globalThis.fetch = async () => Response.json({ games: [
-    { ...game, name: "40 Super Fruits Bell Link with a very long title", stats: {} },
-    { ...game, slug: "off", name: "Another very long title", isActive: false, stats: {} },
+    { ...game, category: "JILI", name: "40 Super Fruits Bell Link with a very long title", stats: {} },
+    { ...game, category: "JILI", slug: "off", name: "Another very long title", isActive: false, stats: {} },
   ], blocked: [], level: 3 });
   try {
     const manager = await page.default({});
@@ -70,6 +72,47 @@ test("provider identities preserve case and cannot collide with local slugs", ()
   assert.equal(identity.isGregmornSlug("aviator"), false);
 });
 
+test("admin list has no search/provider controls and keeps positions across API reorder and Hot/OFF changes", async () => {
+  const jsx = (type, props) => ({ type, props });
+  const page = load("src\\app\\admin\\games\\Client.tsx", {
+    "react/jsx-runtime": { jsx, jsxs: jsx },
+    react: { useState: value => [value, () => {}] },
+    "@/components/Shell": { Card: "card" },
+    "@/lib/actions": {}, "@/lib/adminLiveUpdates": {},
+    "@/lib/providerOrder": order,
+    "@/components/lobby/GameGridSkeleton": { GameGridSkeleton: "skeleton" },
+    "@/lib/useDb": { usePage: loader => loader() },
+  });
+  const rows = [
+    { ...game, slug: "z", category: "Z Studio", name: "Game 1", stats: {} },
+    { ...game, slug: "a10", category: "A Studio", name: "Game 10", stats: {} },
+    { ...game, slug: "a2", category: "A Studio", name: "Game 2", stats: {} },
+  ];
+  const previous = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({ games: rows, blocked: [], level: 3 });
+  async function displayed() {
+    const manager = await page.default({});
+    const result = [];
+    function visit(node) {
+      if (Array.isArray(node)) node.forEach(visit);
+      else if (node && typeof node === "object") {
+        assert.ok(node.type !== "input" && node.type !== "select");
+        if (node.props?.className?.includes("truncate")) result.push(node.props.children);
+        visit(node.props?.children);
+      }
+    }
+    visit(manager.type(manager.props));
+    return result;
+  }
+  try {
+    assert.deepEqual(await displayed(), ["Game 2", "Game 10", "Game 1"]);
+    rows.reverse();
+    rows[0].isActive = false;
+    rows[1].isHot = false;
+    assert.deepEqual(await displayed(), ["Game 2", "Game 10", "Game 1"]);
+  } finally { globalThis.fetch = previous; }
+});
+
 test("catalogue settings preserve admin OFF/hot choices and never expose saved local games", async () => {
   const saved = [{ slug, isActive: false, isHot: true }, { slug: "aviator", isActive: true, isHot: true }];
   const updates = [];
@@ -84,6 +127,7 @@ test("catalogue settings preserve admin OFF/hot choices and never expose saved l
     "./gregmornIdentity": identity,
     "./gregmornSelection": selection,
     "./providerArtwork": { providerArtwork: (_, fallback) => fallback },
+    "./providerOrder": order,
   });
   const games = await catalog.getProviderCatalog();
   assert.equal(games.length, 1);
@@ -189,6 +233,7 @@ test("admin ON/OFF and Hot choices reach player catalogues without waiting for t
   const catalog = load("src\\lib\\gregmornCatalog.ts", {
     "@/models": { Game: dbGame },
     "./gregmorn": { getGregmornCatalog: async () => { fetches++; return [providerGame]; } },
+    "./providerOrder": order,
     "./gregmornIdentity": identity,
     "./providerArtwork": { providerArtwork: (_, fallback) => fallback },
   });
@@ -217,7 +262,7 @@ test("admin ON/OFF and Hot choices reach player catalogues without waiting for t
   assert.equal((await listed())[0].isHot, true);
   await actions.toggleGameHotAction(slug, false);
   assert.equal((await listed()).filter(game => categories.matchesProviderCategory(game, "Hot")).length, 0);
-  assert.equal(fetches, 1, "admin changes apply even when the upstream catalogue stays cached");
+  assert.equal(fetches, 2, "admin changes apply while both currency catalogues stay cached");
 });
 
 test("public catalogue hides switched-off and player-restricted provider games", async () => {
@@ -291,8 +336,59 @@ test("provider launch enforces restrictions before calling provider and maps the
   }
 });
 
-test("provider unfinished-round rejection opens a view-only demo without player funds", async () => {
+test("launch selects catalogue currency server-side and preserves nominal PKR wallet numbers", async () => {
+  const launches = [], sessions = [], queries = [];
+  let currency = "USD";
+  const previousExit = process.env.GREGMORN_EXIT_URL;
+  const previousCurrency = process.env.GREGMORN_CURRENCY;
+  process.env.GREGMORN_EXIT_URL = "https://site.example/player";
+  process.env.GREGMORN_CURRENCY = "PKR";
+  const route = load("src\\app\\api\\gregmorn\\launch\\route.ts", {
+    "next/server": next,
+    "@/lib/serverAuth": { getServerSessionUser: async () => player },
+    "@/lib/gregmorn": { openGregmornGame: async input => {
+      launches.push(input);
+      return { ...input, sessionId: `session-${launches.length}`, url: "https://game.example/play" };
+    } },
+    "@/lib/gregmornCatalog": {
+      getProviderCatalog: async (...args) => { queries.push(args); return [{ ...game, currency }]; },
+      saveProviderGame: async () => ({ _id: "saved-id" }),
+    },
+    "@/lib/gameAccess": { checkGameAccess: async () => null },
+    "@/lib/multiplayer-store": { mysqlMultiplayerStore: { transact: async (_room, fn) => fn({}) } },
+    "@/lib/gregmornWallet": { gregmornCallbackRoom: id => id, registerGregmornSession: async (_tx, session) => { sessions.push(session); } },
+  });
+  const request = () => new Request("https://site.example/api/gregmorn/launch", {
+    method: "POST", body: JSON.stringify({ gameId: game.id, currency: currency === "USD" ? "PKR" : "USD", balance: 9999 }),
+  });
+  try {
+    assert.equal((await route.POST(request())).status, 200);
+    assert.equal(launches[0].currency, "USD");
+    assert.equal(launches[0].playerLogin, `usd.${player.displayId}`);
+    assert.equal(launches[0].balance, 100);
+    assert.equal(sessions[0].currency, "USD");
+    assert.equal(sessions[0].userId, player.id);
+    currency = "PKR";
+    assert.equal((await route.POST(request())).status, 200);
+    assert.equal(launches[1].currency, "PKR");
+    assert.equal(launches[1].playerLogin, player.displayId);
+    assert.equal(launches[1].balance, 100);
+    process.env.GREGMORN_CURRENCY = "USD";
+    assert.equal((await route.POST(request())).status, 200);
+    assert.equal(launches[2].playerLogin, `pkr.${player.displayId}`);
+    assert.equal(sessions[2].currency, "PKR");
+    assert.ok(queries.every(args => args.length === 0), "launch uses the merged, not environment-only catalogue");
+  } finally {
+    if (previousExit === undefined) delete process.env.GREGMORN_EXIT_URL;
+    else process.env.GREGMORN_EXIT_URL = previousExit;
+    if (previousCurrency === undefined) delete process.env.GREGMORN_CURRENCY;
+    else process.env.GREGMORN_CURRENCY = previousCurrency;
+  }
+});
+
+test("provider unfinished-round rejection waits and retries real mode with fresh account checks, never demo", async () => {
   const opens = [], sessions = [];
+  let pending = true, denied = null, currentPlayer = player;
   const previousExit = process.env.GREGMORN_EXIT_URL;
   process.env.GREGMORN_EXIT_URL = "https://site.example/player";
   class GregmornLaunchError extends Error {
@@ -300,33 +396,53 @@ test("provider unfinished-round rejection opens a view-only demo without player 
   }
   const route = load("src\\app\\api\\gregmorn\\launch\\route.ts", {
     "next/server": next,
-    "@/lib/serverAuth": { getServerSessionUser: async () => player },
+    "@/lib/serverAuth": { getServerSessionUser: async () => currentPlayer },
     "@/lib/gregmorn": {
       GregmornLaunchError,
       openGregmornGame: async input => {
         opens.push(input);
-        if (!input.demo) throw new GregmornLaunchError("session_in_progress");
-        return { sessionId: "demo-session", url: "https://game.example/demo", gameId: input.gameId, playerLogin: input.playerLogin, currency: "PKR", demo: true };
+        if (pending) throw new GregmornLaunchError("session_in_progress");
+        return { sessionId: "real-session", url: "https://game.example/play", gameId: input.gameId, playerLogin: input.playerLogin, currency: "PKR" };
       },
     },
     "@/lib/gregmornCatalog": { getProviderCatalog: async () => [game], saveProviderGame: async () => ({ _id: "saved-id" }) },
-    "@/lib/gameAccess": { checkGameAccess: async () => null },
+    "@/lib/gameAccess": { checkGameAccess: async () => denied },
     "@/lib/multiplayer-store": { mysqlMultiplayerStore: { transact: async (_room, fn) => fn({}) } },
     "@/lib/gregmornWallet": { gregmornCallbackRoom: id => id, registerGregmornSession: async (_tx, session) => { sessions.push(session); } },
   });
   try {
-    const response = await route.POST(new Request("https://site.example/api/gregmorn/launch", {
+    const request = () => new Request("https://site.example/api/gregmorn/launch", {
       method: "POST", body: JSON.stringify({ gameId: game.id }),
-    }));
-    assert.equal(response.status, 200);
-    assert.deepEqual((await response.json()).url, "https://game.example/demo");
-    assert.equal(opens.length, 2);
+    });
+    const response = await route.POST(request());
+    assert.equal(response.status, 409);
+    assert.equal(response.headers.get("retry-after"), "10");
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await response.json(), {
+      error: "The previous session is still active. Waiting for the next available session.",
+      code: "session_in_progress", retryAfter: 10,
+    });
+    assert.equal(opens.length, 1);
     assert.equal(opens[0].balance, player.balance);
     assert.equal(opens[0].demo, undefined);
-    assert.equal(opens[1].demo, true);
-    assert.equal(opens[1].balance, 0);
-    assert.equal(opens[1].playerLogin, `demo.${player.displayId}`);
-    assert.equal(sessions[0].demo, true);
+    assert.equal(sessions.length, 0);
+    denied = "Restricted";
+    assert.equal((await route.POST(request())).status, 403);
+    assert.equal(opens.length, 1, "retries cannot bypass changed restrictions");
+    denied = null;
+    currentPlayer = { ...player, isActive: false };
+    assert.equal((await route.POST(request())).status, 401);
+    assert.equal(opens.length, 1, "retries cannot bypass account deactivation");
+    currentPlayer = { ...player, balance: 75 };
+    pending = false;
+    const success = await route.POST(request());
+    assert.equal(success.status, 200);
+    assert.equal((await success.json()).url, "https://game.example/play");
+    assert.equal(opens[1].demo, undefined);
+    assert.equal(opens[1].balance, 75);
+    assert.equal(opens[1].playerLogin, player.displayId);
+    assert.equal(sessions[0].sessionId, "real-session");
+    assert.equal(sessions[0].demo, undefined);
   } finally {
     if (previousExit === undefined) delete process.env.GREGMORN_EXIT_URL;
     else process.env.GREGMORN_EXIT_URL = previousExit;

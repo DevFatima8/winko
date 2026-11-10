@@ -22,8 +22,7 @@ export async function POST(request: Request) {
 
   let stage = "catalogue";
   try {
-    const currency = process.env.GREGMORN_CURRENCY ?? "PKR";
-    const games = await getProviderCatalog(currency);
+    const games = await getProviderCatalog();
     const game = games.find(game => game.id === body.gameId && game.isActive && game.isEnabled !== false);
     if (!game) {
       return NextResponse.json({ error: "This provider game is not enabled for your currency." }, { status: 404 });
@@ -47,25 +46,15 @@ export async function POST(request: Request) {
       exitUrl = target.toString();
     }
     stage = "provider_launch";
-    let session: Awaited<ReturnType<typeof openGregmornGame>>;
-    try {
-      session = await openGregmornGame({
-        gameId: body.gameId,
-        playerLogin: me.displayId,
-        balance: me.balance,
-        exitUrl,
-      });
-    } catch (error) {
-      if (!(error instanceof GregmornLaunchError) || error.reason !== "session_in_progress") throw error;
-      console.info("[gregmorn launch] Opening a view-only demo after the provider reported an unfinished session.");
-      session = await openGregmornGame({
-        gameId: body.gameId,
-        playerLogin: `demo.${me.displayId}`,
-        balance: 0,
-        exitUrl,
-        demo: true,
-      });
-    }
+    const session = await openGregmornGame({
+      gameId: body.gameId,
+      // Balance callbacks can precede session registration and contain only the login.
+      playerLogin: game.currency === (process.env.GREGMORN_CURRENCY ?? "PKR")
+        ? me.displayId : `${game.currency.toLowerCase()}.${me.displayId}`,
+      currency: game.currency,
+      balance: me.balance,
+      exitUrl,
+    });
     stage = "session_registration";
     await mysqlMultiplayerStore.transact(gregmornCallbackRoom(session.sessionId), tx => registerGregmornSession(tx, {
       sessionId: session.sessionId,
@@ -78,6 +67,14 @@ export async function POST(request: Request) {
     }));
     return NextResponse.json({ url: session.url }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
+    if (error instanceof GregmornLaunchError && error.reason === "session_in_progress") {
+      console.info("[gregmorn launch] Waiting for the provider's unfinished session.");
+      return NextResponse.json({
+        error: "The previous session is still active. Waiting for the next available session.",
+        code: error.reason,
+        retryAfter: 10,
+      }, { status: 409, headers: { "Cache-Control": "no-store", "Retry-After": "10" } });
+    }
     console.error("[gregmorn launch]", { stage, error });
     const code = error instanceof GregmornLaunchError ? error.reason : stage;
     return NextResponse.json({

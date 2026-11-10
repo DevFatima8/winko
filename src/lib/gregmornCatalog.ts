@@ -2,8 +2,9 @@ import { Game } from "@/models";
 import { getGregmornCatalog, type GregmornGame } from "./gregmorn";
 import { gregmornGameSlug } from "./gregmornIdentity";
 import { providerArtwork } from "./providerArtwork";
+import { compareProviderGames } from "./providerOrder";
 
-export type ProviderCatalogGame = GregmornGame & { slug: string; isActive: boolean; isHot: boolean; isHiddenByAdmin?: boolean };
+export type ProviderCatalogGame = GregmornGame & { currency: string; slug: string; isActive: boolean; isHot: boolean; isHiddenByAdmin?: boolean };
 
 const catalogRequests = new Map<string, Promise<GregmornGame[]>>();
 const catalogs = new Map<string, { games: GregmornGame[]; expiresAt: number }>();
@@ -30,19 +31,27 @@ function getCachedCatalog(currency: string): Promise<GregmornGame[]> {
 }
 
 export async function getProviderCatalog(currency?: string): Promise<ProviderCatalogGame[]> {
-  const [catalog, settings] = await Promise.all([
-    getCachedCatalog(currency ?? process.env.GREGMORN_CURRENCY ?? "PKR"),
+  const [catalogsByCurrency, settings] = await Promise.all([
+    Promise.all((currency === undefined ? ["PKR", "USD"] : [currency]).map(async code =>
+      (await getCachedCatalog(code)).map(game => ({ ...game, currency: code })))),
     Game.find({ slug: { $regex: /^gregmorn-[a-f0-9]{40}$/ } }).lean(),
   ]);
+  const byId = new Map<string, GregmornGame & { currency: string }>();
+  for (const catalog of catalogsByCurrency) {
+    for (const game of catalog) {
+      const selected = byId.get(game.id);
+      if (!selected || !selected.isEnabled && game.isEnabled) byId.set(game.id, game);
+    }
+  }
   const bySlug = new Map(settings.map(game => [game.slug, game]));
-  return catalog.map(game => {
+  return [...byId.values()].map(game => {
     const slug = gregmornGameSlug(game.id);
     const saved = bySlug.get(slug);
     const isHiddenByAdmin = saved?.isActive === false;
     return { ...game, imageUrl: providerArtwork(game.title, game.imageUrl), slug,
       isActive: game.isEnabled && !isHiddenByAdmin, isHiddenByAdmin,
       isHot: game.isEnabled && !isHiddenByAdmin && saved?.isHot === true };
-  });
+  }).sort(compareProviderGames);
 }
 
 export async function saveProviderGame(game: ProviderCatalogGame) {

@@ -15,6 +15,7 @@ function load(path, imports, browser = {}) {
   return loaded.exports;
 }
 
+const order = load("src\\lib\\providerOrder.ts", {});
 const game = { id: "provider:one", title: "Game One", provider: "Provider", imageUrl: "https://cdn.example/one.jpg", isEnabled: true };
 
 function cachedCatalog(getCatalog, settings = []) {
@@ -26,6 +27,7 @@ function cachedCatalog(getCatalog, settings = []) {
     "./gregmorn": { getGregmornCatalog: getCatalog },
     "./gregmornIdentity": { gregmornGameSlug: id => `slug-${id}` },
     "./providerArtwork": { providerArtwork: (_, fallback) => fallback },
+    "./providerOrder": order,
   });
   return {
     ...catalog,
@@ -60,6 +62,40 @@ test("warm catalog cache avoids provider latency but re-reads admin settings and
   } finally { catalog.restore(); }
 });
 
+test("merged catalogue prefers enabled PKR and falls back to USD without duplicate cards or settings", async () => {
+  const calls = [];
+  const catalog = cachedCatalog(async currency => {
+    calls.push(currency);
+    return currency === "PKR" ? [
+      { ...game, id: "both" }, { ...game, id: "pkr-only" },
+      { ...game, id: "usd-enabled", isEnabled: false },
+      { ...game, id: "both-off", isEnabled: false },
+    ] : [
+      { ...game, id: "both" }, { ...game, id: "usd-only" },
+      { ...game, id: "usd-enabled" }, { ...game, id: "both-off", isEnabled: false },
+    ];
+  }, [{ slug: "slug-usd-only", isActive: false, isHot: true }]);
+  try {
+    const merged = await catalog.getProviderCatalog();
+    assert.deepEqual(calls, ["PKR", "USD"]);
+    assert.equal(merged.length, 5);
+    const byId = new Map(merged.map(game => [game.id, game]));
+    assert.equal(byId.get("both").currency, "PKR");
+    assert.equal(byId.get("pkr-only").currency, "PKR");
+    assert.equal(byId.get("usd-enabled").currency, "USD");
+    assert.equal(byId.get("usd-enabled").isActive, true);
+    assert.equal(byId.get("usd-only").currency, "USD");
+    assert.equal(byId.get("usd-only").isActive, false, "fallback cannot bypass admin OFF");
+    assert.equal(byId.get("usd-only").isHot, false);
+    assert.equal(byId.get("both-off").currency, "PKR");
+    assert.equal(byId.get("both-off").isActive, false);
+    const usd = await catalog.getProviderCatalog("USD");
+    assert.equal(usd.length, 4);
+    assert.ok(usd.every(game => game.currency === "USD"));
+    assert.deepEqual(calls, ["PKR", "USD"], "explicit and merged catalogues share currency caches");
+  } finally { catalog.restore(); }
+});
+
 test("catalog retains unavailable provider entries separately from admin-hidden entries", async () => {
   const catalog = cachedCatalog(async () => [
     game, { ...game, id: "unavailable", isEnabled: false },
@@ -68,9 +104,9 @@ test("catalog retains unavailable provider entries separately from admin-hidden 
   try {
     const games = await catalog.getProviderCatalog();
     assert.equal(games.length, 3);
-    assert.equal(games[1].isActive, false);
-    assert.equal(games[1].isHiddenByAdmin, false);
-    assert.equal(games[2].isHiddenByAdmin, true);
+    assert.equal(games.find(game => game.id === "unavailable").isActive, false);
+    assert.equal(games.find(game => game.id === "unavailable").isHiddenByAdmin, false);
+    assert.equal(games.find(game => game.id === "hidden-unavailable").isHiddenByAdmin, true);
   } finally { catalog.restore(); }
 });
 
@@ -142,9 +178,30 @@ test("future API games join the cached catalogue without registration or an allo
     await new Promise(resolve => setImmediate(resolve));
     const updated = await catalog.getProviderCatalog();
     assert.equal(updated.length, 2);
-    assert.equal(updated[0].isHiddenByAdmin, true, "refresh preserves existing admin OFF");
-    assert.deepEqual(updated[1], { ...added, slug: `slug-${added.id}`, isActive: true, isHiddenByAdmin: false, isHot: false });
-    assert.equal(updated[1].imageUrl, added.imageUrl, "new titles keep the provider artwork fallback");
+    assert.equal(updated.find(item => item.id === game.id).isHiddenByAdmin, true, "refresh preserves existing admin OFF");
+    assert.deepEqual(updated.find(item => item.id === added.id), { ...added, currency: "PKR", slug: `slug-${added.id}`, isActive: true, isHiddenByAdmin: false, isHot: false });
+  } finally { catalog.restore(); }
+});
+
+test("catalogue order stays provider/name/ID based across reversed API refreshes and admin changes", async () => {
+  const games = [
+    { ...game, id: "z", provider: "Z Studio", title: "Game 1" },
+    { ...game, id: "a-10", provider: "A Studio", title: "Game 10" },
+    { ...game, id: "a-2-b", provider: "A Studio", title: "Game 2" },
+    { ...game, id: "a-2-a", provider: "A Studio", title: "Game 2" },
+  ];
+  const settings = [];
+  const catalog = cachedCatalog(async () => [...games], settings);
+  try {
+    const expected = ["a-2-a", "a-2-b", "a-10", "z"];
+    assert.deepEqual((await catalog.getProviderCatalog()).map(game => game.id), expected);
+    games.reverse();
+    settings.push({ slug: "slug-z", isActive: true, isHot: true }, { slug: "slug-a-2-a", isActive: false });
+    catalog.advance(60_001);
+    await catalog.getProviderCatalog();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual((await catalog.getProviderCatalog()).map(game => game.id), expected);
+    assert.deepEqual(games.map(game => game.id), ["a-2-a", "a-2-b", "a-10", "z"], "sorting does not mutate the source");
   } finally { catalog.restore(); }
 });
 
@@ -336,10 +393,13 @@ test("initial provider thumbnails load eagerly without changing the displayed ga
   const enabled = [];
   const component = load("src\\components\\lobby\\GregmornGames.tsx", {
     "@/lib/providerCategories": load("src\\lib\\providerCategories.ts"),
+    "@/lib/providerOrder": order,
     react: { useId: () => "title", useState: initial => [initial, () => {}], useEffect: () => {}, useRef: () => ({ current: null }) },
     "react/jsx-runtime": { jsx, jsxs: jsx },
     "next/navigation": { useRouter: () => ({}) },
+    "next/image": { default: "image" },
     "@/lib/auth": {},
+    "@/components/Icons": { FlameIcon: "flame" },
     "@/lib/gameNavigation": { useGameReturnScroll: () => {} },
     "./GameThumbnail": { GameThumbnail: "thumbnail" },
     "./GameGridSkeleton": { GameGridSkeleton: "skeleton" },

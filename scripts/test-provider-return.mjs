@@ -110,6 +110,181 @@ function find(tree, predicate) {
 
 const state = { category: "Hot", search: "Aviator", provider: "SPRIBE", limit: 120, sliderScrollLeft: 640 };
 
+function waitingPanel() {
+  const env = browser(), runtime = hooks(), timers = new Map();
+  const previousSetTimeout = globalThis.setTimeout, previousClearTimeout = globalThis.clearTimeout;
+  let id = 0;
+  globalThis.setTimeout = (callback, delay) => { timers.set(++id, { callback, delay }); return id; };
+  globalThis.clearTimeout = key => timers.delete(key);
+  const game = { id: "real-game", title: "Live Game", provider: "Live", isEnabled: true, imageUrl: "https://cdn.example/game.jpg" };
+  const component = load("src\\components\\lobby\\GregmornGames.tsx", {
+    react: runtime.react, "react/jsx-runtime": { jsx, jsxs: jsx },
+    "next/navigation": { useRouter: () => ({ push: () => {} }) },
+    "@/lib/auth": { getCurrentUser: async () => ({ dbRole: "client" }) },
+    "@/lib/providerCategories": load("src\\lib\\providerCategories.ts"),
+    "@/lib/providerOrder": load("src\\lib\\providerOrder.ts"),
+    "@/lib/gameNavigation": { readProviderGameReturn: () => null, rememberGameReturn: () => {}, useGameReturnScroll: () => {} },
+    "@/lib/useProviderCatalog": { useProviderCatalog: () => ({}) },
+    "./GameThumbnail": { GameThumbnail: "thumbnail" },
+    "./GameGridSkeleton": { GameGridSkeleton: "skeleton" },
+    "./HotSlider": { HotSlider: "slider" },
+  }).GregmornGames;
+  const render = (category = "All") => runtime.render(() => component({ category, catalog: { games: [game], loading: false, error: "" } }));
+  return {
+    env, runtime, render, timers,
+    start: () => find(render(), node => node.type === "button" && typeof node.props.children !== "string")[0].props.onClick(),
+    advance: async () => {
+      assert.equal(timers.size, 1);
+      const [key, timer] = [...timers][0];
+      assert.equal(timer.delay, 10_000, "polling must be spaced by ten seconds");
+      timers.delete(key);
+      timer.callback();
+      await tick();
+    },
+    restore: () => {
+      runtime.unmount();
+      assert.equal(timers.size, 0, "unmount must clear the pending retry");
+      globalThis.setTimeout = previousSetTimeout;
+      globalThis.clearTimeout = previousClearTimeout;
+      env.restore();
+    },
+  };
+}
+
+test("unfinished sessions wait indefinitely at ten-second intervals, prevent duplicate clicks and then open real play", async () => {
+  const panel = waitingPanel(), requests = [];
+  let ready = false;
+  globalThis.fetch = async (_url, options) => {
+    requests.push(JSON.parse(options.body));
+    return ready ? Response.json({ url: "https://provider.example/real" })
+      : Response.json({ code: "session_in_progress" }, { status: 409 });
+  };
+  try {
+    panel.render(); await tick();
+    panel.start(); panel.start(); await tick();
+    assert.equal(requests.length, 1, "same-render double clicks cannot launch duplicate requests");
+    const tree = panel.render();
+    assert.ok(find(tree, node => node.type === "p" && String(node.props.children).includes("Waiting for the next available session")).length);
+    assert.equal(window.assigned, undefined);
+    for (let i = 0; i < 70; i++) await panel.advance();
+    assert.equal(requests.length, 71, "waiting has no arbitrary timeout even after more than ten minutes");
+    assert.ok(requests.every(body => body.gameId === "real-game" && body.demo === undefined));
+    ready = true;
+    await panel.advance();
+    assert.equal(window.assigned, "https://provider.example/real");
+    assert.equal(panel.timers.size, 0);
+  } finally { panel.restore(); }
+});
+
+test("Cancel clears session polling and allows another game launch", async () => {
+  const panel = waitingPanel();
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return Response.json({ code: "session_in_progress" }, { status: 409 });
+  };
+  try {
+    panel.render(); await tick();
+    panel.start(); await tick();
+    find(panel.render(), node => node.type === "button" && node.props.children === "Cancel")[0].props.onClick();
+    await tick();
+    assert.equal(panel.timers.size, 0);
+    assert.equal(window.assigned, undefined);
+    assert.equal(find(panel.render(), node => node.type === "button")[0].props.disabled, false);
+    panel.start(); await tick();
+    assert.equal(calls, 2);
+    assert.equal(panel.timers.size, 1);
+  } finally { panel.restore(); }
+});
+
+test("cancelling an in-flight launch ignores late URLs and cannot overwrite a newer wait", async () => {
+  const panel = waitingPanel();
+  let release, oldSignal, calls = 0;
+  globalThis.fetch = async (_url, options) => {
+    calls++;
+    if (calls === 1) {
+      oldSignal = options.signal;
+      return new Promise(resolve => { release = resolve; });
+    }
+    return Response.json({ code: "session_in_progress" }, { status: 409 });
+  };
+  try {
+    panel.render(); await tick();
+    panel.start(); await tick();
+    find(panel.render(), node => node.type === "button" && node.props.children === "Cancel")[0].props.onClick();
+    assert.equal(oldSignal.aborted, true);
+    panel.start(); await tick();
+    release(Response.json({ url: "https://provider.example/stale" }));
+    await tick();
+    assert.equal(window.assigned, undefined);
+    assert.equal(panel.timers.size, 1);
+    assert.equal(find(panel.render(), node => node.type === "button" && typeof node.props.children !== "string")[0].props.disabled, true);
+  } finally { panel.restore(); }
+});
+
+test("page departure, category changes and unmount stop waiting without stale navigation", async () => {
+  for (const action of ["pagehide", "category", "unmount"]) {
+    const panel = waitingPanel();
+    globalThis.fetch = async () => Response.json({ code: "session_in_progress" }, { status: 409 });
+    try {
+      panel.render(); await tick();
+      panel.start(); await tick();
+      if (action === "pagehide") {
+        panel.env.event("pagehide", {});
+        panel.env.event("pageshow", { persisted: true });
+      } else if (action === "category") {
+        panel.render("Live");
+      } else panel.runtime.unmount();
+      await tick();
+      assert.equal(panel.timers.size, 0, action);
+      assert.equal(window.assigned, undefined);
+    } finally { panel.restore(); }
+  }
+});
+
+test("vendor errors, demo rejection, account errors and invalid responses stop rather than waiting", async () => {
+  for (const [status, body] of [
+    [503, { code: "game_vendor_unavailable", error: "Vendor unavailable" }],
+    [503, { code: "demo_not_supported", error: "Demo unsupported" }],
+    [401, { error: "Account inactive" }],
+    [403, { error: "Restricted" }],
+    [409, { error: "Account not ready" }],
+    [503, { code: "session_in_progress", error: "Wrong response status" }],
+  ]) {
+    const panel = waitingPanel();
+    let calls = 0;
+    globalThis.fetch = async () => ++calls === 1
+      ? Response.json({ code: "session_in_progress" }, { status: 409 })
+      : Response.json(body, { status });
+    try {
+      panel.render(); await tick();
+      panel.start(); await tick();
+      await panel.advance();
+      assert.equal(calls, 2);
+      assert.equal(panel.timers.size, 0);
+      assert.equal(window.assigned, undefined);
+      assert.ok(find(panel.render(), node => node.type === "p" && node.props.children === body.error).length);
+    } finally { panel.restore(); }
+  }
+});
+
+test("network and malformed JSON failures surface an error instead of silently retrying", async () => {
+  for (const failure of ["network", "json"]) {
+    const panel = waitingPanel();
+    globalThis.fetch = async () => {
+      if (failure === "network") throw new Error("Network unavailable");
+      return new Response("<html>Gateway error</html>", { status: 502 });
+    };
+    try {
+      panel.render(); await tick();
+      panel.start(); await tick();
+      assert.equal(panel.timers.size, 0);
+      assert.equal(window.assigned, undefined);
+      assert.ok(find(panel.render(), node => node.type === "p" && node.props.role === "status").length);
+    } finally { panel.restore(); }
+  }
+});
+
 test("return storage preserves the view only for the originating page and scroll waits for rendered games", () => {
   const env = browser(), runtime = hooks(), nav = navigation(runtime.react);
   try {
@@ -129,7 +304,7 @@ test("return storage preserves the view only for the originating page and scroll
   } finally { runtime.unmount(); env.restore(); }
 });
 
-test("provider game departure and full page remount restore search, provider, loaded count and horizontal position", async () => {
+test("provider game departure and full page remount restore loaded count and position without removed filters", async () => {
   const env = browser("/");
   const departing = hooks(), returning = hooks();
   const nav = navigation({ useEffect: () => {} });
@@ -145,10 +320,13 @@ test("provider game departure and full page remount restore search, provider, lo
   function panel(runtime) {
     return load("src\\components\\lobby\\GregmornGames.tsx", {
       "@/lib/providerCategories": load("src\\lib\\providerCategories.ts"),
+      "@/lib/providerOrder": load("src\\lib\\providerOrder.ts", {}),
       react: runtime.react,
       "react/jsx-runtime": { jsx, jsxs: jsx },
       "next/navigation": { useRouter: () => ({ push: () => {} }) },
+      "next/image": { default: "image" },
       "@/lib/auth": { getCurrentUser: async () => ({ dbRole: "client" }) },
+      "@/components/Icons": { FlameIcon: "flame" },
       "@/lib/gameNavigation": { ...nav, useGameReturnScroll: () => {} },
       "@/lib/useProviderCatalog": { useProviderCatalog: () => ({}) },
       "./GameThumbnail": { GameThumbnail: "thumbnail" },
@@ -161,9 +339,6 @@ test("provider game departure and full page remount restore search, provider, lo
     const firstPanel = panel(departing);
     let tree = departing.render(() => firstPanel(props));
     await tick();
-    find(tree, node => node.type === "input")[0].props.onChange({ target: { value: state.search } });
-    find(tree, node => node.type === "select")[0].props.onChange({ target: { value: state.provider } });
-    tree = departing.render(() => firstPanel(props));
     find(tree, node => node.type === "slider")[0].props.onEnd();
     tree = departing.render(() => firstPanel(props));
     tree.props.ref.current = { querySelector: () => ({ scrollLeft: 640 }) };
@@ -171,14 +346,14 @@ test("provider game departure and full page remount restore search, provider, lo
     await tick();
     assert.equal(requestBody.returnTo, "/?cat=Hot#games");
     assert.equal(window.assigned, "https://provider.example/play");
-    assert.deepEqual(nav.readProviderGameReturn(), { ...state, category: "All" });
+    assert.deepEqual(nav.readProviderGameReturn(), { ...state, category: "All", search: "", provider: "" });
+    nav.rememberGameReturn({ ...state, category: "All" });
     departing.unmount();
     const secondPanel = panel(returning);
     returning.render(() => secondPanel(props));
     await tick();
     tree = returning.render(() => secondPanel(props));
-    assert.equal(find(tree, node => node.type === "input")[0].props.value, state.search);
-    assert.equal(find(tree, node => node.type === "select")[0].props.value, state.provider);
+    assert.equal(find(tree, node => node.type === "input" || node.type === "select").length, 0);
     const slider = find(tree, node => node.type === "slider")[0];
     assert.equal(slider.props.hot.length, 120);
     assert.equal(slider.props.initialScrollLeft, 640);
@@ -228,7 +403,7 @@ test("provider slider restores its saved horizontal offset after mounting", () =
   runtime.unmount();
 });
 
-test("browser back refreshes lobby data without unmounting the searched panel", async () => {
+test("browser back refreshes lobby data without unmounting the games panel", async () => {
   const env = browser("/"), runtime = hooks();
   globalThis.fetch = async () => Response.json({ links: {}, leaderboard: [] });
   const component = load("src\\app\\HomeClient.tsx", {

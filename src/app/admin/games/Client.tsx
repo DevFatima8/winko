@@ -5,6 +5,7 @@ import { toggleGameAction, toggleGameHotAction } from "@/lib/actions";
 import { usePage } from "@/lib/useDb";
 import { GameGridSkeleton } from "@/components/lobby/GameGridSkeleton";
 import { refreshAdminData } from "@/lib/adminLiveUpdates";
+import { compareProviderGames } from "@/lib/providerOrder";
 
 type ProviderGame = { _id: string; name: string; slug: string; category: string; isActive: boolean; isHot?: boolean; icon: string; imageUrl: string; stats: { c: number; bet: number; win: number } };
 type GamesData = { games: ProviderGame[]; blocked: { _id: string; c: number }[]; level: number };
@@ -19,15 +20,14 @@ export default function GamesAdminPageClient({ params, searchParams }: { params?
 }
 
 function ProviderGamesManager({ data }: { data: GamesData }) {
-    const [search, setSearch] = useState("");
-    const [provider, setProvider] = useState("");
     const [limit, setLimit] = useState(60);
     const [pending, setPending] = useState<string | null>(null);
     const [error, setError] = useState("");
     const bm = new Map(data.blocked.map(b => [b._id, b.c]));
-    const games = data.games.filter(game => (!provider || game.category === provider) &&
-      `${game.name} ${game.category}`.toLowerCase().includes(search.trim().toLowerCase()));
-    const providers = [...new Set(data.games.map(game => game.category))].sort();
+    const games = [...data.games].sort((a, b) => compareProviderGames(
+      { provider: a.category, title: a.name, id: a.slug },
+      { provider: b.category, title: b.name, id: b.slug },
+    ));
     async function updateGame(game: ProviderGame, hot: boolean) {
       if (pending) return;
       setPending(game.slug);
@@ -47,15 +47,6 @@ function ProviderGamesManager({ data }: { data: GamesData }) {
         <div>
           <h1 className="text-2xl font-bold text-white">Provider Games On / Off</h1>
           <p className="text-sm text-[#b8a7e6]">Game ko ON/OFF karein, aur lobby ke Hot Games section ke liye alag se select karein. OFF game lobby ya All Games mein available nahi hoti. Kisi ek user ko block karne ke liye Users → user → Game Restrictions.</p>
-        </div>
-        <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
-          <input aria-label="Search provider games" value={search} onChange={event => { setSearch(event.target.value); setLimit(60); }}
-            placeholder="Search games..." className="min-w-0 flex-1 rounded-xl border border-[#3a2470] bg-[#100a21] px-3 py-2 text-sm text-white" />
-          <select aria-label="Game provider" value={provider} onChange={event => { setProvider(event.target.value); setLimit(60); }}
-            className="min-w-0 rounded-xl border border-[#3a2470] bg-[#100a21] px-3 py-2 text-sm text-white">
-            <option value="">All providers</option>
-            {providers.map(name => <option key={name} value={name}>{name}</option>)}
-          </select>
         </div>
         <p className="text-sm text-[#b8a7e6]">{games.length} provider games</p>
         {error && <p role="alert" className="rounded-xl border border-red-500/30 p-3 text-sm text-red-200">{error}</p>}

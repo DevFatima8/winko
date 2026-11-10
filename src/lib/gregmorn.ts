@@ -35,6 +35,21 @@ export class GregmornLaunchError extends Error {
   }
 }
 
+function launchRejectionReason(data: GregmornOpenGameResponse) {
+  const rawDetail = `${typeof data.error === "string" ? data.error : ""} ${typeof data.message === "string" ? data.message : ""}`.toLowerCase();
+  const detail = rawDetail.replace(/[_-]+/g, " ");
+  return /\b(?:active|unfinished|uncompleted|pending|open|ongoing|running)\s+(?:game\s+)?(?:session|round)\b|\b(?:session|round)\s+(?:(?:is|has|already)\s+)*(?:active|unfinished|uncompleted|pending|open|ongoing|running|in\s+progress|not\s+(?:complete|completed|finished|closed))\b|\bprevious\s+(?:game|round|session)\b.{0,40}\b(?:active|open|unfinished|pending|finish|complete|close|not\s+(?:finished|complete|completed|closed))\b/.test(detail) ? "session_in_progress"
+    : /signature|hmac/.test(rawDetail) ? "signature_rejected"
+    : /\bdemo\b.{0,30}\b(?:not supported|unsupported|unavailable)\b|\bno demo\b/.test(detail) ? "demo_not_supported"
+    : /网络异常|vendor open game/.test(rawDetail) ? "game_vendor_unavailable"
+    : /callback|wallet/.test(rawDetail) ? "wallet_callback_rejected"
+    : /currency/.test(rawDetail) ? "currency_rejected"
+    : /\bip\b|whitelist|allowlist/.test(rawDetail) ? "ip_rejected"
+    : /balance|fund|credit/.test(rawDetail) ? "balance_rejected"
+    : /unauthori[sz]ed|user_id|merchant/.test(rawDetail) ? "account_rejected"
+    : "provider_rejected";
+}
+
 const OFFICE_API = process.env.GREGMORN_OFFICE_API_URL ?? "https://office-api-dev.helcenac.com";
 const CLIENT_API = process.env.GREGMORN_CLIENT_API_URL ?? "https://client-api-dev.helcenac.com";
 
@@ -157,6 +172,7 @@ export async function openGregmornGame(input: {
   balance: number;
   exitUrl: string;
   demo?: boolean;
+  currency?: string;
 }) {
   if (!input.gameId || input.gameId.length > 255) throw new Error("Invalid Gregmorn game identity.");
   if (!/^[a-zA-Z0-9_.-]{1,64}$/.test(input.playerLogin)) throw new Error("Invalid Gregmorn player login.");
@@ -165,7 +181,7 @@ export async function openGregmornGame(input: {
   if (exitUrl.protocol !== "https:" || exitUrl.username || exitUrl.password) {
     throw new Error("Gregmorn exit URL must use HTTPS and cannot include credentials.");
   }
-  const currency = process.env.GREGMORN_CURRENCY ?? "PKR";
+  const currency = input.currency ?? process.env.GREGMORN_CURRENCY ?? "PKR";
   if (!/^[A-Z]{3}$/.test(currency)) throw new Error("Gregmorn currency must be a three-letter ISO code.");
   const auth = await getAuth();
   const payload = {
@@ -205,7 +221,8 @@ export async function openGregmornGame(input: {
     } catch {
       transientReason = response ? "invalid_provider_response" : "provider_unreachable";
     }
-    if (data && (data.status === "success" || (response && response.status < 500))) break;
+    if (data && (data.status === "success" || (response && response.status < 500) ||
+        launchRejectionReason(data) === "session_in_progress")) break;
     if (data) transientReason = "provider_rejected";
     console.warn("[gregmorn launch] transient provider response", {
       attempt, status: response?.status ?? null, contentType: response?.headers.get("content-type") ?? null,
@@ -216,18 +233,7 @@ export async function openGregmornGame(input: {
   const sessionId = data.content?.gameRes?.sessionId;
   if (!response.ok || data.status !== "success" || typeof gameUrl !== "string" ||
       typeof sessionId !== "string" || !sessionId) {
-    const rawDetail = `${typeof data.error === "string" ? data.error : ""} ${typeof data.message === "string" ? data.message : ""}`.toLowerCase();
-    const detail = rawDetail.replace(/[_-]+/g, " ");
-    const reason = /\b(?:active|unfinished|uncompleted|pending|open|ongoing)\s+(?:game\s+)?(?:session|round)\b|\b(?:session|round)\s+(?:is\s+)?(?:active|unfinished|uncompleted|pending|open|ongoing|already\s+(?:open|running|ongoing))\b|\bround\s+(?:is\s+)?not\s+(?:complete|completed|finished|closed)\b|\bprevious\s+(?:game|round|session)\b.{0,40}\b(?:active|open|unfinished|pending|finish|complete|close|not\s+(?:finished|complete|completed|closed))\b/.test(detail) ? "session_in_progress"
-      : /signature|hmac/.test(rawDetail) ? "signature_rejected"
-      : /网络异常|vendor open game/.test(rawDetail) ? "game_vendor_unavailable"
-      : /callback|wallet/.test(rawDetail) ? "wallet_callback_rejected"
-      : /currency/.test(rawDetail) ? "currency_rejected"
-      : /\bip\b|whitelist|allowlist/.test(rawDetail) ? "ip_rejected"
-      : /balance|fund|credit/.test(rawDetail) ? "balance_rejected"
-      : /unauthori[sz]ed|user_id|merchant/.test(rawDetail) ? "account_rejected"
-      : "provider_rejected";
-    throw new GregmornLaunchError(reason, response.status, typeof data.code === "number" ? data.code : undefined);
+    throw new GregmornLaunchError(launchRejectionReason(data), response.status, typeof data.code === "number" ? data.code : undefined);
   }
   let parsedUrl: URL;
   try { parsedUrl = new URL(gameUrl); } catch { throw new Error("Gregmorn returned an invalid game URL."); }

@@ -69,21 +69,22 @@ test("Sports includes confirmed sports themes without removing their original ga
     assert.equal(categories.matchesProviderCategory({ title, category: "slots", provider: "Studio", isHot: false }, "Sports"), false);
   }
 });
-test("shared panel filters rendered cards by category, provider and search together", () => {
+test("shared panel keeps category selection and Hot-first provider order without search/provider controls", () => {
   const jsx = (type, props) => ({ type, props });
-  let stateOverrides = [];
-  let stateIndex = 0;
   const { GregmornGames } = load("src\\components\\lobby\\GregmornGames.tsx", {
     react: {
       useId: () => "games",
-      useState: initial => [stateOverrides[stateIndex++] ?? initial, () => {}],
+      useState: initial => [initial, () => {}],
       useEffect: () => {}, useRef: () => ({ current: null }),
     },
     "react/jsx-runtime": { jsx, jsxs: jsx },
     "next/navigation": { useRouter: () => ({}) },
+    "next/image": { default: "image" },
     "@/lib/auth": {},
+    "@/components/Icons": { FlameIcon: "flame" },
     "@/lib/gameNavigation": { useGameReturnScroll: () => {} },
     "@/lib/providerCategories": categories,
+    "@/lib/providerOrder": load("src\\lib\\providerOrder.ts"),
     "@/lib/useProviderCatalog": { useProviderCatalog: () => ({}) },
     "./GameThumbnail": { GameThumbnail: "thumbnail" },
     "./GameGridSkeleton": { GameGridSkeleton: "skeleton" },
@@ -100,14 +101,25 @@ test("shared panel filters rendered cards by category, provider and search toget
     ...game,
     imageUrl: game.id === "e" ? "/games/Cricket-King-18.png" : game.id === "a" ? "/games/01_Aviator_1024x700.jpg" : "https://cdn.example/game.jpg",
   }));
-  function titles(category, search = "", provider = "") {
-    stateIndex = 0;
-    stateOverrides = [search, provider];
+  function titles(category) {
     const tree = GregmornGames({ category, catalog: { games, loading: false, error: "" } });
     const result = [];
     function visit(node) {
       if (Array.isArray(node)) node.forEach(visit);
       else if (node && typeof node === "object") {
+        assert.ok(node.type !== "input" && node.type !== "select", "search/provider controls are removed");
+        if (node.type === "svg" && node.props["aria-label"] === "Hot") {
+          assert.match(node.props.className, /\bleft-1 top-1\b/);
+          assert.ok(node.props.className.includes("w-[26%]"), "fire and text scale together to the reference card proportion");
+          assert.equal(node.props.viewBox, "0 0 80 40");
+          const [flame, accent, label] = node.props.children;
+          assert.equal(flame.props.fill, "#ef241c");
+          assert.equal(accent.props.fill, "#ff6a16");
+          assert.equal(label.props.children, "HOT");
+          assert.equal(label.props.fill, "#ffe83b");
+          assert.equal(label.props.fontStyle, "italic");
+          assert.equal(label.props.fontSize, "25");
+        }
         if (node.type === "thumbnail") {
           result.push(node.props.alt);
           assert.equal(node.props.className, node.props.src.endsWith("_1024x700.jpg") ? "h-full w-full object-cover object-center" : "h-full w-full object-contain");
@@ -123,13 +135,18 @@ test("shared panel filters rendered cards by category, provider and search toget
     return result;
   }
   assert.deepEqual(titles("Mini Games"), ["Aviator", "Mines"]);
-  assert.deepEqual(titles("Mini Games", "mine", "SPRIBE"), ["Mines"]);
-  assert.deepEqual(titles("Mini Games", "", "Evolution"), []);
   assert.deepEqual(titles("Live"), ["Roulette"]);
-  assert.deepEqual(titles("Slot"), ["Sweet Bonanza", "Cricket King 18", "Unavailable Slot"]);
+  assert.deepEqual(titles("Slot"), ["Cricket King 18", "Sweet Bonanza", "Unavailable Slot"]);
   assert.deepEqual(titles("Sports"), ["Cricket King 18"]);
-  assert.deepEqual(titles("Sports", "cricket", "Jili"), ["Cricket King 18"]);
-  assert.deepEqual(titles("Sports", "", "PP"), []);
-  assert.deepEqual(titles("Hot"), ["Aviator", "Roulette"]);
+  assert.deepEqual(titles("Hot"), ["Roulette", "Aviator"]);
   assert.equal(titles("All").length, games.length);
+  const expected = ["Roulette", "Aviator", "Cricket King 18", "Sweet Bonanza", "Unavailable Slot", "Mines"];
+  assert.deepEqual(titles("All"), expected);
+  games.reverse();
+  assert.deepEqual(titles("All"), expected, "upstream reordering cannot shuffle displayed games");
+  const manyGames = Array.from({ length: 110 }, (_, index) => ({ ...games[0], id: `game-${index}` }));
+  const tree = GregmornGames({ category: "All", catalog: { games: manyGames, loading: false, error: "" } });
+  const text = JSON.stringify(tree);
+  assert.doesNotMatch(text, /Showing \d+ of \d+ games|Load more games \(/);
+  assert.match(text, /Load more games/);
 });

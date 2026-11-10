@@ -1,19 +1,20 @@
 import { NextResponse } from "next/server";
 import { verifyGregmornSignature } from "@/lib/gregmorn";
-import { GregmornWalletError, gregmornCallbackRoom, processGregmornWalletCallback, type GregmornCallbackBody } from "@/lib/gregmornWallet";
+import { GregmornWalletError, gregmornCallbackCurrency, gregmornCallbackRoom, parseGregmornCallback, processGregmornWalletCallback } from "@/lib/gregmornWallet";
 import { mysqlMultiplayerStore } from "@/lib/multiplayer-store";
 
 export const dynamic = "force-dynamic";
 
-function failure(login: string, duration: number, error: string, status = 400, balance = 0) {
+function failure(login: string, duration: number, error: string, status = 400, balance = 0, currency = process.env.GREGMORN_CURRENCY ?? "PKR") {
+  console.warn("[gregmorn wallet callback] Rejected", { reason: error, httpStatus: status });
   return NextResponse.json({
     balance,
-    currency: process.env.GREGMORN_CURRENCY ?? "PKR",
+    currency,
     duration,
     error,
     login,
     status: "fail",
-  }, { status });
+  }, { status, headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
   let body: unknown;
   try { body = JSON.parse(rawBody); }
   catch { return failure("", Date.now() - startedAt, "invalid json"); }
-  const login = body && typeof body === "object" && "login" in body && typeof body.login === "string" ? body.login : "";
+  let login = body && typeof body === "object" && "login" in body && typeof body.login === "string" ? body.login : "";
 
   let validSignature = false;
   try { validSignature = verifyGregmornSignature(rawBody, request.headers.get("x-signature")); }
@@ -34,20 +35,12 @@ export async function POST(request: Request) {
     return failure(login, Date.now() - startedAt, "wallet integration unavailable", 503);
   }
   if (!validSignature) return failure(login, Date.now() - startedAt, "invalid signature");
-  if (!body || typeof body !== "object" || !("cmd" in body) ||
-      !["getBalance", "writeBet", "rollback"].includes(String(body.cmd)) ||
-      !("login" in body) || typeof body.login !== "string" ||
-      (body.cmd !== "getBalance" && (!("sessionid" in body) || typeof body.sessionid !== "string")) ||
-      ("sessionid" in body && body.sessionid !== null && body.sessionid !== undefined && typeof body.sessionid !== "string")) {
-    return failure(login, Date.now() - startedAt, "invalid callback request");
-  }
-
-  const callback = {
-    ...body,
-    sessionid: "sessionid" in body && typeof body.sessionid === "string" ? body.sessionid : "",
-  } as GregmornCallbackBody;
+  let currency = process.env.GREGMORN_CURRENCY ?? "PKR";
   try {
-    const room = callback.sessionid ? gregmornCallbackRoom(callback.sessionid) : gregmornCallbackRoom(`balance:${login}`);
+    const callback = parseGregmornCallback(body);
+    login = callback.login;
+    currency = gregmornCallbackCurrency(callback);
+    const room = gregmornCallbackRoom(callback.cmd === "getBalance" ? `balance:${login}` : callback.sessionid);
     const result = await mysqlMultiplayerStore.transact(room, tx =>
       processGregmornWalletCallback(tx, callback));
     return NextResponse.json({
@@ -63,6 +56,6 @@ export async function POST(request: Request) {
     return failure(login, Date.now() - startedAt,
       error instanceof GregmornWalletError ? error.message : "wallet transaction failed",
       error instanceof GregmornWalletError ? 400 : 503,
-      error instanceof GregmornWalletError ? error.balance ?? 0 : 0);
+      error instanceof GregmornWalletError ? error.balance ?? 0 : 0, currency);
   }
 }
