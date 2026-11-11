@@ -1,8 +1,9 @@
 "use client";
 
 import type { ProviderCatalogGame } from "./gregmornCatalog";
+import { PROVIDER_GAMES_VISIBLE, SITE_CATALOG_URL } from "./gameAvailability";
 
-const KEY = "wx_provider_catalog_cache";
+const KEY = PROVIDER_GAMES_VISIBLE ? "wx_provider_catalog_cache" : "wx_local_catalog_cache";
 let warm: { games: ProviderCatalogGame[]; at: number } | null = null;
 
 function cacheName() {
@@ -23,7 +24,7 @@ export async function saveProviderCatalog(games: ProviderCatalogGame[]) {
   if (!("caches" in window)) return;
   try {
     const cache = await caches.open(cacheName());
-    await cache.put("/api/gregmorn/catalog", Response.json({ games, at: Date.now() }));
+    await cache.put(SITE_CATALOG_URL, Response.json({ games, at: Date.now() }));
   } catch (error) { console.warn("[Provider catalog] Could not cache return catalogue", error); }
 }
 
@@ -33,7 +34,7 @@ export async function readReturnCatalog() {
     const name = sessionStorage.getItem(KEY);
     if (!name) return null;
     const cache = await caches.open(name);
-    const response = await cache.match("/api/gregmorn/catalog");
+    const response = await cache.match(SITE_CATALOG_URL);
     if (!response) return null;
     const data = await response.json();
     if (!Number.isFinite(data.at) || Date.now() - data.at > 24 * 3600000 ||

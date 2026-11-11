@@ -320,6 +320,7 @@ export default function MonsterHiloGame() {
 
   return (
     <div className="w-full h-full max-w-5xl mx-auto flex flex-col overflow-y-auto overflow-x-hidden rounded-2xl bg-gradient-to-b from-[#10131f] via-[#161a29] to-[#0a0d17] border border-[#a855f7]/30 shadow-2xl shadow-[#a855f7]/10 px-2 sm:px-4 py-2 text-white select-none">
+      {idleRound.countdown !== null && <p className="shrink-0 text-center text-xs text-amber-200" role="status">Next round in {idleRound.countdown}s</p>}
       {/* Top Header Bar */}
       <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-white/10 shrink-0">
         <div className="flex items-center gap-2">

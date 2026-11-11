@@ -15,6 +15,8 @@ export function GameResultPopup({ game }: { game: string }) {
             if (!result || (result.id ? result.game !== game : !LEGACY_RESULT_GAMES.includes(game))) return;
             if (!result.id && result.game.toLowerCase().replace(/[^a-z0-9]+/g, "-") !== game &&
                 !(game === "aviator-x" && result.game === "Aviator")) return;
+            const amount = result.poolPending ? result.poolClaim ?? 0 : result.win;
+            if (!Number.isFinite(amount) || amount <= 0) return;
             if (result.id && seen.has(result.id)) return;
             if (result.id) seen.add(result.id);
             const notification = { result, sequence: ++nextSequence.current };
@@ -28,11 +30,9 @@ export function GameResultPopup({ game }: { game: string }) {
     if (!notification) return null;
     const { result, sequence } = notification;
     const amount = result.poolPending ? result.poolClaim ?? 0 : result.win;
-    const won = amount > 0;
-    const title = won ? "Congratulations! You win" : "You lose";
-    const detail = won && result.poolPending ? "Provisional win amount. Daily pool payout pending; not credited yet." : "";
+    const detail = result.poolPending ? "Provisional win amount. Daily pool payout pending; not credited yet." : "";
     return createPortal(
-        <GameResultMessage key={sequence} title={title} result={detail} winAmount={won ? amount : undefined} onDismiss={dismiss} />,
+        <GameResultMessage key={sequence} title="Congratulations! You win" result={detail} winAmount={amount} onDismiss={dismiss} />,
         document.body,
     );
 }

@@ -9,6 +9,8 @@ import { dailyPoolLock } from "./dailyPoolRules";
 import { dailyPoolEnabled } from "./dailyPoolConfig";
 import { isCardGame } from "./cardGameRules";
 import { nextPlayerWin } from "./playerWinCycle";
+import { AVIATOR_CLIENT_SEED, AVIATOR_LEGACY_MAX_CRASH, AVIATOR_MAX_CASHOUT, AVIATOR_MODEL, aviatorAccounting, aviatorCents, aviatorPayout, aviatorReachAt, isAviatorModel, validAutoCashout } from "./aviatorRules";
+import { flightAnimationSnapshot } from "./aviatorFlight";
 
 const FLIGHT_ROOM = "aviator:shared:v2";
 const LIMIT = 1000;
@@ -17,7 +19,7 @@ const stamp = (value: Date | string | number) => new Date(value).getTime();
 const mask = (name?: string | null) => name ? `${name.slice(0, 1)}***${name.slice(-1)}` : "P***r";
 const gameIds = new Map<string, string>();
 type Tx = MultiplayerTransaction;
-type LiveResult = GameResultDoc & PoolFields & { sharedRoom?: string; publicName?: string };
+type LiveResult = GameResultDoc & PoolFields & { sharedRoom?: string; publicName?: string; flightModel?: string; serverSeedHash?: string; autoCashout?: number; netProfit?: number; cashoutMultiplier?: number };
 type LiveCardBet = CardBetDoc & PoolFields & { publicName?: string; poolResultId?: string; personalRoom?: string };
 type CardContext = { table: cards.Table; room: string; personal: boolean; spectator: boolean };
 type FlightContext = { table: flight.Table; room: string; userId: string | null };
@@ -59,7 +61,7 @@ async function flightBets(tx: Tx, gid: string, roundNo: number, context: FlightC
 }
 
 async function crashAfterCashouts(tx: Tx, gid: string, round: AviatorRoundDoc, context: FlightContext, now: number, multiplier: number) {
-  if (context.table !== "aviator") return;
+  if (context.table !== "aviator" || round.fairness) return;
   const bets = await flightBets(tx, gid, round.roundNo, context);
   if (bets.length >= LIMIT) throw new Error("Flight participant limit exceeded.");
   const players = new Set(bets.map(bet => bet.userId));
@@ -72,6 +74,68 @@ async function crashAfterCashouts(tx: Tx, gid: string, round: AviatorRoundDoc, c
   }
   Object.assign(round, { status: "crashed", crashPoint: multiplier, endedAt: new Date(now), updatedAt: new Date(now) });
   await tx.put("aviatorrounds", round._id, round);
+}
+
+function publicFlightProof(round: AviatorRoundDoc) {
+  const proof = round.fairness;
+  if (!proof) return null;
+  return {
+    version: proof.version, nextVersion: proof.nextVersion ?? proof.version, serverSeedHash: proof.serverSeedHash, clientSeed: proof.clientSeed,
+    nonce: proof.nonce, nextServerSeedHash: proof.nextServerSeedHash,
+    ...(round.status === "crashed" ? { serverSeed: proof.serverSeed } : {}),
+  };
+}
+
+async function payFlightBet(tx: Tx, user: UserDoc, bet: LiveResult, multiplier: number, now: number) {
+  if (bet.outcome !== "pending" || !isAviatorModel(bet.flightModel)) throw new Error("Aviator wager is not payable.");
+  if (aviatorCents(bet.betAmount) <= 0) throw new Error("Invalid Aviator accepted stake.");
+  const win = aviatorPayout(bet.betAmount, multiplier);
+  Object.assign(bet, {
+    outcome: "win", winAmount: win, netProfit: (aviatorCents(win) - aviatorCents(bet.betAmount)) / 100, cashoutMultiplier: multiplier,
+    resultData: `Cashed out @ ${multiplier.toFixed(2)}x | ${bet.flightModel}`, updatedAt: new Date(now),
+  });
+  await tx.put("gameresults", bet._id, bet);
+  await saveFlightWallet(tx, user, bet, win, "payout", now);
+  return { ok: true, multiplier, win, netWin: bet.netProfit!, netProfit: bet.netProfit! };
+}
+
+async function saveFlightWallet(tx: Tx, user: UserDoc, bet: LiveResult, delta: number, action: "stake" | "payout" | "refund", now: number) {
+  const before = aviatorCents(user.balance);
+  const change = aviatorCents(Math.abs(delta)) * (delta < 0 ? -1 : 1);
+  const after = before + change;
+  if (!Number.isSafeInteger(after) || after < 0 || aviatorCents(after / 100) !== after) throw new Error("Aviator wallet movement exceeds safe precision.");
+  user.balance = after / 100;
+  user.updatedAt = new Date(now);
+  await tx.put("users", user._id, user);
+  const id = `aviator:${bet._id}:${action}`;
+  await tx.insert("multiplayerrequests", id, {
+    _id: id, userId: user._id, gameId: bet.gameId, resultId: bet._id, roundNo: bet.roundNo,
+    flightModel: bet.flightModel, serverSeedHash: bet.serverSeedHash, cashoutMultiplier: bet.cashoutMultiplier,
+    action, deltaCents: change, balanceBeforeCents: before, balanceAfterCents: after,
+    createdAt: new Date(now),
+  });
+}
+
+async function settleFlightAutos(tx: Tx, gid: string, round: AviatorRoundDoc, context: FlightContext, now: number) {
+  if (round.fairness && now < stamp(round.startsAt)) return;
+  const bets = await flightBets(tx, gid, round.roundNo, context);
+  for (const bet of bets.filter(bet => isAviatorModel(bet.flightModel))) {
+    if (bet.outcome === "pending" && (aviatorCents(bet.betAmount) <= 0 || bet.winAmount !== 0)) {
+      throw new Error("Invalid Aviator pending wager.");
+    }
+    if (!round.fairness || bet.flightModel !== round.fairness.version ||
+        bet.serverSeedHash !== undefined && bet.serverSeedHash !== round.fairness.serverSeedHash ||
+        bet.autoCashout !== undefined && !validAutoCashout(bet.autoCashout)) {
+      throw new Error("Aviator wager commitment or automatic target is invalid.");
+    }
+  }
+  if (!round.fairness) return;
+  const due = bets.filter(bet => bet.outcome === "pending" && isAviatorModel(bet.flightModel) &&
+    bet.autoCashout !== undefined && bet.autoCashout < round.crashPoint &&
+    now >= aviatorReachAt(stamp(round.startsAt), bet.autoCashout, flight.TABLES[context.table].growth));
+  for (const bet of due.sort((a, b) => (a.userId ?? "").localeCompare(b.userId ?? "") || a.betSlot - b.betSlot)) {
+    await payFlightBet(tx, await wallet(tx, bet.userId!), bet, bet.autoCashout!, now);
+  }
 }
 
 async function advanceFlight(tx: Tx, gid: string, context: FlightContext) {
@@ -96,13 +160,16 @@ async function advanceFlight(tx: Tx, gid: string, context: FlightContext) {
     round = await createFlight(tx, roundNo, now, context);
   }
   for (let guard = 0; guard < 128; guard++) {
+    flight.validateFlightRound(round, context.table);
     now = await tx.now();
-    const crashAt = stamp(round.startsAt) + Math.log(round.crashPoint) / cfg.growth * 1000 + 1;
+    await settleFlightAutos(tx, gid, round, context, now);
+    const crashAt = round.fairness ? aviatorReachAt(stamp(round.startsAt), round.crashPoint, cfg.growth)
+      : stamp(round.startsAt) + Math.log(round.crashPoint) / cfg.growth * 1000 + 1;
     if (round.status !== "crashed" && now >= crashAt) {
       const bets = await flightBets(tx, gid, round.roundNo, context);
       for (const bet of bets) if (bet.outcome === "pending") {
         await closePoolWager(tx, bet._id, 0);
-        Object.assign(bet, { outcome: "lose", resultData: `Flew away @ ${round.crashPoint.toFixed(2)}x`, updatedAt: new Date(now) });
+        Object.assign(bet, { outcome: "lose", netProfit: -bet.betAmount, resultData: `Flew away @ ${round.crashPoint.toFixed(2)}x`, updatedAt: new Date(now) });
         await tx.put("gameresults", bet._id, bet);
       }
       round = { ...round, status: "crashed", endedAt: new Date(crashAt), updatedAt: new Date(now) };
@@ -116,21 +183,30 @@ async function advanceFlight(tx: Tx, gid: string, context: FlightContext) {
     let nextNo = round.roundNo + 1;
     const pending = await tx.findWhere<LiveResult>("gameresults", { gameId: gid, ...(context.table === "aviator" ? { sharedRoom: context.room } : { userId: context.userId }), outcome: "pending" }, LIMIT);
     if (!pending.length) {
-      const duration = cfg.waitMs + Math.log(round.crashPoint) / cfg.growth * 1000 + 1 + cfg.pauseMs;
+      const duration = cfg.waitMs + crashAt - stamp(round.startsAt) + cfg.pauseMs;
       const skipped = Math.max(0, Math.floor((now - anchor) / duration));
       anchor += skipped * duration;
       nextNo += skipped;
     }
-    round = await createFlight(tx, nextNo, anchor, context);
+    round = await createFlight(tx, nextNo, anchor, context, round);
   }
   throw new Error("Live flight is catching up. Please retry shortly.");
 }
 
-async function createFlight(tx: Tx, roundNo: number, anchor: number, context: FlightContext) {
+async function createFlight(tx: Tx, roundNo: number, anchor: number, context: FlightContext, previous?: AviatorRoundDoc) {
   const now = new Date(anchor);
+  const model = previous?.fairness ? previous.fairness.nextVersion ?? previous.fairness.version : AVIATOR_MODEL;
+  if (!isAviatorModel(model)) throw new Error("Aviator round commitment verification failed.");
+  const generated = flight.generateCrashPoint(context.table, roundNo, previous?.fairness?.nextServerSeed, model);
+  const nextServerSeed = flight.newFlightSeed();
   const round: AviatorRoundDoc = {
-    _id: randomUUID(), table: context.room, roundNo, crashPoint: flight.generateCrashPoint(context.table).crashPoint,
+    _id: randomUUID(), table: context.room, roundNo, crashPoint: generated.crashPoint,
     status: "waiting", startsAt: new Date(anchor + flight.TABLES[context.table].waitMs), endedAt: null,
+    fairness: {
+      version: model, nextVersion: AVIATOR_MODEL, serverSeed: generated.seed, serverSeedHash: generated.hash,
+      clientSeed: AVIATOR_CLIENT_SEED, nonce: roundNo, nextServerSeed,
+      nextServerSeedHash: flight.flightSeedHash(nextServerSeed),
+    },
     createdAt: now, updatedAt: now,
   };
   await tx.insert("aviatorrounds", round._id, round);
@@ -143,9 +219,9 @@ async function withFlight<T>(fn: (tx: Tx, round: AviatorRoundDoc, gid: string, c
   return mysqlMultiplayerStore.transact(dailyPoolLock(table), async (tx) => {
     await settleDailyPools(tx, table);
     const round = await advanceFlight(tx, gid, context);
-    if (table === "aviator" && round.status === "running") {
+    if (table === "aviator" && !round.fairness && round.status === "running") {
       const now = await tx.now();
-      const multiplier = Math.min(round.crashPoint, flight.multiplierAt(table, new Date(round.startsAt), new Date(now)));
+      const multiplier = Math.min(round.crashPoint, flight.multiplierAt(table, new Date(round.startsAt), new Date(now), AVIATOR_LEGACY_MAX_CRASH));
       await crashAfterCashouts(tx, gid, round, context, now, multiplier);
     }
     const result = await fn(tx, round, gid, context);
@@ -158,6 +234,7 @@ export async function sharedFlightState(userId: string | null, table: flight.Tab
     const current = await flightBets(tx, gid, round.roundNo, context);
     const queued = userId ? (await flightBets(tx, gid, round.roundNo + 1, context)).filter((bet) => bet.userId === userId && bet.outcome === "pending") : [];
     const history = await tx.findWhere<AviatorRoundDoc>("aviatorrounds", { table: context.room, status: "crashed" }, 40, { field: "roundNo", direction: "desc" });
+    for (const completed of history) flight.validateFlightRound(completed, table);
     const own = userId ? await tx.findWhere<LiveResult>("gameresults", { gameId: gid, userId }, 30, { field: "createdAt", direction: "desc" }) : [];
     const top = await tx.findWhere<LiveResult>("gameresults", { gameId: gid, outcome: "win" }, 20, { field: "winAmount", direction: "desc" });
     const names = new Map<string, string>();
@@ -172,30 +249,30 @@ export async function sharedFlightState(userId: string | null, table: flight.Tab
     };
     const me = userId ? await tx.get<UserDoc>("users", userId) : null;
     const cfg = flight.TABLES[table];
+    const maxMult = round.fairness ? cfg.maxMult : AVIATOR_LEGACY_MAX_CRASH;
     const serverNow = await tx.now();
-    // Bound the display even if the round crossed its crash time while these reads ran.
-    const multiplier = round.status === "crashed" ? round.crashPoint : Math.min(
-      round.crashPoint, cfg.maxMult,
-      Math.exp(cfg.growth * Math.max(0, (serverNow - stamp(round.startsAt)) / 1000)),
-    );
+    const snapshot = flightAnimationSnapshot(round, serverNow, cfg.growth, maxMult);
     return {
       serverNow, table,
-      config: { name: cfg.name, slots: cfg.slots, minBet: cfg.minBet, maxBet: cfg.maxBet, waitMs: cfg.waitMs, pauseMs: cfg.pauseMs, growth: cfg.growth, maxMult: cfg.maxMult },
-      round: { id: round.roundNo, key: round._id, status: round.status, idle: false, startsAt: stamp(round.startsAt), endedAt: round.endedAt ? stamp(round.endedAt) : null, crashPoint: round.status === "crashed" ? round.crashPoint : null, multiplier },
-      history: history.map((row) => ({ id: row.roundNo, crashPoint: row.crashPoint })),
+      config: { name: cfg.name, slots: cfg.slots, minBet: cfg.minBet, maxBet: cfg.maxBet, waitMs: cfg.waitMs, pauseMs: cfg.pauseMs, growth: cfg.growth, maxMult, maxCashout: round.fairness ? cfg.maxCashout : AVIATOR_LEGACY_MAX_CRASH, theoreticalRtp: round.fairness ? 80 : undefined, theoreticalRtpAt199: round.fairness ? round.fairness.version === AVIATOR_MODEL ? 79.6 : 80 : undefined, model: round.fairness?.version },
+      round: { ...snapshot.round, idle: false },
+      fairness: publicFlightProof(round),
+      accounting: aviatorAccounting(current.filter(bet => isAviatorModel(bet.flightModel))),
+      history: history.map((row) => ({ id: row.roundNo, crashPoint: row.crashPoint, fairness: publicFlightProof(row) })),
       bets: current.slice(-200).map((bet) => ({ id: bet._id, name: names.get(bet.userId ?? "") ?? "P***r", bet: bet.betAmount, win: bet.winAmount, outcome: bet.outcome, data: bet.resultData, mult: mult(bet), poolPending: bet.poolPending, poolClaim: bet.poolClaim })),
       totals: { count: current.length, amount: money(current.reduce((sum, bet) => sum + bet.betAmount, 0)), cashed: current.filter((bet) => bet.outcome === "win").length },
-      myBets: current.filter((bet) => bet.userId === userId && userId !== null).map((bet) => ({ id: bet._id, slot: bet.betSlot, bet: bet.betAmount, win: bet.winAmount, outcome: bet.outcome, data: bet.resultData, poolPending: bet.poolPending, poolClaim: bet.poolClaim, poolVersion: bet.poolVersion })),
+      myBets: current.filter((bet) => bet.userId === userId && userId !== null).map((bet) => ({ id: bet._id, slot: bet.betSlot, bet: bet.betAmount, win: bet.winAmount, outcome: bet.outcome, data: bet.resultData, poolPending: bet.poolPending, poolClaim: bet.poolClaim, poolVersion: bet.poolVersion, flightModel: bet.flightModel, autoCashout: bet.autoCashout, netProfit: bet.netProfit })),
       queued: queued.map((bet) => ({ slot: bet.betSlot, bet: bet.betAmount })),
-      myHistory: own.filter((bet) => bet.outcome !== "pending").map((bet) => ({ id: bet._id, round: bet.roundNo, bet: bet.betAmount, win: bet.winAmount, outcome: bet.outcome, at: bet.createdAt, poolPending: bet.poolPending, poolClaim: bet.poolClaim })),
+      myHistory: own.filter((bet) => bet.outcome !== "pending").map((bet) => ({ id: bet._id, round: bet.roundNo, bet: bet.betAmount, win: bet.winAmount, netProfit: bet.poolPending ? null : money(bet.winAmount - bet.betAmount), outcome: bet.outcome, at: bet.createdAt, poolPending: bet.poolPending, poolClaim: bet.poolClaim })),
       top: top.filter(bet => !bet.poolPending && bet.winAmount > 0).map((bet) => ({ name: names.get(bet.userId ?? "") ?? "P***r", bet: bet.betAmount, win: bet.winAmount, mult: mult(bet) ?? 1, round: bet.roundNo })),
       balance: me?.balance ?? 0,
     };
   }, table, userId);
 }
 
-export async function sharedFlightBet(userId: string, amount: number, slot: number, expectedRound?: number, table: flight.Table = "aviator", queueIfClosed = false) {
+export async function sharedFlightBet(userId: string, amount: number, slot: number, expectedRound?: number, table: flight.Table = "aviator", queueIfClosed = false, autoCashout?: number) {
   return withFlight(async (tx, round, gid, context) => {
+    if (!round.fairness) return { error: "The previous-rule flight is finishing. Please wait for the next round." };
     const user = await wallet(tx, userId);
     if (!user.isActive || user.role !== "client" || user.blockedGames?.includes(table)) return { error: "This account cannot bet on this game." };
     if (user.balance < amount) return { error: "Insufficient balance." };
@@ -211,14 +288,15 @@ export async function sharedFlightBet(userId: string, amount: number, slot: numb
     }
     if (bets.some((bet) => bet.userId === userId && bet.betSlot === slot)) return { error: "Bet already placed." };
     if (bets.length >= LIMIT - 1) return { error: "This flight is full. Please wait for the next round." };
+    const flightModel = target === round.roundNo ? round.fairness.version : round.fairness.nextVersion ?? round.fairness.version;
     const _id = randomUUID();
-    const bet: LiveResult = { _id, gameId: gid, userId, roundNo: target, betSlot: slot, betAmount: amount, winAmount: 0, outcome: "pending", resultData: null, sharedRoom: context.room, publicName: mask(user.username || user.name), createdAt: new Date(now), updatedAt: new Date(now) };
-    if (dailyPoolEnabled()) await addPoolWager(tx, table, bet);
-    await saveWallet(tx, user, -amount, now);
+    const bet: LiveResult = { _id, gameId: gid, userId, roundNo: target, betSlot: slot, betAmount: amount, winAmount: 0, outcome: "pending", resultData: null, sharedRoom: context.room, flightModel, serverSeedHash: target === round.roundNo ? round.fairness.serverSeedHash : round.fairness.nextServerSeedHash, autoCashout, publicName: mask(user.username || user.name), createdAt: new Date(now), updatedAt: new Date(now) };
+    await saveFlightWallet(tx, user, bet, -amount, "stake", now);
     await tx.insert("gameresults", _id, bet);
     return {
       ok: true, round: target, queued: target !== round.roundNo, balance: user.balance,
-      bet: { id: _id, slot, bet: amount, win: 0, outcome: "pending", data: null, poolPending: bet.poolPending, poolVersion: bet.poolVersion },
+      bet: { id: _id, slot, bet: amount, win: 0, outcome: "pending", data: null, flightModel, autoCashout },
+      serverSeedHash: target === round.roundNo ? round.fairness.serverSeedHash : round.fairness.nextServerSeedHash,
     };
   }, table, userId);
 }
@@ -233,7 +311,8 @@ export async function sharedFlightCancel(userId: string, slot: number, expectedR
     const user = await wallet(tx, userId);
     if (bet.roundNo === round.roundNo && await tx.now() >= stamp(round.startsAt)) return { error: "Round started. This bet cannot be cancelled." };
     await closePoolWager(tx, bet._id, 0, true);
-    await saveWallet(tx, user, bet.betAmount, await tx.now());
+    if (isAviatorModel(bet.flightModel)) await saveFlightWallet(tx, user, bet, bet.betAmount, "refund", await tx.now());
+    else await saveWallet(tx, user, bet.betAmount, await tx.now());
     await tx.remove("gameresults", bet._id);
     return { ok: true };
   }, table, userId);
@@ -247,8 +326,23 @@ export async function sharedFlightCashout(userId: string, slot: number, expected
     const bet = (await flightBets(tx, gid, round.roundNo, context)).find((row) => row.userId === userId && row.betSlot === slot && row.outcome === "pending");
     if (!bet) return { error: "No active bet." };
     const now = await tx.now();
-    const multiplier = flight.multiplierAt(table, new Date(round.startsAt), new Date(now));
+    if (isAviatorModel(bet.flightModel)) {
+      if (!round.fairness || bet.flightModel !== round.fairness.version ||
+          bet.serverSeedHash !== undefined && bet.serverSeedHash !== round.fairness.serverSeedHash ||
+          bet.autoCashout !== undefined && !validAutoCashout(bet.autoCashout)) throw new Error("Aviator wager commitment or automatic target is invalid.");
+      // The target may have elapsed during wallet/ledger reads after advanceFlight.
+      if (bet.autoCashout !== undefined && bet.autoCashout < round.crashPoint &&
+          now >= aviatorReachAt(stamp(round.startsAt), bet.autoCashout, flight.TABLES[table].growth)) {
+        return payFlightBet(tx, user, bet, bet.autoCashout, now);
+      }
+      if (now >= aviatorReachAt(stamp(round.startsAt), round.crashPoint, flight.TABLES[table].growth)) return { error: "Flew away!" };
+    }
+    const multiplier = flight.multiplierAt(table, new Date(round.startsAt), new Date(now), round.fairness ? flight.TABLES[table].maxMult : AVIATOR_LEGACY_MAX_CRASH);
     if (multiplier >= round.crashPoint) return { error: "Flew away!" };
+    if (isAviatorModel(bet.flightModel)) {
+      if (multiplier < 1.01 || multiplier > AVIATOR_MAX_CASHOUT) return { error: "Cashout is available from 1.01x to 99.98x." };
+      return payFlightBet(tx, user, bet, multiplier, now);
+    }
     const claim = money(bet.betAmount * multiplier);
     if (await closePoolWager(tx, bet._id, claim)) {
       Object.assign(bet, { outcome: "win", winAmount: 0, poolClaim: claim, resultData: `claim @ ${multiplier.toFixed(2)}x | daily`, updatedAt: new Date(now) });

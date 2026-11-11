@@ -10,7 +10,7 @@ export const TABLES = {
   "dragon-tiger": {
     name: "Dragon Tiger",
     icon: "🐉",
-    betMs: 20000,
+    betMs: 10000,
     options: {
       dragon: { label: "Dragon", pays: "1:1", mult: 2 },
       tie: { label: "Tie", pays: "1:1", mult: 2 },
@@ -20,7 +20,7 @@ export const TABLES = {
   "andar-bahar": {
     name: "Andar Bahar",
     icon: "🃏",
-    betMs: 20000,
+    betMs: 10000,
     options: {
       andar: { label: "Andar", pays: "0.9:1", mult: 1.9 },
       bahar: { label: "Bahar", pays: "1:1", mult: 2 },

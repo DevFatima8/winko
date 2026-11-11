@@ -25,6 +25,25 @@ export async function nextPlayerWin(tx: MultiplayerTransaction, game: string, us
   return win;
 }
 
+/** Every completed block of `total` counted wagers contains exactly `winners` wins, in random order. */
+export async function nextBetWin(tx: MultiplayerTransaction, game: string, winners: number, total = 100) {
+  if (!Number.isSafeInteger(winners) || !Number.isSafeInteger(total) || winners < 0 || winners > total || total < 1) {
+    throw new Error("Invalid bet win cycle.");
+  }
+  const id = `${game}:bet-wins-${winners}-of-${total}:v1`;
+  const fresh = () => [...Array<boolean>(winners).fill(true), ...Array<boolean>(total - winners).fill(false)];
+  const saved = await tx.get<{ _id: string; remaining: boolean[] }>("multiplayerrooms", id);
+  if (saved && (!Array.isArray(saved.remaining) || !saved.remaining.length || saved.remaining.length > total ||
+      saved.remaining.some(slot => typeof slot !== "boolean") ||
+      saved.remaining.filter(Boolean).length > winners || saved.remaining.filter(slot => !slot).length > total - winners)) {
+    throw new Error(`${game} bet win cycle is invalid. Contact support.`);
+  }
+  const remaining = saved ? [...saved.remaining] : fresh();
+  const [win] = remaining.splice(randomInt(remaining.length), 1);
+  await tx.put("multiplayerrooms", id, { _id: id, remaining: remaining.length ? remaining : fresh() });
+  return win;
+}
+
 export async function nextPlayerPrize<T extends string>(
   tx: MultiplayerTransaction, game: string, userId: string, prizes: readonly T[],
 ): Promise<T | null> {

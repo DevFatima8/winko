@@ -211,6 +211,7 @@ export default function PokerGame({ backHref }: { backHref?: string }) {
 
   return (
     <div className="poker-container h-full w-full flex flex-col min-h-0 bg-[#0b0f1a] text-white overflow-hidden">
+      {live.controls}
       {/* Header */}
       <header className="flex-shrink-0 flex items-center justify-between border-b border-white/10 bg-gradient-to-r from-[#111827] via-[#1a1030] to-[#111827] px-3 py-2 sm:px-6 sm:py-3 shadow-md z-10">
         <div className="flex items-center gap-2 sm:gap-3">

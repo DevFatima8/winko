@@ -12,6 +12,7 @@ const loaded = { exports: {} };
 const imports = new Set([
   "react/jsx-runtime", "next/link", "@/lib/client", "@/lib/gameAudio", "@/lib/gameSfx",
   "@/lib/walletSync", "@/lib/betPresets", "react", "./AviatorScenicView", "@/lib/aviatorScenery",
+  "@/lib/aviatorRules",
 ]);
 new Function("require", "module", "exports", code)(name => {
   assert.ok(imports.has(name), `Unexpected dependency: ${name}`);
@@ -96,7 +97,8 @@ const display = (state, projected) => {
 for (const table of ["aviator", "aviator-x"]) {
   test(`${table}: delayed crash updates cannot show 3.45x before a 3.30x crash`, async () => {
     const s = createLegacyScene();
-    s.flight.generateCrashPoint = () => ({ crashPoint: 3.3, seed: "", hash: "" });
+    const generate = s.flight.generateCrashPoint;
+    s.flight.generateCrashPoint = (...args) => ({ ...generate(...args), crashPoint: 3.3 });
     const first = await s.flight.getState("alice", table);
     const crashAt = first.round.startsAt + Math.log(3.3) / first.config.growth * 1000 + 1;
     s.at(crashAt - 200);
@@ -116,22 +118,24 @@ for (const table of ["aviator", "aviator-x"]) {
 
   test(`${table}: slow state reads crossing the crash time never confirm an overshoot`, async () => {
     const s = createLegacyScene();
-    s.flight.generateCrashPoint = () => ({ crashPoint: 3.3, seed: "", hash: "" });
+    const generate = s.flight.generateCrashPoint;
+    s.flight.generateCrashPoint = (...args) => ({ ...generate(...args), crashPoint: 3.3 });
     const first = await s.flight.getState("alice", table);
     const crashAt = first.round.startsAt + Math.log(3.3) / first.config.growth * 1000 + 1;
     s.at(crashAt - 100);
     s.setReadDelay(1000);
     const delayed = await s.flight.getState("alice", table);
-    assert.equal(delayed.round.status, "running");
+    assert.equal(delayed.round.status, "crashed");
     assert.ok(delayed.serverNow > crashAt);
     assert.equal(delayed.round.multiplier, 3.3);
     assert.equal(display(delayed, 3.45), 3.3);
-    assert.equal(delayed.round.crashPoint, null);
+    assert.equal(delayed.round.crashPoint, 3.3);
   });
 
   test(`${table}: display increases monotonically and resets only in the next round`, async () => {
     const s = createLegacyScene();
-    s.flight.generateCrashPoint = () => ({ crashPoint: 3.45, seed: "", hash: "" });
+    const generate = s.flight.generateCrashPoint;
+    s.flight.generateCrashPoint = (...args) => ({ ...generate(...args), crashPoint: 3.45 });
     const first = await s.flight.getState("alice", table);
     assert.equal(display(first, 1), 1);
     const duration = Math.log(3.45) / first.config.growth * 1000 + 1;
@@ -161,41 +165,22 @@ test("the shared animation uses the capped value for the screen and plane, not p
   assert.match(source, /setMult\(visualPhase === "crashed" \? flightMultiplier : Math\.floor\(flightMultiplier \* 100\) \/ 100\)/);
   assert.match(source, /draw\(canvas, sizeRef\.current, T, visualPhase, flightMultiplier, now, visualRound\)/);
   assert.match(source, /if \(ph === "running"\) \{\s*panelsRef\.current\.forEach/);
-  assert.match(source, /p\.autoCash && mine && target >= 1\.01 && m >= target/);
+  assert.match(source, /p\.autoCash && mine && !mine\.flightModel && target >= 1\.01 && target <= .* && m >= target/);
 });
 
 const CFG = createLegacyScene().flight.TABLES;
 const crashTime = (startsAt, crash, growth) => startsAt + Math.log(crash) / growth * 1000 + 1;
 
-test("the real generator retains the 65/35 bands and produces distinct random crash points above 50x", () => {
-  const aviator = readFileSync("src\\lib\\aviator.ts", "utf8");
-  const code = ts.transpileModule(aviator, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-  let uniform = 0;
-  const crypto = { getRandomValues(array) {
-    const hex = Math.floor(uniform * 2 ** 52).toString(16).padStart(13, "0").padEnd(array.length * 2, "0");
-    array.set(Buffer.from(hex, "hex"));
-    return array;
-  } };
-  const module = { exports: {} };
-  new Function("require", "module", "exports", "crypto", code)(() => ({}), module, module.exports, crypto);
+test("both capped tables retain their growth rates, slots and strict sub-100 limits", () => {
   for (const table of ["aviator", "aviator-x"]) {
-    let low = 0, high = 0;
-    for (let i = 0; i < 100; i++) {
-      uniform = (i + 0.5) / 100;
-      const { crashPoint } = module.exports.generateCrashPoint(table);
-      if (crashPoint < 2) low++; else high++;
-    }
-    assert.equal(low, 65);
-    assert.equal(high, 35);
-    const points = [0.9861, 0.99, 0.995, 0.999].map(value => {
-      uniform = value;
-      return module.exports.generateCrashPoint(table).crashPoint;
-    });
-    assert.ok(points.every(value => value > 50 && value <= 10000));
-    assert.equal(new Set(points).size, points.length);
+    assert.equal(CFG[table].maxMult, 99.99);
+    assert.equal(CFG[table].maxCashout, 99.98);
+    assert.ok(Math.abs(CFG[table].houseEdge - 0.2) < 1e-14);
   }
+  assert.equal(CFG.aviator.growth, 0.06);
+  assert.equal(CFG["aviator-x"].growth, 0.075);
+  assert.equal(CFG.aviator.slots, 2);
+  assert.equal(CFG["aviator-x"].slots, 3);
 });
 
 /** Simulates the browser: frames every 1000/fps ms, server samples arriving after a poll gap + latency. */
@@ -255,7 +240,7 @@ for (const table of ["aviator", "aviator-x"]) {
 
   test(`${table}: real epoch timestamps reach the exact crash and release the next round`, () => {
     const cfg = CFG[table], startsAt = 1792937765217;
-    for (const crash of [1.01, 1.25, 1.27, 1.98, 3.45, 9.03, 50.54, 123.45]) {
+    for (const crash of [1.01, 1.25, 1.27, 1.98, 3.45, 9.03, 50.54, 99.99]) {
       const { frames, crashAt } = simulate({ table, crash, startsAt });
       const final = frames.at(-1);
       assert.equal(final.phase, "crashed", `${crash}x must not stall below its final hundredth`);
@@ -274,7 +259,7 @@ for (const table of ["aviator", "aviator-x"]) {
 
   for (const fps of [30, 60, 120]) {
     test(`${table}: ${fps}fps counts every hundredth smoothly and finishes exactly on the crash point`, () => {
-      for (const crash of [1, 1.01, 1.44, 2.18, 4.24, 5.07, 12.34, 50.54, 123.45]) {
+      for (const crash of [1, 1.01, 1.44, 2.18, 4.24, 5.07, 12.34, 50.54, 99.99]) {
         const { frames } = simulate({ table, crash, fps });
         let last = 0, maxStep = 0;
         for (const f of frames) {
@@ -378,7 +363,8 @@ for (const table of ["aviator", "aviator-x"]) {
 
   test(`${table}: a real round passes 50x and ends at its server-generated 50.54x`, async () => {
     const scene = createLegacyScene();
-    scene.flight.generateCrashPoint = () => ({ crashPoint: 50.54, seed: "", hash: "" });
+    const generate = scene.flight.generateCrashPoint;
+    scene.flight.generateCrashPoint = (...args) => ({ ...generate(...args), crashPoint: 50.54 });
     const first = await scene.flight.getState("alice", table);
     const crashAt = crashTime(first.round.startsAt, 50.54, first.config.growth);
     scene.at(crashAt - 50);

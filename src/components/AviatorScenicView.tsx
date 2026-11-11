@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, type RefObject } from "react";
 import { ArrowLeft, Menu, Signal, Volume2, VolumeX, X } from "lucide-react";
 import { BET_PRESETS } from "@/lib/betPresets";
+import { aviatorPayout } from "@/lib/aviatorRules";
 import type { AviatorPanel, AviatorState } from "./AviatorGame";
 
 type Props = {
@@ -80,7 +81,7 @@ export function AviatorScenicView({
         </nav>
 
         <div className={section === "game" ? "block" : "hidden"}>
-          <div ref={wrapRef} className="relative mx-2 h-[clamp(280px,44svh,470px)] overflow-hidden border-x border-[#94733b] bg-[#143635] md:h-[clamp(160px,calc(100dvh-480px),470px)]">
+          <div ref={wrapRef} className="relative mx-2 h-[clamp(280px,44svh,470px)] overflow-hidden border-x border-[#94733b] bg-[#143635] md:h-[clamp(300px,calc(100dvh-360px),640px)]">
             <canvas ref={canvasRef} aria-label="3D red plane flying over a continuous forest and city landscape" className="block h-full w-full" />
             {graphicsError && <div role="alert" className="absolute inset-x-2 bottom-12 z-20 rounded bg-red-950/95 p-3 text-center text-xs">{graphicsError} Your bets still follow the live server round.</div>}
             <div className="absolute left-2 top-1 rounded-full bg-black/45 px-2 py-0.5 text-[10px]">{state.totals.count} live bets</div>
@@ -88,7 +89,7 @@ export function AviatorScenicView({
             <div aria-live="polite" className="pointer-events-none absolute inset-x-0 top-6 flex flex-col items-center text-center">
               {showCountdown ? <>
                 <strong className="mt-6 text-3xl font-black tracking-wide text-white drop-shadow-[0_2px_2px_#000]">NEXT ROUND</strong>
-                <span className="mt-1 text-lg font-bold drop-shadow-[0_2px_2px_#000]">Starts in {Math.ceil(countdown)}s</span>
+                <span className="mt-1 text-lg font-bold drop-shadow-[0_2px_2px_#000]">Starts in {Math.ceil(Math.min(countdown, state.config.waitMs / 1000))}s</span>
                 <div className="mt-3 h-1.5 w-36 overflow-hidden rounded bg-black/50"><div className="h-full bg-[#26ca65]" style={{ width: `${Math.max(0, Math.min(100, countdown / (state.config.waitMs / 1000) * 100))}%` }} /></div>
               </> : <>
                 {phase === "crashed" && <strong className="text-4xl font-black tracking-wide text-[#d50e38] [-webkit-text-stroke:1px_white]">CRASHED!</strong>}
@@ -118,7 +119,8 @@ export function AviatorScenicView({
               const cancel = !!queued || pending && phase === "waiting";
               const betAmount = mine?.bet ?? amount;
               const net = Math.floor(betAmount * multiplier * 0.98 * 100) / 100;
-              const potential = mine?.poolVersion ? Math.round(betAmount * multiplier * 100) / 100 : Math.floor((betAmount + net) * 100) / 100;
+              const potential = mine?.flightModel ? aviatorPayout(betAmount, Math.min(multiplier, mine.autoCashout ?? Infinity, state.config.maxCashout ?? 99.98))
+                : mine?.poolVersion ? Math.round(betAmount * multiplier * 100) / 100 : Math.floor((betAmount + net) * 100) / 100;
               return <section key={slot} aria-label={`Bet panel ${slot + 1}`} className="min-w-0">
                 <div className="flex h-12 items-center rounded-2xl border border-[#ded7d9] bg-[#30252b]">
                   <button type="button" aria-label={`Decrease bet ${slot + 1}`} disabled={locked} onClick={() => setAmount(amount - 50)} className="h-11 w-9 shrink-0 text-2xl text-white/70 disabled:opacity-40">−</button>
@@ -136,8 +138,8 @@ export function AviatorScenicView({
                 {mine && mine.outcome !== "pending" && <div className={`mt-1 text-center text-[10px] ${mine.outcome === "win" ? "text-green-300" : "text-red-300"}`}>{mine.poolPending ? `Claim Rs. ${money(mine.poolClaim ?? 0)} · Daily payout pending` : mine.outcome === "win" ? `Paid: Rs. ${money(mine.win)}` : "No win"}</div>}
                 <div className="mt-1 space-y-1 text-[11px] sm:text-xs md:flex md:flex-wrap md:items-center md:gap-x-4 md:space-y-0">
                   <label className="flex min-h-7 cursor-pointer items-center gap-1"><input type="checkbox" aria-label={`Auto Bet ${slot + 1}`} checked={panel.autoBet} onChange={event => onPanelChange(slot, { autoBet: event.target.checked })} className="peer sr-only" /><span className="h-5 w-10 shrink-0 rounded-full border-2 border-[#ad2533] bg-[#473940] p-px peer-checked:border-[#219b39] peer-checked:bg-[#219b39] peer-focus-visible:outline-2 peer-focus-visible:outline-white"><span className={`block h-3.5 w-3.5 rounded-full bg-white transition-transform ${panel.autoBet ? "translate-x-5" : ""}`} /></span>Auto Bet</label>
-                  <label className="flex min-h-7 cursor-pointer items-center gap-1"><input type="checkbox" aria-label={`Auto Cashout ${slot + 1}`} checked={panel.autoCash} onChange={event => onPanelChange(slot, { autoCash: event.target.checked })} className="sr-only" /><span className={`h-5 w-10 shrink-0 rounded-full border-2 p-px ${panel.autoCash ? "border-[#219b39] bg-[#219b39]" : "border-[#ad2533] bg-[#473940]"}`}><span className={`block h-3.5 w-3.5 rounded-full bg-white transition-transform ${panel.autoCash ? "translate-x-5" : ""}`} /></span>Auto Cashout</label>
-                  {panel.autoCash && <label className="flex items-center gap-1">At <input aria-label={`Auto Cashout multiplier ${slot + 1}`} inputMode="decimal" value={panel.autoCashAt} onChange={event => onPanelChange(slot, { autoCashAt: event.target.value })} onBlur={() => onPanelChange(slot, { autoCashAt: Math.max(1.01, Number(panel.autoCashAt) || 1.01).toFixed(2) })} className="w-16 rounded border border-white/40 bg-black/25 p-1 text-center" />x</label>}
+                  <label className="flex min-h-7 cursor-pointer items-center gap-1"><input type="checkbox" aria-label={`Auto Cashout ${slot + 1}`} checked={panel.autoCash} disabled={locked} onChange={event => onPanelChange(slot, { autoCash: event.target.checked })} className="sr-only" /><span className={`h-5 w-10 shrink-0 rounded-full border-2 p-px ${panel.autoCash ? "border-[#219b39] bg-[#219b39]" : "border-[#ad2533] bg-[#473940]"}`}><span className={`block h-3.5 w-3.5 rounded-full bg-white transition-transform ${panel.autoCash ? "translate-x-5" : ""}`} /></span>Auto Cashout</label>
+                  {panel.autoCash && <label className="flex items-center gap-1">At <input aria-label={`Auto Cashout multiplier ${slot + 1}`} inputMode="decimal" min={1.01} max={state.config.maxCashout ?? 99.98} step={0.01} disabled={locked} value={panel.autoCashAt} onChange={event => onPanelChange(slot, { autoCashAt: event.target.value })} onBlur={() => onPanelChange(slot, { autoCashAt: Math.min(state.config.maxCashout ?? 99.98, Math.max(1.01, Number(panel.autoCashAt) || 1.01)).toFixed(2) })} className="w-16 rounded border border-white/40 bg-black/25 p-1 text-center" />x</label>}
                 </div>
                 <details className="mt-1 text-[10px] text-white/70"><summary className="cursor-pointer py-1">More amounts</summary><div className="grid grid-cols-3 gap-1 py-1">{BET_PRESETS.map(value => <button type="button" key={value} disabled={locked} onClick={() => setAmount(value)} className="rounded border border-white/30 py-1 disabled:opacity-40">{value}</button>)}</div></details>
               </section>;
@@ -147,10 +149,11 @@ export function AviatorScenicView({
 
         {section === "rules" ? <section className="m-2 rounded border border-[#94733b] bg-[#292227] p-4 text-sm leading-relaxed">
           <h2 className="mb-3 text-lg font-bold">How to Play</h2>
-          <ol className="list-decimal space-y-3 pl-4"><li>Choose your amount and press Bet during the NEXT ROUND countdown. Your stake is reserved immediately.</li><li>The multiplier increases when the plane takes off. Cash out before it crashes.</li><li>Next reserves a bet for the following round. Cancel it before that round starts.</li><li>Auto Bet repeats your selected stake. Auto Cashout requests a cashout at your chosen multiplier; keep the game open and connected.</li></ol>
+          <ol className="list-decimal space-y-3 pl-4"><li>Choose your amount and press Bet during the NEXT ROUND countdown. Your stake is reserved immediately.</li><li>The multiplier increases when the plane takes off. Cash out strictly before it crashes. Gross payout is stake times multiplier, rounded down to whole paisa; otherwise payout is zero.</li><li>Next reserves a bet for the following round. Cancel it before that round starts.</li><li>Auto Bet repeats your selected stake. Set Auto Cashout before betting, from 1.01x to 99.98x. The server settles the saved target even after a disconnect.</li><li>Crash points range from 1.00x to 99.99x and never reach 100x. An equal crash/cashout target loses. The fixed-target theoretical RTP is approximately 80% before rounding; actual returns vary.</li></ol>
+          {state.fairness && <details className="mt-3 break-all text-xs"><summary>Seed verification</summary><p>Model: {state.fairness.version}<br />Current seed hash: {state.fairness.serverSeedHash}<br />Public client seed: {state.fairness.clientSeed}<br />Nonce: {state.fairness.nonce}<br />Next seed hash: {state.fairness.nextServerSeedHash}</p>{state.history[0]?.fairness?.serverSeed && <p className="mt-2">Last revealed seed: {state.history[0].fairness.serverSeed}<br />Hash: {state.history[0].fairness.serverSeedHash}<br />Nonce: {state.history[0].fairness.nonce}</p>}</details>}
         </section> : <section className="mx-2 mb-4 bg-[#edf2fa] text-[#152332]">
           <div className="flex items-center justify-between bg-[#203e57] px-2 py-1.5 text-xs text-white"><strong>Live Bets: {state.totals.count}</strong><select aria-label="Bet activity" value={activity} onChange={event => { const value = event.target.value; if (value === "live" || value === "mine" || value === "top") setActivity(value); }} className="rounded border border-white/30 bg-[#203e57] px-1 py-1"><option value="live">Live Bets</option><option value="mine">My History</option><option value="top">Top Wins</option></select></div>
-          <div className="flex flex-wrap justify-between gap-1 bg-[#e0e6e8] px-2 py-1 text-[10px]"><span>Total staked: Rs. {money(state.totals.amount)}</span><span>Cashed out: {state.totals.cashed}</span></div>
+          <div className="flex flex-wrap justify-end gap-1 bg-[#e0e6e8] px-2 py-1 text-[10px]"><span>Cashed out: {state.totals.cashed}</span></div>
           {section === "results" && <div className="flex flex-wrap gap-2 border-b border-slate-300 bg-[#30252b] p-2 text-xs">{state.history.map(row => <span key={row.id} className={historyColor(row.crashPoint)}>#{row.id} {row.crashPoint.toFixed(2)}x</span>)}</div>}
           <table className="w-full table-fixed text-left text-xs">
             <thead className="bg-[#d3d8d6]"><tr>{["User", "Size", "Price", "Profit"].map(label => <th key={label} className="px-2 py-2 font-bold">{label}</th>)}</tr></thead>

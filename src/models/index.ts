@@ -63,7 +63,9 @@ export type TransactionDoc = Base & {
 };
 export type GameDoc = Base & { name: string; slug: string; description: string; icon: string; category: string; isActive: boolean; isHot?: boolean };
 export type GameResultDoc = Base & { poolVersion?: string; poolPending?: boolean; poolClaim?: number; poolDay?: string; gameId: string; userId: string | null; roundNo: number | null; betAmount: number; winAmount: number; outcome: "pending" | "win" | "lose"; resultData: string | null; betSlot: number };
-export type AviatorRoundDoc = Base & { table: string; roundNo: number; crashPoint: number; status: "waiting" | "running" | "crashed"; startsAt: Date; endedAt: Date | null; betStarted?: boolean };
+export type AviatorRoundDoc = Base & { table: string; roundNo: number; crashPoint: number; status: "waiting" | "running" | "crashed"; startsAt: Date; endedAt: Date | null; betStarted?: boolean;
+  fairness?: { version: string; nextVersion?: string; serverSeed: string; serverSeedHash: string; clientSeed: string; nonce: number; nextServerSeed: string; nextServerSeedHash: string };
+};
 export type ChickenGameDoc = Base & { poolVersion?: string; poolPending?: boolean; poolClaim?: number; userId: string; resultId: string; difficulty: "easy" | "medium" | "hard" | "hardcore"; betAmount: number; lanes: number; crashLane: number; position: number; status: "active" | "cashed" | "dead"; winAmount: number };
 export type ChickenDashDoc = Base & { poolVersion?: string; poolPending?: boolean; poolClaim?: number; userId: string; resultId: string; level: "easy" | "normal" | "hard"; betAmount: number; lanes: number; crashLane: number; position: number; status: "active" | "cashed" | "dead"; winAmount: number; bagLane: number; bagMult: number; bagCollected: boolean; dashes: { from?: number | null; to?: number | null }[] };
 export type PlinkoBetDoc = Base & { userId: string; betAmount: number; risk: "low" | "medium" | "high"; rows: number; path: number[]; bucket: number; multiplier: number; payout: number };

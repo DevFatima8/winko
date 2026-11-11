@@ -315,6 +315,7 @@ export default function CasinoWar() {
 
   return (
     <div className="casino-war-wrap mx-auto flex h-full w-full max-w-5xl flex-col gap-1.5 sm:gap-2 overflow-y-auto overflow-x-hidden px-1.5 sm:px-3 py-1 pb-4">
+      {idleRound.countdown !== null && <p className="shrink-0 text-center text-xs text-amber-200" role="status">Next round in {idleRound.countdown}s</p>}
       {/* Top bar */}
       <header className="flex flex-wrap items-center justify-between gap-1.5 rounded-xl border border-yellow-500/30 bg-black/50 px-3 py-1 sm:py-1.5 backdrop-blur shrink-0">
         <div className="flex items-center gap-2">

@@ -71,7 +71,7 @@ for (const table of tables) {
         assert.equal(s.users.get(user).balance, 900);
         assert.equal(cycle(s, table), undefined);
       }
-      s.at(120000);
+      s.at(110000);
       const draws = new Map();
       for (const user of ids) {
         const state = await s.cards.getState(user, table);
@@ -113,7 +113,7 @@ for (const table of tables) {
     const before = await s.cards.getState(null, table);
     assert.deepEqual(before.liveBets, []);
     assert.equal(before.myTotal, 0);
-    s.at(120000);
+    s.at(110000);
     const alice = await s.cards.getState("alice", table);
     const bob = await s.cards.getState("bob", table);
     const guest = await s.cards.getState(null, table);
@@ -215,7 +215,7 @@ for (const table of tables) {
     assert.equal(s.data.cardbets.length, 0);
     assert.equal(s.data.multiplayerrequests.length, 0);
     await s.cards.placeBet("alice", table, primary(table), 100, 1, "retry");
-    s.at(120000);
+    s.at(110000);
     s.failNext("cardrounds");
     await assert.rejects(s.cards.getState("alice", table), /Injected/);
     assert.equal(raw(s, table, "alice").result, "");
@@ -245,7 +245,7 @@ for (const table of tables) {
     const s = createLegacyScene(["alice"]);
     s.data.multiplayerrooms.push({ _id: `${table}:ten-player-wins:v1`, players: ["alice"], remaining: [...Array(9).fill(true), ...Array(90).fill(false)] });
     await s.cards.placeBet("alice", table, primary(table), 100, 1);
-    s.at(120000);
+    s.at(110000);
     const state = await s.cards.getState("alice", table);
     assert.equal(state.myExpected, 0);
     assertCards(state.round.result);
@@ -263,7 +263,7 @@ for (const table of tables) {
       s.data.multiplayerrooms.push({ _id: `${table}:ten-player-wins:v1`, players: Array.from({ length: 90 }, (_, i) => `old-${i}`), remaining: Array(10).fill(true) });
       await s.cards.placeBet("alice", table, option, 100, 1);
       await s.cards.placeBet("alice", table, option, 50, 1);
-      s.at(120000);
+      s.at(110000);
       const first = await s.cards.getState("alice", table);
       assertCards(first.round.result);
       assert.equal(first.round.result.winner, option);
@@ -290,7 +290,7 @@ for (const table of tables) {
     const s = createLegacyScene(["alice", "bob"]);
     await s.cards.getState("alice", table);
     await s.cards.getState("bob", table);
-    s.at(120000);
+    s.at(110000);
     assert.match((await s.cards.placeBet("alice", table, primary(table), 100, 2, "wait")).error, /Wait for the next round/);
     assert.match((await s.cards.placeBet("bob", table, primary(table), 50, 2)).error, /Wait for the next round/);
     assert.equal(cycle(s, table), undefined);
@@ -325,7 +325,7 @@ for (const table of tables) {
   test(`${table}: betting boundary recheck rejects late or stale operations without allocation`, async () => {
     const s = createLegacyScene(["alice"]);
     await s.cards.getState("alice", table);
-    s.at(119999);
+    s.at(109999);
     s.setReadDelay(2);
     const late = await s.cards.placeBet("alice", table, primary(table), 100, 1);
     assert.match(late.error, /closed/);
@@ -468,7 +468,7 @@ test("Dragon Tiger: mixed feasible stakes respect the combined gross cap; comple
   assert.equal(s.users.get("alice").balance, 890);
   assert.equal(cycle(s, table), undefined);
   s.data.multiplayerrooms.push({ _id: `${table}:ten-player-wins:v1`, players: Array.from({ length: 90 }, (_, i) => `old-${i}`), remaining: Array(10).fill(true) });
-  s.at(120000);
+  s.at(110000);
   const state = await s.cards.getState("alice", table);
   assertCards(state.round.result);
   assert.equal(state.round.result.winner, "dragon");
@@ -517,7 +517,7 @@ for (const [table, option] of [["dragon-tiger", "tie"], ["andar-bahar", "andar"]
     s.data.multiplayerrooms.push({ _id: `${table}:ten-player-wins:v1`, players: Array.from({ length: 90 }, (_, i) => `old-${i}`), remaining: Array(10).fill(true) });
     assert.ok((await s.cards.placeBet("alice", table, option, stake, 1, "crore")).ok);
     assert.equal(s.users.get("alice").balance, 0);
-    s.at(120000);
+    s.at(110000);
     const state = await s.cards.getState("alice", table);
     assertCards(state.round.result);
     assert.equal(state.round.result.winner, option);

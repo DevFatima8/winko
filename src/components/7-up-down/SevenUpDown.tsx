@@ -32,7 +32,7 @@ type RoundResult = {
 };
 
 const CHIP_VALUES: number[] = [...BET_PRESETS];
-const BET_DURATION = 13; // seconds — matches typical 7 Up Down round
+const BET_DURATION = 10;
 
 export default function SevenUpDown({ backHref }: { backHref?: string }) {
   const live = useMultiplayerGame<SevenOutcome>("7-up-down");

@@ -8,7 +8,7 @@ export const isDailyPoolGame = (game: string): game is DailyPoolGame =>
   DAILY_POOL_GAMES.some((value) => value === game);
 
 export const DAILY_POOL_RULES = [
-  "New card, roulette and slot wagers use instant wallet accounting: the server deducts accepted stakes and credits confirmed winnings directly. The deferred daily-pool rules below apply only to other pool-enabled games and previously accepted wagers carrying a pool version.",
+  "New Aviator, Aviator X, card, roulette and slot wagers use instant wallet accounting: the server deducts accepted stakes and credits confirmed winnings directly. Aviator and Aviator X use independent capped 80%-target crash outcomes, not a winning-slot quota or daily pool. The deferred daily-pool rules below apply only to other pool-enabled games and previously accepted wagers carrying a pool version.",
   "35% of each game's total accepted daily stakes is allocated to player payouts; 65% is retained by the platform. Cancelled stakes are excluded.",
   "35% is a payout-pool share, not your probability of winning. Individual payouts vary and no individual win or return of stake is guaranteed.",
   "Wins, bonus awards and cashouts are provisional claims against the same pool, not extra wallet payments. Final payouts are settled after the Pakistan day ends and all accepted rounds finish.",

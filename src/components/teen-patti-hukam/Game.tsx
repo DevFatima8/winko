@@ -12,7 +12,7 @@ const RN: Record<number, string> = { 11: "J", 12: "Q", 13: "K", 14: "A" };
 const rankName = (r: number) => RN[r] ?? String(r);
 const HAND_NAMES = ["", "High Card", "Pair", "Color", "Sequence", "Pure Sequence", "Trail"];
 const PAYOUT = 1.98;
-const BET_TIME = 12;
+const BET_TIME = 10;
 const CHIPS = BET_PRESETS;
 const CHIP_COLORS: Record<number, string> = {
   50: "from-emerald-400 to-emerald-700",

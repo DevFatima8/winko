@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { ProviderCatalogGame } from "./gregmornCatalog";
 import { isGameReturn } from "./gameNavigation";
 import { readReturnCatalog, saveProviderCatalog, warmProviderCatalog } from "./providerCatalogCache";
+import { SITE_CATALOG_URL } from "./gameAvailability";
 
 export type ProviderCatalogState = {
   games: ProviderCatalogGame[];
@@ -32,11 +33,11 @@ export function useProviderCatalog(enabled = true): ProviderCatalogState {
     const refresh = () => {
       if (pending || controller.signal.aborted) return;
       pending = true;
-      void fetch("/api/gregmorn/catalog", { cache: "no-store", signal: controller.signal })
+      void fetch(SITE_CATALOG_URL, { cache: "no-store", signal: controller.signal })
       .then(async response => {
         const data = await response.json() as { games?: ProviderCatalogGame[]; error?: string };
-        if (!response.ok) throw new Error(data.error ?? "Provider games could not be loaded.");
-        if (!Array.isArray(data.games)) throw new Error("Provider returned an invalid game catalogue.");
+        if (!response.ok) throw new Error(data.error ?? "Games could not be loaded.");
+        if (!Array.isArray(data.games)) throw new Error("Invalid game catalogue.");
         if (!controller.signal.aborted) {
           fresh = true;
           setState({ games: data.games, loading: false, error: "" });

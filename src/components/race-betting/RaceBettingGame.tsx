@@ -32,7 +32,7 @@ import { RulesModal } from './components/RulesModal';
 import { SettingsModal } from './components/SettingsModal';
 import { RoundDetailModal } from './components/BetDetailModal';
 
-const BETTING_DURATION = 15;
+const BETTING_DURATION = 10;
 const INITIAL_BALANCE = 0;
 
 export default function Race20GamePage() {

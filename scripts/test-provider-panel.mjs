@@ -16,7 +16,7 @@ function load(path, imports = {}) {
   return loaded.exports;
 }
 
-const availability = load("src\\lib\\gameAvailability.ts");
+const availability = { ...load("src\\lib\\gameAvailability.ts"), LOCAL_GAMES_CONNECTED: false };
 const identity = load("src\\lib\\gregmornIdentity.ts", { "node:crypto": { createHash } });
 const selection = load("src\\lib\\gregmornSelection.ts");
 const order = load("src\\lib\\providerOrder.ts");
@@ -190,12 +190,11 @@ test("admin on/off and hot actions persist provider choices without changing loc
       } } },
       "./auth": {}, "./serverAuth": { getServerSessionUser: async () => admin },
       "./platform": {}, "./notifications": {}, "./cloudinary": {},
-      "./gregmornCatalog": {
-        requireProviderGame: async value => {
+      "./siteGameCatalog": {
+        requireSiteGame: async value => {
           if (value !== slug) throw new Error("Provider game is not available");
           return game;
         },
-        saveProviderGame: async () => saved[0],
       },
     });
     await actions.toggleGameHotAction(slug, true);
@@ -242,7 +241,11 @@ test("admin ON/OFF and Hot choices reach player catalogues without waiting for t
     "@/models": { Game: dbGame },
     "./auth": {}, "./serverAuth": { getServerSessionUser: async () => ({ role: "admin", level: 3 }) },
     "./platform": {}, "./notifications": {}, "./cloudinary": {},
-    "./gregmornCatalog": catalog,
+    "./siteGameCatalog": { requireSiteGame: async slug => {
+      const game = await catalog.requireProviderGame(slug);
+      await catalog.saveProviderGame(game);
+      return game;
+    } },
   });
   const route = load("src\\app\\api\\gregmorn\\catalog\\route.ts", {
     "next/server": next,

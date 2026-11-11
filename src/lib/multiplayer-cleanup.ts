@@ -7,6 +7,7 @@ import { DAILY_POOL_GAMES, dailyPoolLock } from "./dailyPoolRules";
 type CleanupBet = { userId: string; status: string; createdAt?: number; settledAt?: number; cashoutMultiplier?: number };
 type CleanupRoom = {
   game: MultiplayerGame; startedAt: number; outcome: { crashPoint?: number };
+  roundTimingVersion?: 1 | 2;
   ownerId?: string;
   bets: CleanupBet[]; queuedBets: CleanupBet[];
 };
@@ -50,7 +51,7 @@ export async function cleanupMultiplayerPlayerData(connection: PoolConnection, {
       deleted += result.affectedRows;
       continue;
     }
-    const t = timings(room.game);
+    const t = timings(room.game, room.roundTimingVersion ?? 1);
     const resultAt = room.startedAt + t.bettingMs + (room.game === "blast-off" ? flightMs(room.outcome.crashPoint ?? 1) : t.runningMs);
     const remove = (bet: CleanupBet) => {
       if (!users.has(bet.userId)) return false;

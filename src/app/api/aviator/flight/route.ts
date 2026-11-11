@@ -4,7 +4,7 @@ import type { AviatorRoundDoc } from "@/models";
 import { getMysqlPool } from "@/lib/mysql";
 import { getServerSessionUser } from "@/lib/serverAuth";
 import { flightAnimationSnapshot } from "@/lib/aviatorFlight";
-import { isTable, TABLES } from "@/lib/aviator";
+import { isTable, TABLES, validateFlightRound } from "@/lib/aviator";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +30,7 @@ export async function GET(request: Request) {
     );
     if (!rows[0]) return new NextResponse(null, { status: 204, headers });
     const document: AviatorRoundDoc = typeof rows[0].data === "string" ? JSON.parse(rows[0].data) : rows[0].data;
+    validateFlightRound(document, table);
     return NextResponse.json(flightAnimationSnapshot(document, Number(rows[0].now), TABLES[table].growth, TABLES[table].maxMult), { headers });
   } catch (error) {
     console.error("[aviator flight]", error);

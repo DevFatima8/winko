@@ -45,10 +45,10 @@ function ProviderGamesManager({ data }: { data: GamesData }) {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Provider Games On / Off</h1>
+          <h1 className="text-2xl font-bold text-white">Games On / Off</h1>
           <p className="text-sm text-[#b8a7e6]">Game ko ON/OFF karein, aur lobby ke Hot Games section ke liye alag se select karein. OFF game lobby ya All Games mein available nahi hoti. Kisi ek user ko block karne ke liye Users → user → Game Restrictions.</p>
         </div>
-        <p className="text-sm text-[#b8a7e6]">{games.length} provider games</p>
+        <p className="text-sm text-[#b8a7e6]">{games.length} games</p>
         {error && <p role="alert" className="rounded-xl border border-red-500/30 p-3 text-sm text-red-200">{error}</p>}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {games.slice(0, limit).map((g) => {

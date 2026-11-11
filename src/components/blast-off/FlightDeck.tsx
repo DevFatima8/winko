@@ -63,7 +63,7 @@ const FlightDeck = forwardRef<FlightDeckHandle, { reduced: boolean }>(function F
     t: 0,
     multiplier: 1,
     crashPoint: 2,
-    countdown: 6,
+    countdown: 10,
     betPlaced: false,
   });
 
@@ -498,7 +498,7 @@ function render(
     ctx.beginPath();
     ctx.arc(cx, cy, rad, 0, Math.PI * 2);
     ctx.stroke();
-    const frac = Math.max(0, Math.min(1, s.countdown / 6));
+    const frac = Math.max(0, Math.min(1, s.countdown / 10));
     ctx.strokeStyle = frac > 0.34 ? C.cyan : C.launch;
     ctx.lineCap = "round";
     ctx.beginPath();
@@ -509,7 +509,7 @@ function render(
     ctx.font = "700 22px 'JetBrains Mono', monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(`${Math.max(0, s.countdown).toFixed(1)}`, cx, cy - 4);
+    ctx.fillText(`${Math.ceil(Math.max(0, s.countdown))}`, cx, cy - 4);
     ctx.font = "500 9px 'Space Grotesk', sans-serif";
     ctx.fillStyle = C.mist;
     ctx.fillText("T-MINUS", cx, cy + 18);

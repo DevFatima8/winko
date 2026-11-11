@@ -16,20 +16,31 @@ export interface Decision {
  *
  * If the player has no bets, the result is purely random (24 equally likely lights).
  */
+export function outcomeSlots(bets: Bets) {
+  const winSlots: number[] = [];
+  const loseSlots: number[] = [];
+  for (let i = 0; i < SLOT_COUNT; i++) {
+    if (evaluateBets(bets, i).net > 0) winSlots.push(i);
+    else loseSlots.push(i);
+  }
+  return { winSlots, loseSlots };
+}
+
+/** Pick a light for an already-decided result; falls back only when that result is impossible for these bets. */
+export function decideFixedOutcome(bets: Bets, wantWin: boolean, rng: () => number = Math.random): Decision {
+  const { winSlots, loseSlots } = outcomeSlots(bets);
+  const pool = wantWin ? (winSlots.length ? winSlots : loseSlots) : (loseSlots.length ? loseSlots : winSlots);
+  const slot = pool[Math.floor(rng() * pool.length) % pool.length];
+  return { slot, outcome: winSlots.includes(slot) ? "win" : "lose" };
+}
+
 export function decideOutcome(bets: Bets, rng: () => number = Math.random): Decision {
   const total = totalOf(bets);
   if (total <= 0) {
     return { slot: Math.floor(rng() * SLOT_COUNT) % SLOT_COUNT, outcome: "idle" };
   }
 
-  const winSlots: number[] = [];
-  const loseSlots: number[] = [];
-  for (let i = 0; i < SLOT_COUNT; i++) {
-    const { net } = evaluateBets(bets, i);
-    if (net > 0) winSlots.push(i);
-    else loseSlots.push(i);
-  }
-
+  const { winSlots, loseSlots } = outcomeSlots(bets);
   const wantWin = rng() < PLAYER_WIN_RATE;
   let pool: number[];
   if (wantWin) pool = winSlots.length > 0 ? winSlots : loseSlots;

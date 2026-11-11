@@ -248,6 +248,7 @@ export default function App() {
 
   return (
     <div className="flex h-full min-h-0 w-full shrink-0 flex-col overflow-x-hidden overflow-y-auto bg-slate-950 text-slate-100 px-1 sm:px-2 md:px-3 py-1 select-none">
+      {idleRound.countdown !== null && <p className="shrink-0 text-center text-xs text-amber-200" role="status">Next round in {idleRound.countdown}s</p>}
       {/* header */}
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 px-2 py-1.5 sm:px-4">
         <div className="flex items-center gap-1.5">

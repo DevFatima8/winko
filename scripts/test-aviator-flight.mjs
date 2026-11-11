@@ -14,8 +14,16 @@ function load(file, imports = {}) {
   }, module, module.exports);
   return module.exports;
 }
-const { flightAnimationSnapshot } = load("src\\lib\\aviatorFlight.ts");
-const tableConfig = { aviator: { growth: 0.06, maxMult: 10000 }, "aviator-x": { growth: 0.075, maxMult: 10000 } };
+const { flightAnimationSnapshot } = load("src\\lib\\aviatorFlight.ts", { "./aviatorRules": load("src\\lib\\aviatorRules.ts") });
+const tableConfig = { aviator: { growth: 0.06, maxMult: 99.99 }, "aviator-x": { growth: 0.075, maxMult: 99.99 } };
+
+test("accepted legacy flights keep their previous rendering cap while new-model flights stay below 100x", () => {
+  const legacy = { roundNo: 1, startsAt: new Date(100000), crashPoint: 150, status: "running" };
+  const now = 100000 + Math.log(120) / 0.06 * 1000;
+  assert.ok(flightAnimationSnapshot(legacy, now, 0.06, 99.99).round.multiplier > 119.99);
+  const current = { ...legacy, crashPoint: 99.99, fairness: { version: "aviator-80-capped-v1" } };
+  assert.equal(flightAnimationSnapshot(current, now, 0.06, 99.99).round.multiplier, 99.99);
+});
 
 for (const table of Object.keys(tableConfig)) {
   test(`${table}: read-only flight samples continue past 50x without a plateau`, () => {
@@ -53,7 +61,7 @@ for (const table of Object.keys(tableConfig)) {
   });
 }
 
-function fixture({ table = "aviator", user = null, missing = false, fail = false } = {}) {
+function fixture({ table = "aviator", user = null, missing = false, fail = false, invalidProof = false } = {}) {
   const calls = [];
   const document = { roundNo: 42, startsAt: new Date(100000), crashPoint: 3.3, status: "running" };
   class NextResponse extends Response {
@@ -70,7 +78,9 @@ function fixture({ table = "aviator", user = null, missing = false, fail = false
     }) },
     "@/lib/serverAuth": { getServerSessionUser: async () => user },
     "@/lib/aviatorFlight": { flightAnimationSnapshot },
-    "@/lib/aviator": { isTable: value => value in tableConfig, TABLES: tableConfig },
+    "@/lib/aviator": { isTable: value => value in tableConfig, TABLES: tableConfig, validateFlightRound() {
+      if (invalidProof) throw new Error("Aviator round commitment verification failed.");
+    } },
   });
   return {
     calls,
@@ -132,4 +142,34 @@ test("read failures are logged and return a reconnect error, not a success-shape
   assert.equal(response.status, 503);
   assert.match((await response.json()).error, /Reconnecting/);
   assert.equal(log.length, 1);
+});
+
+test("invalid committed snapshots are logged and withheld instead of confirming a changed result", async t => {
+  const log = [];
+  t.mock.method(console, "error", (...args) => log.push(args));
+  assert.equal((await fixture({ invalidProof: true }).read()).status, 503);
+  assert.match(log[0][1].message, /commitment verification/);
+});
+
+test("read-only snapshots and full settlement use the same integer crash boundary, including instant crashes", () => {
+  const { aviatorReachAt } = load("src\\lib\\aviatorRules.ts");
+  for (const { growth, maxMult } of Object.values(tableConfig)) {
+    for (const crashPoint of [1, 1.01, 2, 99.99]) {
+      const startsAt = 1792937765217;
+      const round = { roundNo: 1, startsAt: new Date(startsAt), crashPoint, status: "running", fairness: {} };
+      const boundary = aviatorReachAt(startsAt, crashPoint, growth);
+      assert.notEqual(flightAnimationSnapshot(round, boundary - 1, growth, maxMult).round.status, "crashed");
+      const crashed = flightAnimationSnapshot(round, boundary, growth, maxMult);
+      assert.equal(crashed.round.status, "crashed");
+      assert.equal(crashed.round.endedAt, boundary);
+      assert.equal(crashed.round.multiplier, crashPoint);
+    }
+  }
+});
+
+test("a persisted early legacy crash stays crashed even before its natural curve endpoint", () => {
+  const round = { roundNo: 1, startsAt: new Date(100000), crashPoint: 2, status: "crashed", endedAt: new Date(105000) };
+  const sample = flightAnimationSnapshot(round, 105001, 0.06, 99.99);
+  assert.equal(sample.round.status, "crashed");
+  assert.equal(sample.round.endedAt, 105000);
 });

@@ -38,7 +38,7 @@ async function dispatch(request: Request) {
             ["/api/aviator/bet", "/api/chicken/start", "/api/chickendash/start", "/api/plinko/drop", "/api/limbo", "/api/slot777", "/api/cards/bet"].includes(path) ||
             path === "/api/mines" && body.action === "start");
         if (!LOCAL_GAMES_CONNECTED && startsLocalBet) return errorResponse(LOCAL_GAMES_UNAVAILABLE, 403);
-        if (method === "POST" && (["/api/aviator/bet", "/api/chicken/start", "/api/chickendash/start", "/api/plinko/drop", "/api/limbo"].includes(path) || path === "/api/mines" && body.action === "start") && dailyPoolEnabled()) {
+        if (method === "POST" && (["/api/chicken/start", "/api/chickendash/start", "/api/plinko/drop", "/api/limbo"].includes(path) || path === "/api/mines" && body.action === "start") && dailyPoolEnabled()) {
             if (!requirePlayer()) return errorResponse("Khelne ke liye Login / Register karein.", 401);
             if (body.poolRulesVersion !== DAILY_POOL_VERSION) return errorResponse("Read and accept the daily-pool rules before placing a new bet.", 400);
         }
@@ -47,10 +47,16 @@ async function dispatch(request: Request) {
                 const table = query.get("table") ?? "aviator";
                 return aviator.isTable(table) ? response(await aviator.getState(userId, table)) : errorResponse("Invalid table");
             }
+            case path === "/api/aviator/stats" && method === "GET": {
+                if (!me) return errorResponse("Login required.", 401);
+                const table = query.get("table") ?? "aviator";
+                if (!aviator.isTable(table)) return errorResponse("Invalid table");
+                return NextResponse.json(await aviator.flightStatistics(table, me.role === "client" ? me.id : undefined), { headers: { "Cache-Control": "no-store" } });
+            }
             case path === "/api/aviator/bet" && method === "POST": {
                 if (!requirePlayer()) return errorResponse("Khelne ke liye Login / Register karein.", 401);
                 const table = String(body.table ?? "aviator");
-                return aviator.isTable(table) ? response(await aviator.placeBet(me!.id, table, Number(body.amount), Number(body.slot ?? 0), body.roundNo === undefined ? undefined : Number(body.roundNo), body.queueIfClosed === true)) : errorResponse("Invalid table");
+                return aviator.isTable(table) ? response(await aviator.placeBet(me!.id, table, Number(body.amount), Number(body.slot ?? 0), body.roundNo === undefined ? undefined : Number(body.roundNo), body.queueIfClosed === true, body.autoCashout === undefined ? undefined : typeof body.autoCashout === "number" ? body.autoCashout : NaN)) : errorResponse("Invalid table");
             }
             case path === "/api/aviator/bet" && method === "DELETE": {
                 if (!requirePlayer()) return errorResponse("Khelne ke liye Login / Register karein.", 401);

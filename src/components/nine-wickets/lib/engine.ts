@@ -296,7 +296,7 @@ export function formatCoins(n: number): string {
 
 export const START_BALANCE = 10000;
 export const MIN_BET = 10;
-export const BETTING_SECONDS = 12;
+export const BETTING_SECONDS = 10;
 /** time (ms) from "bowl" until the ball result is decided and the bet is settled */
 export const BOWL_DURATION: Record<OutcomeId, number> = {
   dot: 4300,

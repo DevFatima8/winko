@@ -221,8 +221,9 @@ export function advanceCricketMatch(outcome: CricketOutcome["outcome"], previous
   if (m.innings === 1) return { innings: 2, batting: m.batting === 0 ? 1 : 0, runs: 0, wickets: 0, balls: 0, target: runs + 1, thisOver: [] };
   return { innings: 1, batting: 0, runs: 0, wickets: 0, balls: 0, target: null, thisOver: [] };
 }
-export function timings(game: MultiplayerGame) {
-  return { bettingMs: game === "blast-off" ? 6000 : game === "speed-baccarat" ? 9000 : game === "7-up-down" ? 13000 : game === "football-studio" || game === "nine-wickets" ? 12000 : game === "auto-roulette" ? 20000 : game === "lightning-roulette" ? 25000 : 15000,
+export function timings(game: MultiplayerGame, version: 1 | 2 = 2) {
+  const legacyBettingMs = game === "blast-off" ? 6000 : game === "speed-baccarat" ? 9000 : game === "7-up-down" ? 13000 : game === "football-studio" || game === "nine-wickets" ? 12000 : game === "auto-roulette" ? 20000 : game === "lightning-roulette" ? 25000 : 15000;
+  return { bettingMs: version === 1 ? legacyBettingMs : 10000,
     runningMs: game === "blast-off" ? Math.ceil(flightMs(250)) : game === "dream-catcher" ? 12000 : game.includes("roulette") ? 8000 : 5000,
     resultMs: game === "blast-off" ? 3200 : 5000 };
 }

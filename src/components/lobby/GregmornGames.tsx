@@ -11,6 +11,7 @@ import { useProviderCatalog, type ProviderCatalogState } from "@/lib/useProvider
 import { readProviderGameReturn, rememberGameReturn, useGameReturnScroll } from "@/lib/gameNavigation";
 import { matchesProviderCategory } from "@/lib/providerCategories";
 import { compareProviderGames } from "@/lib/providerOrder";
+import { PROVIDER_GAMES_VISIBLE } from "@/lib/gameAvailability";
 
 export function GregmornGames({ category = "All", lobby = false, catalog }: { category?: string; lobby?: boolean; catalog?: ProviderCatalogState }) {
   const ownCatalog = useProviderCatalog(catalog === undefined);
@@ -77,6 +78,14 @@ export function GregmornGames({ category = "All", lobby = false, catalog }: { ca
     try {
       const user = await getCurrentUser(true);
       signal.throwIfAborted();
+      if (!PROVIDER_GAMES_VISIBLE) {
+        rememberGameReturn({
+          category, search: "", provider: "", limit,
+          sliderScrollLeft: sectionRef.current?.querySelector("[data-provider-slider]")?.scrollLeft ?? 0,
+        });
+        router.push(`${user?.dbRole === "client" ? "/player" : ""}/games/${game.slug}`);
+        return;
+      }
       if (!user) { router.push("/login"); return; }
       if (user.dbRole !== "client") throw new Error("Please sign in with a player account to play.");
       while (!signal.aborted) {

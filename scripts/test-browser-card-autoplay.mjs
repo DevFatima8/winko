@@ -307,13 +307,27 @@ for (const [game, path, props] of games) {
   });
 }
 
+for (const [game, path, props] of games.slice(0, 9)) {
+  test(`${game}: watching shows 10 through 1 before the next automatic preview`, async () => {
+    const f = fixture(`src\\components\\${path}`, { props });
+    try {
+      for (let second = 10; second > 0; second--) {
+        assert.ok(f.nodes().some(node => node.props?.role === "status" && text(node) === `Next round in ${second}s`), `${game}: missing ${second}`);
+        await f.advance(1000);
+      }
+      assert.ok(!f.nodes().some(node => text(node).startsWith("Next round in ")));
+      assert.deepEqual(f.calls, []);
+    } finally { f.unmount(); }
+  });
+}
+
 test("blackjack: a preview rejects wagering; a valid interactive hand freezes autoplay and accepts only once", async () => {
   const card = (rank, id) => ({ rank: String(rank), value: rank, suit: "♠", id });
   const player = [card(4, 1), card(5, 2)], dealer = [card(8, 3)];
   const f = fixture("src\\components\\blackjack\\BlackjackGame.tsx", {
     cardMove: async () => ({ phase: "playing", view: { bet: 50, player, dealer, hidden: true } }),
   });
-  await f.advance(5650);
+  await f.advance(10650);
   await f.click("DEAL THE CARDS");
   assert.deepEqual(f.calls, []);
   await f.advance(6050);
@@ -348,7 +362,7 @@ test("blackjack: completing an interactive hand resumes spectator cycles, withou
   await Promise.all([stand, duplicate]);
   assert.deepEqual(f.calls.map(call => call.slice(0, 2)), [["start", 50], ["move", "deal"], ["move", "stand"]]);
   const next = JSON.stringify(f.render());
-  await f.advance(7000);
+  await f.advance(12000);
   assert.notEqual(JSON.stringify(f.render()), next, "next no-stake preview runs automatically");
   await f.advance(30000);
   assert.equal(f.calls.length, 3, "watching never replays the previous paid wager");

@@ -72,7 +72,7 @@ export async function ensureAdmin() {
 
 const GAMES = [
   { slug: "aviator", name: "Aviator", icon: "✈️", category: "original", description: "Plane udne se pehle cash out karein aur multiplier jeetein!" },
-  { slug: "aviator-x", name: "Aviator X", icon: "🚀", category: "original", description: "Aviator ka X edition — 3 bets, neon sky, 10,000x tak!" },
+  { slug: "aviator-x", name: "Aviator X", icon: "🚀", category: "original", description: "Aviator ka X edition — 3 bets, neon sky, crash below 100x." },
   { slug: "chicken-road-2", name: "Chicken Road 2", icon: "🐔", category: "original", description: "Chicken ko road cross karwayein — har lane par multiplier barhta hai!" },
   { slug: "chicken-dash", name: "Chicken Dash", icon: "🐤", category: "original", description: "Busy highway cross karein — Dash boost aur Bonus Bag ke saath 100x tak!" },
   { slug: "plinko", name: "Plinko", icon: "🔴", category: "original", description: "Plinko: 25x scale marker (0% chance); payable buckets 0x, 0.2x, 0.9x and 1.3x." },

@@ -5,7 +5,7 @@ import { addPoolWager, cents, closePoolWager, settleDailyPools, type PoolFields,
 import { DAILY_POOL_VERSION, type DailyPoolGame } from "./dailyPoolRules";
 import { isBrowserPoolGame } from "./dailyPoolBrowserGames";
 import { isDailyPoolGame } from "./dailyPoolRules";
-import { nextPlayerPrize, nextPlayerWin } from "./playerWinCycle";
+import { nextBetWin, nextPlayerPrize, nextPlayerWin } from "./playerWinCycle";
 import { isCardGame } from "./cardGameRules";
 import { BROWSER_ROULETTE_GAMES, isRouletteGame, isBrowserRouletteGame } from "./rouletteGameRules";
 import { isInteractiveBrowserCardGame, isServerBrowserCardGame, SERVER_BROWSER_CARD_GAMES } from "./browserCardGames";
@@ -357,7 +357,10 @@ async function serverOutcome(tx: MultiplayerTransaction, userId: string, game: s
       bets[key] = value;
     }
     if (cents(rules.totalOf(bets)) !== cents(stake)) throw new BrowserWagerError("Animal stakes do not match the accepted wager.");
-    const decision = engine.decideOutcome(bets, () => randomInt(0, 2 ** 31) / 2 ** 31);
+    const { winSlots, loseSlots } = engine.outcomeSlots(bets);
+    // Only wagers that can both win and lose consume a slot, so each 100 counted bets has exactly 30 winners.
+    const won = winSlots.length && loseSlots.length ? await nextBetWin(tx, game, rules.BET_WINNERS_PER_100) : winSlots.length > 0;
+    const decision = engine.decideFixedOutcome(bets, won, () => randomInt(0, 2 ** 31) / 2 ** 31);
     return { claim: rules.evaluateBets(bets, decision.slot).payout,
       outcome: { slot: decision.slot, animal: rules.ANIMALS[rules.WHEEL[decision.slot]].id, outcome: decision.outcome } };
   }

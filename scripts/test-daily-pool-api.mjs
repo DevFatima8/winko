@@ -24,12 +24,13 @@ function route({ enabled = true, user = { id: "alice", role: "client" } } = {}) 
   return {
     ...load("src\\app\\api\\[...path]\\route.ts", {
       ...imports, "next/server": next,
-      "@/lib/aviator": { isTable: table => ["aviator", "aviator-x"].includes(table), placeBet: record("flight"), cashOut: record("flight-cashout"), cancelBet: record("flight-cancel") },
+      "@/lib/aviator": { isTable: table => ["aviator", "aviator-x"].includes(table), placeBet: record("flight"), cashOut: record("flight-cashout"), cancelBet: record("flight-cancel"), flightStatistics: record("flight-stats") },
       "@/lib/cards": { isTable: table => ["dragon-tiger", "andar-bahar"].includes(table), placeBet: record("card-bet") },
       "@/lib/slot777": { spin: record("slot-spin") },
       "@/lib/chicken": { startGame: record("legacy-road"), step: record("legacy-road-step"), cashOut: record("legacy-road-cashout") },
       "@/lib/chickendash": { startGame: record("legacy-dash"), step: record("legacy-dash-step"), cashOut: record("legacy-dash-cashout") },
       "@/lib/serverAuth": { getServerSessionUser: async () => user },
+      "@/lib/gameAvailability": { LOCAL_GAMES_CONNECTED: true },
       "@/lib/dailyPoolRules": rules,
       "@/lib/dailyPoolConfig": { dailyPoolEnabled: () => enabled },
       "@/lib/dailyPoolChicken": { startPoolChicken: record("pool-chicken"), actPoolChicken: record("pool-action") },
@@ -38,6 +39,19 @@ function route({ enabled = true, user = { id: "alice", role: "client" } } = {}) 
   };
 }
 const post = (url, body = {}) => new Request(`https://fixture.invalid${url}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+test("flight statistics require login and scope players without exposing other players' totals", async () => {
+  const guest = route({ user: null });
+  assert.equal((await guest.GET(new Request("https://fixture.invalid/api/aviator/stats"))).status, 401);
+  assert.equal(guest.calls.length, 0);
+  const player = route();
+  assert.equal((await player.GET(new Request("https://fixture.invalid/api/aviator/stats?table=aviator-x&userId=bob"))).status, 200);
+  assert.deepEqual(player.calls, [{ name: "flight-stats", args: ["aviator-x", "alice"] }]);
+  const admin = route({ user: { id: "staff", role: "admin" } });
+  assert.equal((await admin.GET(new Request("https://fixture.invalid/api/aviator/stats"))).status, 200);
+  assert.deepEqual(admin.calls[0].args, ["aviator", undefined]);
+  assert.equal((await admin.GET(new Request("https://fixture.invalid/api/aviator/stats?table=bad"))).status, 400);
+});
 
 test("instant card placements do not require a deferred daily-pool acknowledgement", async () => {
   for (const table of ["dragon-tiger", "andar-bahar"]) {
@@ -60,19 +74,20 @@ test("instant Lucky 777 bets do not require deferred-pool consent and still requ
   assert.deepEqual(guest.calls, []);
 });
 
-test("Aviator's explicit late-queue preference is forwarded without bypassing pool consent", async () => {
+test("Aviator forwards queue and server auto targets without legacy pool consent", async () => {
   const f = route();
-  const body = { table: "aviator", amount: 50, slot: 0, roundNo: 42, queueIfClosed: true };
-  assert.equal((await f.POST(post("/api/aviator/bet", body))).status, 400);
-  assert.equal(f.calls.length, 0);
-  assert.equal((await f.POST(post("/api/aviator/bet", { ...body, poolRulesVersion: rules.DAILY_POOL_VERSION }))).status, 200);
-  assert.deepEqual(f.calls[0].args, ["alice", "aviator", 50, 0, 42, true]);
+  const body = { table: "aviator", amount: 50, slot: 0, roundNo: 42, queueIfClosed: true, autoCashout: 2 };
+  assert.equal((await f.POST(post("/api/aviator/bet", body))).status, 200);
+  assert.deepEqual(f.calls[0].args, ["alice", "aviator", 50, 0, 42, true, 2]);
+  const guest = route({ user: null });
+  assert.equal((await guest.POST(post("/api/aviator/bet", body))).status, 401);
+  assert.equal(guest.calls.length, 0);
+  await f.POST(post("/api/aviator/bet", { ...body, autoCashout: "2" }));
+  assert.ok(Number.isNaN(f.calls[1].args[6]));
 });
 
-test("all four new-mode placements require authenticated current-rules acknowledgement before mutation", async () => {
+test("unchanged chicken pool placements require authenticated current-rules acknowledgement before mutation", async () => {
   const cases = [
-    ["/api/aviator/bet", { table: "aviator", amount: 100 }],
-    ["/api/aviator/bet", { table: "aviator-x", amount: 100 }],
     ["/api/chicken/start", { difficulty: "easy", amount: 100 }],
     ["/api/chickendash/start", { level: "easy", amount: 100 }],
   ];
@@ -92,7 +107,7 @@ test("all four new-mode placements require authenticated current-rules acknowled
   }
 });
 
-test("cashout/completion is not blocked by new-bet acknowledgement; disabled mode keeps legacy chicken start", async () => {
+test("cashout/completion is not blocked by new-bet acknowledgement; chicken start keeps its existing dispatcher", async () => {
   for (const path of ["/api/chicken/cashout", "/api/chicken/step", "/api/chickendash/cashout", "/api/chickendash/step", "/api/aviator/cashout"]) {
     const fixture = route();
     assert.equal((await fixture.POST(post(path))).status, 200);
@@ -100,7 +115,7 @@ test("cashout/completion is not blocked by new-bet acknowledgement; disabled mod
   }
   const fixture = route({ enabled: false });
   assert.equal((await fixture.POST(post("/api/chicken/start", { difficulty: "easy", amount: 100 }))).status, 200);
-  assert.equal(fixture.calls[0].name, "legacy-road");
+  assert.equal(fixture.calls[0].name, "pool-chicken");
 });
 
 test("client acknowledges each game separately and never changes legacy action payloads", async () => {
@@ -227,12 +242,9 @@ test("round messages preserve pending payouts and have no replay or close contro
     handler({ detail: { game: "Aviator", bet: 100, win: 200, won: true } });
     assert.equal(render().props.title, "Congratulations! You win");
     assert.equal(render().props.winAmount, 200);
-    const winningKey = render().key;
     render().props.onDismiss();
     handler({ detail: { game: "Aviator", bet: 100, win: 0, won: false } });
-    assert.equal(render().props.title, "You lose");
-    assert.equal(render().props.winAmount, undefined);
-    assert.notEqual(render().key, winningKey);
+    assert.equal(render(), null, "Aviator losses remain hidden as requested");
   } finally {
     globalThis.window = originalWindow;
     globalThis.document = originalDocument;

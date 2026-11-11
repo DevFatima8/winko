@@ -23,7 +23,7 @@ function aviatorPollingScene() {
       options.signal.addEventListener("abort", () => reject(new Error("Request aborted")), { once: true });
     }),
     setState: (value) => states.push(value), broadcastBalanceUpdate: (value) => balances.push(value),
-    showToast: (...args) => notices.push(args), console: { error: () => {} },
+    showToast: (...args) => notices.push(args), console: { error: () => {}, warn: () => {} },
     setTimeout: (fn) => { const id = Symbol(); timers.set(id, fn); return id; },
     clearTimeout: (id) => timers.delete(id),
   };
@@ -42,13 +42,13 @@ test("Aviator polling coalesces slow requests rather than accumulating requests 
   assert.equal(s.refresh(), first);
   await Promise.resolve();
   assert.equal(s.calls.length, 1);
-  s.calls[0].resolve({ ok: true, json: async () => ({ serverNow: 100, balance: 0 }) });
+  s.calls[0].resolve({ ok: true, json: async () => ({ round: { id: 42 }, serverNow: 100, balance: 0 }) });
   await first;
   assert.equal(s.states.length, 1);
   assert.equal(s.context.refreshInFlight.current, null);
   assert.equal(s.timers.size, 0);
   const next = s.refresh(); await Promise.resolve();
-  s.calls[1].resolve({ ok: true, json: async () => ({ serverNow: 200, balance: 0 }) });
+  s.calls[1].resolve({ ok: true, json: async () => ({ round: { id: 42 }, serverNow: 200, balance: 0 }) });
   await next;
   assert.equal(s.states.length, 2);
   assert.deepEqual(s.balances, [0], "Unchanged spectator wallet does not repeatedly trigger session refreshes");
@@ -115,7 +115,7 @@ test("Aviator polling times out visibly, retries, and cannot update state after 
         assert.equal(+s.rounds[0].startsAt, startsAt);
         assert.equal((await s.api.cancelBet("player", table, 0)).ok, true);
         assert.equal(+s.rounds[0].startsAt, startsAt);
-        s.tick(3000);
+        s.at(startsAt);
         assert.equal((await s.advance()).status, "running");
         const queued = await s.api.placeBet("player", table, 100, 0);
         assert.equal(queued.queued, true);
@@ -123,13 +123,13 @@ test("Aviator polling times out visibly, retries, and cannot update state after 
         assert.ok((await s.api.placeBet("player", table, 100, 0)).error, "Same slot cannot queue twice");
         s.tick(1000); await s.advance();
         assert.equal(s.bets[0].outcome, "pending", "Round N cannot settle N+1 bet");
-        s.tick(3500); await s.advance(); s.tick(7000); await s.advance();
+        s.tick(3500); await s.advance(); s.tick(11000); await s.advance();
         assert.equal(s.bets[0].outcome, "lose");
         assert.deepEqual(s.wallet, [-50, 50, -100]);
       });
       test(`${table}: a slow database read across betting close queues the bet instead of joining the flight`, async () => {
         const s = aviatorScene(table);
-        await s.advance(); s.tick(5500); s.setReadDelay(1000);
+        const waiting = await s.advance(); s.at(+waiting.startsAt - 500); s.setReadDelay(1000);
         const placed = await s.api.placeBet("player", table, 50);
         assert.equal(placed.queued, true);
         assert.equal(placed.round, 2);

@@ -393,6 +393,7 @@ export default function RummyGame() {
 
   return (
     <div className="rummy-wrapper rummy-felt-bg relative flex h-full max-w-5xl mx-auto w-full flex-col justify-between overflow-hidden rounded-2xl border border-[#e7bc55]/30 shadow-2xl select-none text-[#f7f1de] px-1 sm:px-2 py-0.5">
+      {idleRound.countdown !== null && <p className="relative z-20 shrink-0 text-center text-xs text-amber-200" role="status">Next round in {idleRound.countdown}s</p>}
       <div className="rummy-table-ring pointer-events-none absolute inset-0 rounded-2xl" />
 
       {/* ── Header ── */}

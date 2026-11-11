@@ -13,7 +13,7 @@
     "test:chicken-traffic": "node --test scripts/test-chicken-traffic.mjs scripts/test-chicken-crash-lane.mjs",
     "test:bet-presets": "node --test scripts/test-bet-presets.mjs",
     "test:daily-pool": "node --test scripts/test-daily-pool.mjs scripts/test-daily-pool-config.mjs scripts/test-daily-pool-api.mjs scripts/test-daily-pool-browser.mjs scripts/test-browser-recovery.mjs scripts/test-browser-pool-ui.mjs scripts/test-daily-pool-dedicated.mjs scripts/test-multiplayer.mjs scripts/test-multiplayer-client.mjs scripts/test-live-card-rounds.mjs scripts/test-shared-aviator.mjs",
-    "test:aviator-ui": "node --test scripts/test-aviator-scenic.mjs scripts/test-aviator-multiplier.mjs scripts/test-aviator-flight.mjs scripts/test-shared-aviator.mjs",
+    "test:aviator-ui": "node --test scripts/test-aviator-rtp.mjs scripts/test-aviator-scenic.mjs scripts/test-aviator-multiplier.mjs scripts/test-aviator-flight.mjs scripts/test-shared-aviator.mjs",
     "test:live-rounds": "node --test scripts/test-live-rounds.mjs scripts/test-live-card-rounds.mjs scripts/test-live-other-tables.mjs scripts/test-live-crash-rounds.mjs scripts/test-live-wheel-rounds.mjs",
     "test:multiplayer": "node --test scripts/test-multiplayer.mjs scripts/test-multiplayer-client.mjs scripts/test-multiplayer-cards.mjs scripts/test-multiplayer-wheels.mjs scripts/test-multiplayer-dice-crash.mjs scripts/test-shared-aviator.mjs scripts/test-live-card-rounds.mjs"
   },

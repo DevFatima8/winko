@@ -380,6 +380,7 @@ export function ThreeCardPoker() {
 
   return (
     <div className="casino-shell">
+      {idleRound.countdown !== null && <p className="shrink-0 text-center text-xs text-amber-200" role="status">Next round in {idleRound.countdown}s</p>}
       <div className="casino-vignette" />
 
       <header className="casino-top">

@@ -30,7 +30,7 @@ import { CardSlot, PlayingCard } from "./PlayingCard";
 type Phase = "betting" | "dealing" | "reveal" | "result";
 
 const START_BALANCE = 10000;
-const BET_SECONDS = 15;
+const BET_SECONDS = 10;
 const DEAL_STEP = 300;
 const FLIP_STEP = 750;
 const FLIP_START = 520;

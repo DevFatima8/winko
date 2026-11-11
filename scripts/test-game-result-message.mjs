@@ -70,14 +70,16 @@ function fixture() {
   };
 }
 
-for (const title of ["Congratulations! You win", "You lose", "Round complete"]) {
-  test(`${title}: visible for exactly two seconds with no background or buttons`, () => {
+  test("wins display a small right-side amount for exactly two seconds without background or buttons", () => {
     const f = fixture();
-    const props = { title, result: "" };
+    const props = { title: "Congratulations! You win", result: "", winAmount: 100 };
     const tree = f.render(props);
-    assert.match(text(tree), new RegExp(title === "Congratulations! You win" ? "Congratulations! You won" : title));
+    assert.equal(text(tree).trim(), "Win Rs. 100.00");
     assert.equal(tree.props.role, "status");
     assert.match(tree.props.className, /pointer-events-none/);
+    assert.match(tree.props.className, /\bright-4\b/);
+    assert.match(tree.props.className, /\btext-xs\b/);
+    assert.doesNotMatch(tree.props.className, /\binset-0\b/);
     assert.equal(nodes(tree).filter(node => node.type === "button").length, 0);
     for (const node of nodes(tree)) {
       assert.doesNotMatch(node.props?.className ?? "", /\bbg-|\bbackdrop-|\bborder\b|\bring-/);
@@ -88,12 +90,11 @@ for (const title of ["Congratulations! You win", "You lose", "Round complete"]) 
     f.advance(1);
     assert.equal(f.render(props), null);
   });
-}
 
 test("rerenders do not restart the two-second timer or start a new game", () => {
   const f = fixture();
   let dismissals = 0;
-  const props = { title: "You lose", result: "", onDismiss: () => dismissals++ };
+  const props = { title: "Congratulations! You win", winAmount: 100, result: "", onDismiss: () => dismissals++ };
   f.render(props);
   f.advance(1500);
   f.render(props);
@@ -107,14 +108,14 @@ test("rerenders do not restart the two-second timer or start a new game", () => 
 test("leaving the game cancels the message timer", () => {
   const f = fixture();
   let dismissals = 0;
-  f.render({ title: "You lose", result: "", onDismiss: () => dismissals++ });
+  f.render({ title: "Congratulations! You win", winAmount: 100, result: "", onDismiss: () => dismissals++ });
   f.unmount();
   assert.equal(f.timers.size, 0);
   f.advance(2000);
   assert.equal(dismissals, 0);
 });
 
-test("the game-over adapter shows win/loss text without calling game callbacks", () => {
+test("the legacy game-over adapter suppresses losses without calling game callbacks", () => {
   const f = fixture();
   let actions = 0;
   const callbacks = { onPlayAgain: () => actions++, onClose: () => actions++ };
@@ -122,8 +123,6 @@ test("the game-over adapter shows win/loss text without calling game callbacks",
   for (const [result, title] of [
     ["YOU WIN Rs. 100!", "Congratulations! You win"],
     ["You won this hand.", "Congratulations! You win"],
-    ["No win", "You lose"],
-    ["You lose", "You lose"],
     ["Daily payout pending. Provisional claim Rs. 100", "Round complete"],
     ["Push", "Round complete"],
   ]) {
@@ -131,9 +130,9 @@ test("the game-over adapter shows win/loss text without calling game callbacks",
     assert.equal(message.props.title, title);
   }
   const message = f.GameOverOverlay({ open: true, result: "No win", ...callbacks });
-  f.render(message.props);
+  assert.equal(message, null);
+  assert.equal(f.GameOverOverlay({ open: true, result: "You lose", ...callbacks }), null);
   f.advance(2000);
-  assert.equal(f.render(message.props), null);
   assert.equal(actions, 0);
 });
 
@@ -141,22 +140,15 @@ test("pending payout details remain visible without announcing a paid win", () =
   const f = fixture();
   const message = f.GameOverOverlay({ open: true, result: "Provisional claim Rs. 100. Daily pool settlement pending." });
   const tree = f.render(message.props);
-  assert.match(text(tree), /Round complete/);
-  assert.match(text(tree), /Provisional claim Rs\. 100/);
-  assert.doesNotMatch(text(tree), /Congratulations|You lose/);
+  assert.equal(tree, null, "A pending result without a supplied claim amount cannot announce a paid win");
 });
 
-test("the winning amount uses the website font below the script congratulations heading", () => {
+test("winning notices contain only the amount, not congratulations or duplicate result details", () => {
   const f = fixture();
   const message = f.GameOverOverlay({ open: true, result: "You won this hand.", winAmount: 1234.5 });
   const tree = f.render(message.props);
-  const heading = nodes(tree).find(node => node.type === "h2");
-  const spans = nodes(heading).filter(node => node.type === "span");
-  assert.match(spans[0].props.className, /result-script-font/);
-  assert.match(spans[0].props.className, /congratulations/);
-  assert.match(spans[1].props.className, /winnings/);
-  assert.doesNotMatch(spans[1].props.className, /result-script-font/);
-  assert.match(text(heading).replace(/\s+/g, " ").trim(), /Congratulations! You won Rs\. 1,234\.50/);
+  assert.equal(text(tree).trim(), "Win Rs. 1,234.50");
+  assert.equal(nodes(tree).filter(node => node.type === "h2").length, 0);
   assert.doesNotMatch(text(tree), /You won this hand/);
 });
 
@@ -166,7 +158,7 @@ test("a loss contains no amount even if a caller supplies stake details or win p
     title: "You lose", result: "Bet Rs. 500", winAmount: 500,
     children: jsx("span", { children: "Rs. 250" }),
   });
-  assert.equal(text(tree).trim(), "You lose");
+  assert.equal(tree, null);
   assert.doesNotMatch(text(tree), /Rs\.|500|250/);
 });
 
@@ -176,34 +168,6 @@ test("invalid amounts are never rendered as a win", () => {
     const tree = f.render({ title: "Congratulations! You win", result: "", winAmount });
     assert.doesNotMatch(text(tree), /Rs\.|NaN|Infinity|undefined/);
   }
-});
-
-test("losses use red website text while congratulations keeps its script font", () => {
-  const f = fixture();
-  const loss = nodes(f.render({ title: "You lose", result: "" })).find(node => node.type === "h2");
-  assert.match(loss.props.className, /\bloss\b/);
-  assert.doesNotMatch(loss.props.className, /result-script-font/);
-  assert.equal(loss.props.style.fontWeight, 800);
-  const win = nodes(f.render({ title: "Congratulations! You win", result: "", winAmount: 200 })).find(node => node.type === "h2");
-  assert.match(nodes(win).find(node => node.type === "span").props.className, /result-script-font/);
-  assert.doesNotMatch(win.props.className, /\bloss\b/);
-  assert.equal(win.props.style.fontWeight, 400);
-  const css = readFileSync("src\\components\\GameOverOverlay.module.css", "utf8");
-  assert.match(css, /\.heading\.loss\s*\{[^}]*color:\s*#ef4444/s);
-  assert.match(css, /\.winnings\s*\{[^}]*font-family:\s*var\(--font-outfit\), ui-sans-serif/s);
-});
-
-test("the result has larger green congratulations, black outline and a two-second animation without a background", () => {
-  const css = readFileSync("src\\components\\GameOverOverlay.module.css", "utf8");
-  assert.match(css, /color:\s*#fff/);
-  assert.match(css, /-webkit-text-stroke:\s*1\.5px #000/);
-  assert.match(css, /paint-order:\s*stroke fill/);
-  assert.match(css, /\.congratulations\s*\{[^}]*color:\s*#22c55e;[^}]*font-size:\s*clamp\(2rem, 6vw, 2\.5rem\)/s);
-  assert.match(css, /animation:\s*result-message 2s/);
-  assert.match(css, /0%\s*\{\s*opacity:\s*0/);
-  assert.match(css, /100%\s*\{\s*opacity:\s*0/);
-  assert.match(css, /prefers-reduced-motion:\s*reduce/);
-  assert.doesNotMatch(css, /background/);
 });
 
 test("shared game results suppress duplicate legacy overlays inside the game frame", () => {
@@ -218,6 +182,30 @@ test("a provisional win always includes its pending-payout explanation", () => {
     title: "Congratulations! You win", winAmount: 100,
     result: "Provisional win amount. Daily pool payout pending; not credited yet.",
   });
-  assert.match(text(tree), /You won Rs\. 100\.00/);
+  assert.match(text(tree), /Win Rs\. 100\.00/);
   assert.match(text(tree), /Provisional.*pending; not credited yet/);
+});
+
+test("consecutive wins dismiss once without showing unrelated stake content", () => {
+  const f = fixture();
+  let dismissed = 0;
+  const props = { title: "Congratulations! You win", result: "", winAmount: 1234.5, onDismiss: () => dismissed++ };
+  const tree = f.render(props);
+  assert.equal(text(tree).replace(/\s+/g, " ").trim(), "Win Rs. 1,234.50");
+  assert.match(tree.props.className, /\btext-xs\b/);
+  assert.doesNotMatch(text(tree), /Congratulations|lose|[Ss]take/);
+  assert.equal(nodes(tree).filter(node => node.type === "h2" || node.type === "button").length, 0);
+  f.advance(2000);
+  assert.equal(f.render(props), null);
+  assert.equal(dismissed, 1);
+});
+
+test("losses display nothing and pending positive claims keep their disclosure", () => {
+  assert.equal(fixture().render({ title: "You lose", result: "", winAmount: 0 }), null);
+  const pending = fixture().render({
+    title: "Congratulations! You win", winAmount: 100,
+    result: "Provisional win amount. Daily pool payout pending; not credited yet.",
+  });
+  assert.match(text(pending), /Win Rs\. 100\.00/);
+  assert.match(text(pending), /pending; not credited yet/);
 });

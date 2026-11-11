@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { createHash, randomInt, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomInt, randomUUID } from "node:crypto";
 import ts from "typescript";
 
-export function createLegacyScene(userIds = ["alice", "bob"], { poolEnabled = false } = {}) {
+export function createLegacyScene(userIds = ["alice", "bob"], { poolEnabled = false, realFlight = false } = {}) {
   let now = 100000, readDelay = 0, wagerReadDelay = 0, failure = null, chain = Promise.resolve();
   const data = Object.fromEntries([
     "users", "games", "multiplayerrooms", "gameresults", "aviatorrounds", "cardrounds", "cardbets", "winholds", "multiplayerrequests", "dailypools", "dailypoolentries", "chickengames", "chickendashes",
@@ -84,7 +84,7 @@ export function createLegacyScene(userIds = ["alice", "bob"], { poolEnabled = fa
     const module = { exports: {} };
     componentModules.set(absolute, module);
     const require = specifier => {
-      if (specifier === "node:crypto") return { randomUUID, createHash, randomInt };
+      if (specifier === "node:crypto") return { randomUUID, createHash, createHmac, randomBytes, randomInt };
       if (specifier.startsWith("@/lib/")) return load(specifier.slice("@/lib/".length));
       if (specifier.startsWith("@/components/")) return loadComponent(`src\\${specifier.slice(2).replaceAll("/", "\\")}.ts`);
       if (specifier.startsWith("./") || specifier.startsWith("../")) {
@@ -107,7 +107,7 @@ export function createLegacyScene(userIds = ["alice", "bob"], { poolEnabled = fa
         oid: id => id,
         Game: { findOneAndUpdate: ({ slug }) => ({ lean: async () => ({ _id: slug }) }) },
       };
-      if (specifier === "node:crypto") return { randomUUID, createHash, randomInt };
+      if (specifier === "node:crypto") return { randomUUID, createHash, createHmac, randomBytes, randomInt };
       if (specifier.startsWith("@/components/")) {
         return loadComponent(`src\\${specifier.slice(2).replaceAll("/", "\\")}.ts`);
       }
@@ -123,7 +123,14 @@ export function createLegacyScene(userIds = ["alice", "bob"], { poolEnabled = fa
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
     }).outputText;
     new Function("require", "module", "exports", "Date", "Math", code)(require, loaded, loaded.exports, clock, math);
-    if (name === "aviator") loaded.exports.generateCrashPoint = () => ({ crashPoint: 1.01, seed: "", hash: "" });
+    if (name === "aviator" && !realFlight) {
+      const generate = loaded.exports.generateCrashPoint;
+      const validate = loaded.exports.validateFlightRound;
+      loaded.exports.generateCrashPoint = (...args) => ({ ...generate(...args), crashPoint: 1.02 });
+      // Timing fixtures override crash points; realFlight scenes exercise untouched proof validation.
+      loaded.exports.validateFlightRound = (round, table) => validate(round.fairness
+        ? { ...round, crashPoint: generate(table, round.roundNo, round.fairness.serverSeed, round.fairness.version).crashPoint } : round, table);
+    }
     return loaded.exports;
   }
   return {

@@ -316,3 +316,17 @@ for (const spec of specs) test(`${spec[1]}: spectator rounds, one-shot queue, ca
     game.dispose();
   }
 });
+
+for (const spec of specs) test(`${spec[1]}: automatic play cannot begin before the ten-second betting countdown`, async () => {
+  const game = scene(spec);
+  try {
+    if (spec[0].includes("birds-beasts")) await game.advance(900);
+    assert.equal(game.open(), true);
+    await game.advance(9999);
+    assert.equal(game.open(), true, "The full ten-second window must remain open");
+    await game.advance(101);
+    assert.equal(game.open(), false, "Automatic play starts after ten counts");
+    assert.equal(game.writes.length, 0);
+    assert.equal(game.requests.length, 0);
+  } finally { game.dispose(); }
+});

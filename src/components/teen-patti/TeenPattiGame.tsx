@@ -337,6 +337,7 @@ export default function TeenPattiGame() {
 
   return (
     <main className="tpr-felt relative h-full w-full overflow-hidden text-slate-100 flex flex-col justify-between px-1 sm:px-2 md:px-3 py-1 select-none">
+      {idleRound.countdown !== null && <p className="relative z-20 shrink-0 text-center text-xs text-amber-200" role="status">Next round in {idleRound.countdown}s</p>}
       {/* falling coins on win */}
       {coins.map((c) => (
         <div

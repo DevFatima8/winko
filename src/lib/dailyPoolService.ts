@@ -2,7 +2,9 @@ import { allRows, settleDailyPools, type PoolEntry } from "./dailyPool";
 import { mysqlMultiplayerStore } from "./multiplayer-store";
 import { dailyPoolLock, type DailyPoolGame } from "./dailyPoolRules";
 import { sharedFlightState, sharedCardState } from "./sharedLegacyTables";
-import type { UserDoc } from "@/models";
+import type { GameResultDoc, UserDoc } from "@/models";
+import { getGameId } from "./aviator";
+import { AVIATOR_MODELS } from "./aviatorRules";
 import { isMultiplayerGame, multiplayer } from "./multiplayer";
 
 export async function processDailyPool(game: DailyPoolGame) {
@@ -10,8 +12,15 @@ export async function processDailyPool(game: DailyPoolGame) {
     await sharedFlightState(null);
   }
   if (game === "aviator-x") {
-    const users = await mysqlMultiplayerStore.transact(dailyPoolLock(game), async tx =>
-      [...new Set((await allRows<PoolEntry>(tx, "dailypoolentries", { game, status: "active" })).map(entry => entry.userId))]);
+    const gameId = await getGameId(game);
+    const users = await mysqlMultiplayerStore.transact(dailyPoolLock(game), async tx => {
+      const legacy = await allRows<PoolEntry>(tx, "dailypoolentries", { game, status: "active" });
+      const pending: GameResultDoc[] = [];
+      for (const model of AVIATOR_MODELS) {
+        pending.push(...await allRows<GameResultDoc>(tx, "gameresults", { gameId, outcome: "pending", flightModel: model }));
+      }
+      return [...new Set([...legacy.map(entry => entry.userId), ...pending.map(bet => bet.userId)])];
+    });
     for (const userId of users) await sharedFlightState(userId, game);
   }
   if (isMultiplayerGame(game)) await multiplayer.read(game);

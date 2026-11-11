@@ -17,6 +17,7 @@ type CatalogGame = { _id: string; slug: string; isActive: boolean };
 type RoomBet = Omit<MultiplayerBet, "mine"> & { userId: string; cashoutMultiplier?: number; createdAt?: number; settledAt?: number };
 type Room = {
   _id: string; gameId: string; game: MultiplayerGame; roundNo: number; startedAt: number;
+  roundTimingVersion?: 1 | 2;
   outcome: MultiplayerOutcome; settled: boolean; bets: RoomBet[]; queuedBets: RoomBet[];
   history: { roundNo: number; result: MultiplayerOutcome }[];
   cricketMatch?: CricketMatch;
@@ -41,7 +42,7 @@ const mask = (name: string) => {
   return `${safe[0] ?? "P"}***${safe.length > 1 ? safe[safe.length - 1] : ""}`;
 };
 function deadlines(room: Room) {
-  const t = timings(room.game), bettingEndsAt = room.startedAt + t.bettingMs;
+  const t = timings(room.game, room.roundTimingVersion ?? 1), bettingEndsAt = room.startedAt + t.bettingMs;
   const resultAt = bettingEndsAt + (room.game === "blast-off" ? flightMs((room.outcome as BlastOutcome).crashPoint) : t.runningMs);
   return { bettingEndsAt, resultAt, endsAt: resultAt + t.resultMs };
 }
@@ -74,7 +75,7 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
       const roomId = ownerId ? hash(`private-card:${game}:${ownerId}`) : game;
       let room = roomId === game ? shared : await tx.get<Room>("multiplayerrooms", roomId, true);
       if (!room) {
-        room = { _id: roomId, gameId: catalog._id, game, roundNo: 1, startedAt: now, outcome: createOutcome(game), settled: false, bets: [], queuedBets: [], history: [], ...(ownerId ? { ownerId } : {}) };
+        room = { _id: roomId, gameId: catalog._id, game, roundNo: 1, startedAt: now, roundTimingVersion: 2, outcome: createOutcome(game), settled: false, bets: [], queuedBets: [], history: [], ...(ownerId ? { ownerId } : {}) };
       }
       // Same ordering across rooms prevents two multi-user settlements deadlocking.
       const ids = [...new Set([...(userId ? [userId] : []), ...room.bets.filter(b => b.status === "pending").map(b => b.userId), ...room.queuedBets.filter(b => b.status === "pending").map(b => b.userId)])].sort();
@@ -221,6 +222,7 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
       if (now < d.endsAt) return;
       room.roundNo++;
       room.startedAt = d.endsAt;
+      room.roundTimingVersion = 2;
       room.bets = room.queuedBets;
       room.queuedBets = [];
       room.outcome = createOutcome(room.game);

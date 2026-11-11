@@ -22,7 +22,7 @@ import "../lightning-roulette.css";
 
 type Phase = "betting" | "lightning" | "spinning" | "result";
 
-const BET_TIME = 25;
+const BET_TIME = 10;
 const CHIPS: number[] = [...BET_PRESETS];
 
 const CHIP_STYLE = {

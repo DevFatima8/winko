@@ -40,7 +40,7 @@ const CHIP_DEFS = BET_PRESETS.map((v, i) => ({
   cls: CHIP_CLS[i],
   label: v >= 1000 ? `${v / 1000}K` : String(v),
 }));
-const BET_TIME = 20;
+const BET_TIME = 10;
 const START_BALANCE = 10000;
 const LS_KEY = "bollywood-casino-v1";
 

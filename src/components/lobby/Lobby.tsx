@@ -122,7 +122,7 @@ export const MARQUEE = [
 const SLIDES: Slide[] = [
   { bg: "bg-gradient-to-r from-[#04261f] via-[#0b5a4a] to-[#0a8f9e]", img: "/lobby/02_VIP_1024x765.jpg", kicker: "Welcome bonus", title: "Receive |PKR 1500| for free", sub: "Register now & claim your welcome reward instantly", href: "/signup", cta: "Register now" },
   { bg: "bg-gradient-to-r from-[#0a0f14] via-[#12252e] to-[#0e7490]", img: GAME_IMAGES["aviator"], kicker: "Most played", title: "Aviator |up to 1000x|", sub: "Cash out before the plane flies away", href: "/games/aviator", cta: "Play now" },
-  { bg: "bg-gradient-to-r from-[#3b0a0a] via-[#7a1f2b] to-[#c2410c]", img: GAME_IMAGES["dragon-tiger"], kicker: "Live cards", title: "Dragon Tiger |Tie pays 1:1|", sub: "20-second personal rounds · real cards", href: "/games/dragon-tiger", cta: "Join table" },
+  { bg: "bg-gradient-to-r from-[#3b0a0a] via-[#7a1f2b] to-[#c2410c]", img: GAME_IMAGES["dragon-tiger"], kicker: "Live cards", title: "Dragon Tiger |Tie pays 1:1|",   sub: "10-second betting countdown · real cards", href: "/games/dragon-tiger", cta: "Join table" },
   { bg: "bg-gradient-to-r from-[#0b2a12] via-[#0f5132] to-[#059669]", img: "/lobby/04_Jackpot_No_Amount_1024x765.jpg", kicker: "Every deposit", title: "|7% bonus| on every deposit", sub: "Win up to PKR 60,000 — JazzCash & Easypaisa", href: "/promo", cta: "View promo" },
 ];
 

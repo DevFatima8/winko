@@ -405,6 +405,7 @@ export default function BlackjackGame({ backHref = "/player" }: { backHref?: str
 
   return (
     <main className="app-shell h-full w-full flex flex-col overflow-hidden">
+      {idleRound.countdown !== null && <p className="shrink-0 text-center text-xs text-amber-200" role="status">Next round in {idleRound.countdown}s</p>}
       <div className="app-main h-full w-full flex flex-col min-h-0 overflow-hidden" id="top">
         <header className="topbar shrink-0 flex items-center justify-between px-3 sm:px-4 py-2 border-b border-[#e7d9b1]/10 bg-[#090c0b]/80">
           <div className="flex items-center gap-2 sm:gap-3">

@@ -30,6 +30,7 @@ export function useLiveTable<T extends { [K in keyof T]: number }>({
   const [amount, setAmount] = useState("50");
   const [notice, setNotice] = useState("");
   const [active, setActive] = useState(0);
+  const [countdown, setCountdown] = useState(10);
   const queuedRef = useRef<T | null>(null);
   const locked = useRef(false);
   const latest = useRef({ start, reset, apply, balance });
@@ -45,6 +46,7 @@ export function useLiveTable<T extends { [K in keyof T]: number }>({
       const activate = setTimeout(() => {
         locked.current = false;
         setActive(0);
+        setCountdown(10);
         const next = queuedRef.current;
         queuedRef.current = null;
         setQueued(null);
@@ -55,10 +57,12 @@ export function useLiveTable<T extends { [K in keyof T]: number }>({
           } else setNotice("Queued bet cancelled: insufficient balance");
         }
       }, 0);
-      const timer = autoStart ? setTimeout(() => latest.current.start(), 5000) : null;
+      const ticker = autoStart ? setInterval(() => setCountdown(value => Math.max(0, value - 1)), 1000) : null;
+      const timer = autoStart ? setTimeout(() => latest.current.start(), 10000) : null;
       return () => {
         clearTimeout(activate);
         if (timer !== null) clearTimeout(timer);
+        if (ticker !== null) clearInterval(ticker);
       };
     }
     if (hasReset && (phase === "result" || phase === "settled" || phase === "revealed")) {
@@ -107,7 +111,9 @@ export function useLiveTable<T extends { [K in keyof T]: number }>({
     setNotice("Queued for the next round only — not charged");
   };
 
-  const controls = queueNextRound ? (
+  const controls = queueNextRound || autoStart && phase === "betting" ? <>
+    {autoStart && phase === "betting" && <div className="text-center text-xs text-amber-200" role="status">Next round in {countdown}s</div>}
+    {queueNextRound && (
     <div className="shrink-0 flex flex-wrap items-center justify-center gap-1 text-[10px] text-amber-200" aria-label="Live round bets">
       <span>Live · Active Rs. {active} · Next Rs. {queued ? sum(queued) : 0} (not charged)</span>
       <select aria-label="Next round target" value={target} onChange={(e) => setTarget(e.target.value)} className="bg-slate-900 rounded">
@@ -122,7 +128,8 @@ export function useLiveTable<T extends { [K in keyof T]: number }>({
       }}>Cancel queued</button>
       <span role="status">{notice}</span>
     </div>
-  ) : null;
+    )}
+  </> : null;
   const release = () => {
     locked.current = false;
     setActive(0);

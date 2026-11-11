@@ -16,6 +16,7 @@ function load(file, imports) {
   }, loaded, loaded.exports);
   return loaded.exports;
 }
+const flightRules = load("src\\lib\\aviatorRules.ts");
 function scene(overrides = {}, presets = [10, 15, 20, 25, 50]) {
   const values = [], calls = [];
   let cursor = 0, tree;
@@ -24,14 +25,15 @@ function scene(overrides = {}, presets = [10, 15, 20, 25, 50]) {
     "react/jsx-runtime": jsx, "next/link": { default: "a" },
     "lucide-react": Object.fromEntries(["ArrowLeft", "House", "Menu", "Signal", "Volume2", "VolumeX", "X"].map(name => [name, name])),
     "@/lib/betPresets": { BET_PRESETS: presets },
+    "@/lib/aviatorRules": flightRules,
   });
   const state = {
-    config: { slots: 2, minBet: 0.01, maxBet: 50000, waitMs: 6000 }, balance: 1000,
+    config: { slots: 2, minBet: 0.01, maxBet: 50000, waitMs: 10000 }, balance: 1000,
     round: { id: 42 }, history: [{ id: 41, crashPoint: 2.5 }], totals: { count: 0, amount: 0, cashed: 0 },
     bets: [], myBets: [], queued: [], myHistory: [], top: [], ...overrides.state,
   };
   const props = {
-    state, phase: "waiting", multiplier: 1, countdown: 5.2,
+    state, phase: "waiting", multiplier: 1, countdown: 10,
     panels: Array.from({ length: 3 }, () => ({ amount: "100.00", autoBet: false, autoCash: false, autoCashAt: "2.00", busy: false })),
     canvasRef: { current: null }, wrapRef: { current: null }, backHref: "/", sound: true, toast: null,
     ...overrides, state,
@@ -58,12 +60,16 @@ function scene(overrides = {}, presets = [10, 15, 20, 25, 50]) {
 test("Aviator scenic view renders two readable panels, countdown, original canvas and real empty activity", () => {
   const s = scene();
   assert.equal(s.nodes().filter(node => node.props?.["aria-label"]?.startsWith("Bet panel")).length, 2);
-  assert.match(s.text(), /NEXT ROUND.*Starts in\s+6\s+s/);
+  assert.match(s.text(), /NEXT ROUND.*Starts in\s+10\s+s/);
+  s.props.countdown = 10.8;
+  s.render();
+  assert.match(s.text(), /NEXT ROUND.*Starts in\s+10\s+s/, "Animation headroom must not start the visible counter at eleven");
   assert.match(s.text(), /No bets placed in this round yet/);
+  assert.doesNotMatch(s.text(), /Total staked/i);
   assert.equal(s.nodes().filter(node => node.type === "canvas").length, 1);
   const stage = s.find(node => node.props?.ref === s.props.wrapRef);
   assert.ok(stage.props.className.includes("h-[clamp(280px,44svh,470px)]"), "Keep the existing mobile stage size");
-  assert.ok(stage.props.className.includes("md:h-[clamp(160px,calc(100dvh-480px),470px)]"), "Reserve desktop space for every betting control");
+  assert.ok(stage.props.className.includes("md:h-[clamp(300px,calc(100dvh-360px),640px)]"), "Extend the desktop stage downward without moving its top or changing mobile sizing");
   assert.ok(s.nodes().some(node => node.props?.className?.includes("md:grid-cols-5")), "Use one desktop row for the five preset buttons");
   s.find(node => node.props?.["data-action"] === "bet").props.onClick();
   assert.deepEqual(s.calls, [["onBet", 0]]);
@@ -131,6 +137,27 @@ test("Amount bounds, auto controls, busy state and histories remain available", 
   assert.match(s.text(), /41.*2.50/);
 });
 
+test("New-model cashout preview is gross stake times multiplier and saved auto controls cannot change an active wager", () => {
+  const s = scene({
+    phase: "running", multiplier: 2,
+    state: { myBets: [{ slot: 0, bet: 100, flightModel: "aviator-80-capped-v1", autoCashout: 2.5, outcome: "pending" }] },
+    panels: Array.from({ length: 3 }, () => ({ amount: "100.00", autoBet: false, autoCash: true, autoCashAt: "2.50", busy: false })),
+  });
+  assert.match(s.text(), /200\.00/);
+  assert.doesNotMatch(s.text(), /296\.00/);
+  assert.equal(s.find(node => node.props?.["aria-label"] === "Auto Cashout 1").props.disabled, true);
+  const input = s.find(node => node.props?.["aria-label"] === "Auto Cashout multiplier 1");
+  assert.equal(input.props.disabled, true);
+  assert.equal(input.props.max, 99.98);
+  assert.equal(input.props.min, 1.01);
+  assert.equal(input.props.step, 0.01);
+  const free = scene({ panels: [{ amount: "100", autoCash: true, autoCashAt: "100", busy: false }, { amount: "100", autoCash: true, autoCashAt: "1", busy: false }] });
+  free.find(node => node.props?.["aria-label"] === "Auto Cashout multiplier 1").props.onBlur();
+  assert.deepEqual(free.calls.at(-1), ["onPanelChange", 0, { autoCashAt: "99.98" }]);
+  free.find(node => node.props?.["aria-label"] === "Auto Cashout multiplier 2").props.onBlur();
+  assert.deepEqual(free.calls.at(-1), ["onPanelChange", 1, { autoCashAt: "1.01" }]);
+});
+
 test("Compact header retains lobby, balance, deposit, menu and sound without a duplicate brand bar", () => {
   const s = scene();
   assert.equal(s.nodes().filter(node => node.type === "header").length, 1);
@@ -185,11 +212,15 @@ test("Terrain motion is refresh-rate independent, continuous at cell crossings a
     for (let frame = 0; frame <= 600; frame++) advanceAviatorWorld(slow, frame * 1000 / 30, "running", null);
     for (let frame = 0; frame <= 2400; frame++) advanceAviatorWorld(fast, frame * 1000 / 120, "running", null);
     assert.ok(Math.abs(slow.distance - fast.distance) < 1e-6);
+    const expectedTravel = 110 * 20 + (36 - 110) * (1 - Math.exp(-0.6 * 20)) / 0.6;
+    assert.ok(Math.abs(fast.distance - expectedTravel % 840) < 1e-6, "Accelerating travel must match the integrated speed curve");
+    assert.ok(Math.abs(slow.speed - fast.speed) < 1e-6);
+    assert.ok(fast.speed > 109 && fast.speed <= 110);
     const previous = fast.chunks.map(chunk => chunk.position.z);
     advanceAviatorWorld(fast, 20000 + 1000 / 120, "crashed", 20000);
     fast.chunks.forEach((chunk, index) => {
       const change = chunk.position.z - previous[index];
-      assert.ok(Math.abs(change) < 0.2 || change < -839 && previous[index] > fast.camera.position.z + 100);
+      assert.ok(Math.abs(change) < 0.917 || change < -839 && previous[index] > fast.camera.position.z + 100);
     });
     let wraps = 0;
     for (let frame = 1; frame < 4000; frame++) {
@@ -206,9 +237,36 @@ test("Terrain motion is refresh-rate independent, continuous at cell crossings a
     assert.ok(wraps > 3);
     const distance = fast.distance;
     advanceAviatorWorld(fast, 1000000, "waiting", null);
-    assert.ok(Math.abs(fast.distance - distance) <= 1.151, "Background suspension must not jump the world");
+    const suspendedTravel = (fast.distance - distance + 840) % 840;
+    assert.ok(suspendedTravel <= 5.501, "Background suspension must not jump the world");
   } finally {
     disposeAviatorWorld(slow); disposeAviatorWorld(fast);
+  }
+});
+
+test("Flight accelerates smoothly to a bounded speed and eases down during the next countdown", () => {
+  const { createAviatorWorld, advanceAviatorWorld, disposeAviatorWorld } = scenery();
+  const world = createAviatorWorld();
+  try {
+    advanceAviatorWorld(world, 0, "waiting", null);
+    for (let frame = 1; frame <= 120; frame++) advanceAviatorWorld(world, frame * 1000 / 60, "waiting", null);
+    assert.equal(world.speed, 36);
+    let previous = world.speed;
+    for (let frame = 121; frame <= 720; frame++) {
+      advanceAviatorWorld(world, frame * 1000 / 60, "running", null);
+      assert.ok(world.speed >= previous && world.speed <= 110);
+      assert.ok(world.speed - previous < 0.75, "Takeoff must accelerate rather than jump");
+      previous = world.speed;
+    }
+    assert.ok(world.speed > 109);
+    for (let frame = 721; frame <= 1320; frame++) {
+      advanceAviatorWorld(world, frame * 1000 / 60, "waiting", null);
+      assert.ok(world.speed <= previous && world.speed >= 36);
+      previous = world.speed;
+    }
+    assert.ok(world.speed < 36.2);
+  } finally {
+    disposeAviatorWorld(world);
   }
 });
 
@@ -265,6 +323,8 @@ test("reference-style plane stays small, centred, banks gently and falls away on
     assert.ok(Math.abs(world.plane.position.x) < 0.6);
     assert.equal(world.plane.scale.x, 1.05);
     assert.ok(Math.abs(world.plane.rotation.z) < 0.09);
+    assert.ok(Math.abs(world.plane.position.x - Math.sin(world.motionClock * 1.05) * 0.55) < 1e-6);
+    assert.ok(Math.abs(world.propeller.rotation.z - world.motionClock * 85) < 1e-6, "Propeller accelerates with scenery travel");
     const altitude = world.plane.position.y;
     const z = world.plane.position.z;
     advanceAviatorWorld(world, 2016, "crashed", 1);

@@ -16,7 +16,7 @@ export interface CashoutToast {
 interface CricketFlightCanvasProps {
   phase: GamePhase;
   multiplier: number;
-  countdown: number; // 5.0 down to 0.0
+  countdown: number;
   dismissalText: string;
   cashoutToasts: CashoutToast[];
   roundId: number;
@@ -1050,12 +1050,12 @@ export default function CricketFlightCanvas({
               BOWLER RUNNING IN
             </div>
             <div className="font-mono-tabular font-extrabold text-3xl sm:text-4xl text-[#F8FAFC] tracking-tight my-1">
-              {countdown.toFixed(1)}s
+              {Math.ceil(countdown)}s
             </div>
             <div className="w-full h-2 bg-[#131C2E] rounded-full overflow-hidden mt-2 border border-[#1E2D4A]">
               <div
                 className="h-full bg-gradient-to-r from-[#00E701] via-[#38BDF8] to-[#00E701] transition-all duration-100"
-                style={{ width: `${Math.max(0, (countdown / 5.0) * 100)}%` }}
+                style={{ width: `${Math.max(0, Math.min(1, countdown / 10)) * 100}%` }}
               />
             </div>
             <p className="text-[11px] text-[#94A3B8] mt-2 font-medium">

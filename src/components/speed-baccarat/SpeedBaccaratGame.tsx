@@ -36,7 +36,7 @@ type Phase = "betting" | "dealing" | "result";
 type FeedItem = { id: number; winner: Side; pTotal: number; bTotal: number; net: number; graded: RoundResult["graded"] };
 type SeatBet = { id: string; name: string; side: BetKey; amount: number; won: boolean | null; profit: number };
 
-const BET_MS = 9000;
+const BET_MS = 10000;
 const START_BALANCE = 1000;
 
 const MAIN_SPOTS: BetKey[] = ["player", "tie", "banker"];

@@ -36,7 +36,7 @@ export default function HomePage() {
   const [stake, setStake] = useState(BET_PRESETS[0]);
   const [round, setRound] = useState(7);
   const [phase, setPhase] = useState<RacePhase>("idle");
-  const [countdown, setCountdown] = useState(3);
+  const [countdown, setCountdown] = useState(10);
   const [progress, setProgress] = useState(0);
   const [plan, setPlan] = useState<RacePlan | null>(null);
   const [lastResult, setLastResult] = useState<RaceResult | null>(null);
@@ -116,22 +116,14 @@ export default function HomePage() {
         const next = planRef.current ?? makeRacePlan(horseId, wager?.amount ?? 0, roundRef.current);
         planRef.current = next;
         setPlan(next);
-        setCountdown(3);
-        phaseRef.current = "countdown";
-        setPhase("countdown");
+        setCountdown(0);
+        phaseRef.current = "racing";
+        setPhase("racing");
       };
-      timer = setTimeout(startRace, 6000);
-      return () => clearTimeout(timer);
-    }
-    if (phase === "countdown") {
-      const timer = window.setTimeout(() => {
-        if (countdown > 1) setCountdown(countdown - 1);
-        else {
-          phaseRef.current = "racing";
-          setPhase("racing");
-        }
-      }, 800);
-      return () => window.clearTimeout(timer);
+      const ticks = Array.from({ length: 9 }, (_, i) =>
+        setTimeout(() => setCountdown(9 - i), (i + 1) * 1000));
+      timer = setTimeout(startRace, 10000);
+      return () => { clearTimeout(timer); ticks.forEach(clearTimeout); };
     }
     if (phase === "racing") {
       const timer = window.setTimeout(() => {
@@ -148,13 +140,14 @@ export default function HomePage() {
       setPlan(null);
       setProgress(0);
       setLastResult(null);
+      setCountdown(10);
       const queued = queue.consume();
       if (queued) acceptBet(queued);
       phaseRef.current = "idle";
       setPhase("idle");
     }, 3500);
     return () => window.clearTimeout(timer);
-  }, [acceptBet, completeRace, countdown, phase, queue.consume]);
+  }, [acceptBet, completeRace, phase, queue.consume]);
 
   useEffect(() => {
     function shortcut(event: KeyboardEvent) {
@@ -320,7 +313,7 @@ export default function HomePage() {
         <div className="rules-topline"><span>THE ARCADE CLUB</span><button type="button" aria-label="Close game instructions" onClick={() => rulesRef.current?.close()}>×</button></div>
         <h2>Welcome to the Derby.</h2>
         <p className="rules-subtitle">A retro race. A virtual wager. All for fun.</p>
-        <ol><li><strong>Pick a runner.</strong> Click a coloured horse or use keys 1–6. The number on its yellow saddlecloth is its race number.</li><li><strong>Set your wager.</strong> Use the quick amounts or enter whole coins from your balance.</li><li><strong>Place a bet.</strong> Press Place Bet or Space during the six-second betting window. Races run continuously, even without a wager. A bet placed after betting closes queues one next-race wager, uncharged until the next window and subject to available funds. Cancel it using the queued-bet control.</li><li><strong>Watch the finish.</strong> If your accepted horse wins, you receive 2.75× your stake in total. Bets do not repeat automatically.</li></ol>
+        <ol><li><strong>Pick a runner.</strong> Click a coloured horse or use keys 1–6. The number on its yellow saddlecloth is its race number.</li><li><strong>Set your wager.</strong> Use the quick amounts or enter whole coins from your balance.</li><li>        <strong>Place a bet.</strong> Press Place Bet or Space during the ten-second betting window. Races run continuously, even without a wager. A bet placed after betting closes queues one next-race wager, uncharged until the next window and subject to available funds. Cancel it using the queued-bet control.</li><li><strong>Watch the finish.</strong> If your accepted horse wins, you receive 2.75× your stake in total. Bets do not repeat automatically.</li></ol>
         <button type="button" className="rules-done" onClick={() => rulesRef.current?.close()}>LET&apos;S RACE <ArrowIcon /></button>
       </dialog>
     </main>

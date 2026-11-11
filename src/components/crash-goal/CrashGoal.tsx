@@ -24,7 +24,7 @@ import { assignTargets, createRoster, randomRoundId, type BotPlayer } from "./li
 /* constants                                                            */
 /* ------------------------------------------------------------------ */
 
-const BETTING_MS = 7000;
+const BETTING_MS = 10000;
 const CRASHED_MS = 2800;
 const BALL_SIZE = 54;
 const START_BALANCE = 2000;
@@ -651,7 +651,7 @@ export function CrashGoal() {
                 Next kick-off in
               </div>
               <div className="mt-0.5 text-[30px] font-black italic leading-none tabular-nums text-white drop-shadow-[0_3px_10px_rgba(0,0,0,0.6)]">
-                {(roundTimer ?? 0).toFixed(1)}s
+                {Math.ceil(roundTimer ?? 0)}s
               </div>
             </div>
           )}

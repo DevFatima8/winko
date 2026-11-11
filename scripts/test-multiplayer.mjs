@@ -97,6 +97,49 @@ const bet = (roundNo, option = "down", amount = 100, extra = {}) => ({ action: "
 const action = (kind, roundNo, extra = {}) => ({ action: kind, requestId: `request_${++serial}`, roundNo, ...extra });
 const rejects = (promise, status) => assert.rejects(promise, error => error.status === status);
 
+test("every multiplayer game counts ten full seconds before the current and next round start", async () => {
+  for (const game of types.MULTIPLAYER_GAMES) {
+    const f = fixture();
+    const first = await f.service.read(game);
+    const start = first.serverNow;
+    assert.equal(first.round.bettingEndsAt - start, 10000, game);
+    for (let second = 0; second < 10; second++) {
+      f.at(start + second * 1000);
+      const state = await f.service.read(game);
+      assert.equal(state.round.phase, "betting", game);
+      assert.equal(Math.ceil((state.round.bettingEndsAt - state.serverNow) / 1000), 10 - second, game);
+    }
+    f.at(first.round.bettingEndsAt);
+    assert.equal((await f.service.read(game)).round.phase, "running", game);
+    f.at(game === "blast-off" ? first.round.bettingEndsAt + rules.flightMs(3) + rules.timings(game).resultMs : first.round.endsAt);
+    const next = await f.service.read(game);
+    assert.equal(next.round.roundNo, first.round.roundNo + 1, game);
+    assert.equal(next.round.bettingEndsAt - next.serverNow, 10000, game);
+    assert.equal(f.rows("gameresults").length, 0, "Spectating cannot create wagers");
+  }
+});
+
+test("already-open legacy multiplayer rounds retain their deadlines and upgrade only at the next round", async () => {
+  for (const game of ["blast-off", "7-up-down"]) {
+    const f = fixture();
+    await f.service.read(game);
+    const room = structuredClone(f.document("multiplayerrooms", game));
+    delete room.roundTimingVersion;
+    f.seed("multiplayerrooms", game, room);
+    const before = await f.service.read(game, "u1");
+    assert.equal(before.round.bettingEndsAt - room.startedAt, rules.timings(game, 1).bettingMs);
+    await f.service.act(game, "u1", bet(before.round.roundNo, game === "blast-off" ? "main" : "down"));
+    f.at(game === "blast-off" ? before.round.bettingEndsAt + rules.flightMs(3) + rules.timings(game, 1).resultMs : before.round.endsAt);
+    const next = await f.service.read(game, "u1");
+    assert.equal(next.round.roundNo, before.round.roundNo + 1);
+    assert.equal(next.round.bettingEndsAt - next.serverNow, 10000);
+    const balance = f.document("users", "u1").balance;
+    await f.service.read(game, "u1");
+    assert.equal(f.document("users", "u1").balance, balance);
+    assert.equal(f.rows("gameresults").length, 1, "The old accepted wager settles only once");
+  }
+});
+
 test("pending claims, including zero-claim losses, never become a paid-win or final-loss message", () => {
   assert.equal(types.poolRoundMessage([]), null);
   assert.equal(types.poolRoundMessage([{ poolPending: false, poolClaim: 200 }]), null);
@@ -622,6 +665,7 @@ test("Route authenticates clients, rejects unknown games, preserves statuses and
     return load(join("src", "app", "api", "multiplayer", "[game]", "route.ts"), {
       "next/server": { NextResponse: { json: (body, init) => Response.json(body, init) } },
       "@/lib/serverAuth": { getServerSessionUser: async () => user },
+      "@/lib/gameAvailability": { LOCAL_GAMES_CONNECTED: true },
       "@/lib/multiplayer": { ...f, multiplayer: service },
       "@/lib/requestOrigin": load(join("src", "lib", "requestOrigin.ts"), { "./siteUrl": { SITE_URL: "https://example.test" } }),
     });

@@ -179,7 +179,7 @@ export function Slot777Game({ backHref = "/player" }: { backHref?: string }) {
                   <div className="text-lg sm:text-xl font-black text-white">WIN Rs. {fmt2(show.payout)}</div>
                 </>
               ) : (
-                <div className="text-xs text-slate-400">{spinning ? "Spinning…" : result && !result.win ? "No win — try again!" : "Place bet & spin"}</div>
+                <div className="text-xs text-slate-400">{spinning ? "Spinning…" : result && !result.win ? "..." : "Place bet & spin"}</div>
               )}
             </div>
 

@@ -151,7 +151,7 @@ export default function DerbyTrack(props: Props) {
       oscillator.stop(at + duration + 0.02);
     }
 
-    if (props.phase === "countdown") tone(440 + (3 - props.countdown) * 110, 0.13);
+    if ((props.phase === "idle" || props.phase === "countdown") && props.countdown > 0 && props.countdown <= 3) tone(440 + (3 - props.countdown) * 110, 0.13);
     if (props.phase === "result" && props.plan) {
       const melody = props.plan.stake <= 0 ? [] : props.plan.playerWon ? [523, 659, 784, 1047] : [440, 349, 294];
       melody.forEach((frequency, index) => tone(frequency, 0.2, 0.02, index * 0.13));
@@ -216,7 +216,7 @@ export default function DerbyTrack(props: Props) {
     if (hit) props.onSelectHorse(hit.id);
   }
 
-  const status = props.phase === "racing" ? "RACING" : props.phase === "countdown" ? "GET READY" : props.phase === "result" ? "FINISHED" : reducedMotion ? "READY TO RACE" : previewPlaying ? "LIVE PREVIEW" : "PREVIEW PAUSED";
+  const status = props.phase === "racing" ? "RACING" : props.phase === "countdown" ? "GET READY" : props.phase === "result" ? "FINISHED" : `NEXT RACE ${props.countdown}s`;
 
   return (
     <div className="arcade-cabinet">

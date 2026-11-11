@@ -3,7 +3,9 @@ import { AdminLog, Commission, Feedback, Game, GameResult, LoginEvent, Notificat
 import { getServerSessionUser } from "@/lib/serverAuth";
 import { isStaff } from "@/lib/auth";
 import { ensureHelp, getSettings } from "@/lib/platform";
-import { getProviderCatalog } from "@/lib/gregmornCatalog";
+import { getSiteGameCatalog } from "@/lib/siteGameCatalog";
+import { GAME_SLUGS } from "@/lib/gameCatalog";
+import { PROVIDER_GAMES_VISIBLE } from "@/lib/gameAvailability";
 import { gameResultGameMap, gameResultSummaries, type GameResultStat } from "@/lib/gameResultGames";
 import { recordedPlayerLogins } from "@/lib/dashboardLogins";
 
@@ -365,8 +367,9 @@ async function loadData(request: Request) {
         }
         if (view === "games") {
             const [catalog, gameRows, stats, blocked] = await Promise.all([
-                getProviderCatalog(),
-                Game.find({ slug: { $regex: /^gregmorn-[a-f0-9]{40}$/ } }).lean(),
+                getSiteGameCatalog(),
+                Game.find({ slug: PROVIDER_GAMES_VISIBLE
+                    ? { $regex: /^gregmorn-[a-f0-9]{40}$/ } : { $in: [...GAME_SLUGS] } }).lean(),
                 GameResult.aggregate<{ _id: string; c: number; bet: number; win: number }>([{ $group: { _id: "$gameId", c: { $sum: 1 }, bet: { $sum: "$betAmount" }, win: { $sum: "$winAmount" } } }]),
                 User.aggregate<{ _id: string; c: number }>([{ $unwind: "$blockedGames" }, { $group: { _id: "$blockedGames", c: { $sum: 1 } } }]),
             ]);
@@ -384,7 +387,11 @@ async function loadData(request: Request) {
                 const gameStats = group.reduce((total, game) => {
                     const stat = statsByGameId.get(String(game._id));
                     return { c: total.c + (stat?.c ?? 0), bet: total.bet + (stat?.bet ?? 0), win: total.win + (stat?.win ?? 0) };
-                }, { c: 0, bet: 0, win: 0 });
+                }, {
+                    c: statsByGameId.get(providerGame.slug)?.c ?? 0,
+                    bet: statsByGameId.get(providerGame.slug)?.bet ?? 0,
+                    win: statsByGameId.get(providerGame.slug)?.win ?? 0,
+                });
                 return {
                     _id: providerGame.slug,
                     slug: providerGame.slug,
@@ -501,7 +508,7 @@ async function loadData(request: Request) {
             if (!user || isStaff(user.role)) return NextResponse.json({ error: "User not found." }, { status: 404 });
             const canOperate = me.level >= 2 || String(user.referredBy ?? "") === me.id;
             if (!canOperate) return NextResponse.json({ error: "User not found." }, { status: 404 });
-            const games = (await getProviderCatalog()).map(game => ({
+            const games = (await getSiteGameCatalog()).map(game => ({
                 slug: game.slug, name: game.title, icon: "", imageUrl: game.imageUrl,
             }));
             return NextResponse.json({
@@ -740,7 +747,7 @@ async function loadData(request: Request) {
             const scope = teamIds ? { userId: { $in: teamIds } } : {};
             const [games, catalog, stats] = await Promise.all([
                 Game.find().lean(),
-                getProviderCatalog(),
+                getSiteGameCatalog(),
                 GameResult.aggregate<GameResultStat>([
                     ...(teamIds ? [{ $match: scope }] : []),
                     { $group: {
@@ -753,7 +760,8 @@ async function loadData(request: Request) {
                     } },
                 ]),
             ]);
-            const summaries = gameResultSummaries(games, catalog, stats);
+            const summaries = gameResultSummaries(games, catalog, stats).filter(game =>
+                PROVIDER_GAMES_VISIBLE || game.refs.some(ref => GAME_SLUGS.includes(ref)));
             const requested = params.get("game");
             if (!requested) {
                 return NextResponse.json({ games: summaries.map(({ refs: _refs, ...game }) => game) }, { headers: { "Cache-Control": "no-store" } });

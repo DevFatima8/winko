@@ -51,7 +51,7 @@ export default function CrashCricketApp() {
   // Game Loop State
   const [roundId, setRoundId] = useState<number>(recovered?.roundId ?? 8440);
   const [phase, setPhase] = useState<GamePhase>(recovered?.phase ?? "BETTING");
-  const [countdown, setCountdown] = useState<number>(5.0);
+  const [countdown, setCountdown] = useState<number>(10);
   const [multiplier, setMultiplier] = useState<number>(1.0);
   const [dismissalText, setDismissalText] = useState<string>("");
 
@@ -381,7 +381,7 @@ export default function CrashCricketApp() {
     let stopLoop = () => {};
 
     if (phase === "BETTING") {
-      const durationMs = 5000;
+      const durationMs = 10000;
       const startTs = performance.now() - (Date.now() - phaseStarted.current);
       let lastSecondBeep = 4;
 
@@ -566,7 +566,7 @@ export default function CrashCricketApp() {
       const startNextRound = async () => {
         const nextRoundNum = roundIdRef.current + 1;
         setRoundId(nextRoundNum);
-        setCountdown(5.0);
+        setCountdown(10);
         setMultiplier(1.0);
 
         const freshSimBets = generateSimulatedBetsForRound();

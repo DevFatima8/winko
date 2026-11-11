@@ -12,7 +12,7 @@ import "./crash-bonus.css";
 /* ------------------------------------------------------------------ */
 /*  Config                                                             */
 /* ------------------------------------------------------------------ */
-const BETTING_MS = 6000;
+const BETTING_MS = 10000;
 const CRASHED_MS = 3200;
 const WIN_RATE = 0.35;
 const GROWTH = 0.15; // multiplier = e^(GROWTH * seconds)
@@ -627,7 +627,7 @@ export default function CrashGame() {
                     Waiting for next round
                   </div>
                   <div className="text-5xl font-black text-white sm:text-6xl">
-                    {countdown.toFixed(1)}
+                    {Math.ceil(countdown)}
                     <span className="text-2xl text-slate-500">s</span>
                   </div>
                   <div className="mx-auto mt-4 h-1.5 w-56 overflow-hidden rounded-full bg-white/10">

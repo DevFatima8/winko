@@ -4,6 +4,7 @@ import test from "node:test";
 import ts from "typescript";
 
 function load(file, imports = {}) {
+  imports = { "./gameAvailability": { PROVIDER_GAMES_VISIBLE: true, SITE_CATALOG_URL: "/api/gregmorn/catalog" }, ...imports };
   const loaded = { exports: {} };
   const code = ts.transpileModule(readFileSync(file, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   new Function("require", "module", "exports", code)(name => { assert.ok(name in imports, name); return imports[name]; }, loaded, loaded.exports);
@@ -74,7 +75,8 @@ test("tab-local return cache handles full catalogues above 2MB, survives a remou
   const storage = new Map(), entries = new Map();
   Object.defineProperty(globalThis, "window", { configurable: true, value: { caches: true } });
   Object.defineProperty(globalThis, "sessionStorage", { configurable: true, value: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) } });
-  Object.defineProperty(globalThis, "crypto", { configurable: true, value: { randomUUID: () => "fixture-tab" } });
+  let uuid = 0;
+  Object.defineProperty(globalThis, "crypto", { configurable: true, value: { randomUUID: () => `fixture-tab-${++uuid}` } });
   Object.defineProperty(globalThis, "caches", { configurable: true, value: {
     open: async name => ({
       put: async (key, response) => { entries.set(`${name}:${key}`, await response.json()); },
@@ -91,6 +93,13 @@ test("tab-local return cache handles full catalogues above 2MB, survives a remou
     assert.equal(first.warmProviderCatalog().length, 12000);
     const remount = load("src\\lib\\providerCatalogCache.ts");
     assert.equal((await remount.readReturnCatalog()).length, 12000);
+    const availability = load("src\\lib\\gameAvailability.ts");
+    const local = load("src\\lib\\providerCatalogCache.ts", { "./gameAvailability": availability });
+    assert.equal(await local.readReturnCatalog(), null, "saved API games must not leak into the local catalogue");
+    await local.saveProviderCatalog([{ ...game, id: "local", slug: "mines" }]);
+    assert.deepEqual((await local.readReturnCatalog()).map(game => game.slug), ["mines"]);
+    assert.equal((await remount.readReturnCatalog()).length, 12000, "API cache remains isolated and preserved");
+    await local.clearProviderCatalog();
     await remount.clearProviderCatalog();
     assert.equal(await remount.readReturnCatalog(), null);
     assert.equal(entries.size, 0);

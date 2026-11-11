@@ -28,7 +28,7 @@ interface Bets {
 
 const EMPTY_BETS: Bets = { HOME: 0, DRAW: 0, AWAY: 0 };
 const CHIPS: number[] = [...BET_PRESETS];
-const BET_SECONDS = 12;
+const BET_SECONDS = 10;
 
 const RANK_LABEL: Record<number, string> = {
   2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9",

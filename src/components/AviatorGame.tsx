@@ -6,6 +6,7 @@ import { playGameSound, speakGameVoice } from "@/lib/gameAudio";
 import { gameSfx } from "@/lib/gameSfx";
 import { broadcastBalanceUpdate } from "@/lib/walletSync";
 import { BET_PRESETS } from "@/lib/betPresets";
+import { aviatorPayout, validAutoCashout } from "@/lib/aviatorRules";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AviatorScenicView } from "./AviatorScenicView";
 import { disposeAviatorScenery, drawAviatorScenery } from "@/lib/aviatorScenery";
@@ -13,13 +14,15 @@ import { disposeAviatorScenery, drawAviatorScenery } from "@/lib/aviatorScenery"
 /* Spribe-style Aviator / Aviator X */
 type Table = "aviator" | "aviator-x";
 type PoolState = { poolPending?: boolean; poolClaim?: number; poolVersion?: string };
-type Bet = PoolState & { id: string; slot: number; bet: number; win: number; outcome: string; data: string | null };
+type Bet = PoolState & { id: string; slot: number; bet: number; win: number; outcome: string; data: string | null; flightModel?: string; autoCashout?: number; netProfit?: number };
+type FlightProof = { version: string; serverSeedHash: string; clientSeed: string; nonce: number; nextServerSeedHash: string; serverSeed?: string };
 export type AviatorState = {
   serverNow: number;
   table: Table;
-  config: { name: string; slots: number; minBet: number; maxBet: number; waitMs: number; pauseMs?: number; growth: number; maxMult: number };
+  config: { name: string; slots: number; minBet: number; maxBet: number; waitMs: number; pauseMs?: number; growth: number; maxMult: number; maxCashout?: number; theoreticalRtp?: number; theoreticalRtpAt199?: number; model?: string };
   round: { id: number; key?: string; status: "waiting" | "running" | "crashed"; idle?: boolean; startsAt: number; endedAt: number | null; crashPoint: number | null; multiplier: number };
-  history: { id: number; crashPoint: number }[];
+  fairness?: FlightProof | null;
+  history: { id: number; crashPoint: number; fairness?: FlightProof | null }[];
   bets: (PoolState & { id: string; name: string; bet: number; win: number; outcome: string; data: string | null; mult: number | null })[];
   totals: { count: number; amount: number; cashed: number };
   myBets: Bet[];
@@ -440,6 +443,11 @@ export function AviatorGame({
         showToast("err", `Minimum bet is Rs. ${minBet}. Please enter at least ${minBet}.`);
         return;
       }
+      const autoCashout = p.autoCash ? Number(p.autoCashAt) : undefined;
+      if (autoCashout !== undefined && !validAutoCashout(autoCashout)) {
+        showToast("err", "Auto cashout must be 1.01x to 99.98x, with at most two decimal places.");
+        return;
+      }
       pendingBets.current.add(i);
       setPanel(i, { busy: true });
       try {
@@ -450,7 +458,7 @@ export function AviatorGame({
       const j = await api("/api/aviator/bet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ table, amount, slot: i, roundNo, queueIfClosed: table === "aviator" }),
+        body: JSON.stringify({ table, amount, slot: i, roundNo, queueIfClosed: table === "aviator", autoCashout }),
       });
       if (!j) return;
       if (j.error) showToast("err", j.error);
@@ -509,7 +517,6 @@ export function AviatorGame({
           playGameSound("cashout");
           if (!j.poolPending) speakGameVoice("planeWin");
         }
-        showToast("ok", j.poolPending ? `Claim locked @ ${fmt2(j.multiplier)}x` : `You have cashed out! ${fmt2(j.multiplier)}x`, j.poolPending ? `Provisional Rs. ${fmt2(j.poolClaim)} — daily payout pending` : `Win Rs. ${fmt2(j.win)}`);
         window.dispatchEvent(
           new CustomEvent("wx:game-result", {
             detail: { game: "Aviator", bet: Number(p.amount), win: j.win, won: j.win > 0, poolPending: j.poolPending, poolClaim: j.poolClaim },
@@ -628,14 +635,13 @@ export function AviatorGame({
         panelsRef.current.forEach((p, i) => {
           const mine = s.myBets.find((b) => b.slot === i && b.outcome === "pending");
           const target = parseFloat(p.autoCashAt);
-          if (p.autoCash && mine && target >= 1.01 && m >= target && autoCashFired.current[i] !== s.round.id) {
+          if (p.autoCash && mine && !mine.flightModel && target >= 1.01 && target <= (s.config.maxCashout ?? 99.98) && m >= target && autoCashFired.current[i] !== s.round.id) {
             autoCashFired.current[i] = s.round.id;
             cashOut(i);
           }
         });
       }
 
-      // lost toast
       if (visualPhase === "crashed" && lastCrashShown.current !== visual.display.id) {
         lastCrashShown.current = visual.display.id;
         if (sound) {
@@ -647,11 +653,6 @@ export function AviatorGame({
         const lost = s.myBets.filter((b) => b.outcome === "lose");
         if (lost.length) {
           lastLossNotified.current = s.round.id;
-          showToast(
-            "err",
-            `${table === "aviator" ? "Crashed" : "Flew away"} at ${fmt2(s.round.crashPoint ?? m)}x`,
-            lost.some(bet => bet.poolPending) ? "Round ended — daily pool payout pending" : "No win"
-          );
           const legacyLost = lost.filter(bet => !bet.poolPending);
           if (legacyLost.length) window.dispatchEvent(new CustomEvent("wx:game-result", { detail: { game: "Aviator", bet: legacyLost.reduce((sum, bet) => sum + bet.bet, 0), win: 0, won: false } }));
           const poolLost = lost.filter(bet => bet.poolPending);
@@ -1055,7 +1056,7 @@ export function AviatorGame({
                     Next Round
                   </div>
                   <div className="mt-1 text-xs sm:text-sm font-bold text-white/90">
-                    Starts in {Math.ceil(countdown)}s
+                    Starts in {Math.ceil(Math.min(countdown, state.config.waitMs / 1000))}s
                   </div>
                   <div className="mt-2 h-1.5 w-44 sm:w-56 overflow-hidden rounded-full bg-white/10">
                     <div
@@ -1197,7 +1198,8 @@ export function AviatorGame({
                 const pending = mine?.outcome === "pending";
                 const bet = mine?.bet ?? amount;
                 const netWin = Math.floor(bet * mult * 0.98 * 100) / 100;
-                const potential = mine?.poolVersion ? Math.round(bet * mult * 100) / 100 : Math.floor((bet + netWin) * 100) / 100;
+                const potential = mine?.flightModel ? aviatorPayout(bet, Math.min(mult, mine.autoCashout ?? Infinity, state.config.maxCashout ?? 99.98))
+                  : mine?.poolVersion ? Math.round(bet * mult * 100) / 100 : Math.floor((bet + netWin) * 100) / 100;
                 const setAmt = (v: number) =>
                   setPanel(i, {
                     amount: Math.max(state.config.minBet, v).toFixed(2),
@@ -1428,18 +1430,22 @@ export function AviatorGame({
                         </label>
                         <label className="flex items-center gap-1 cursor-pointer">
                           <span className="text-slate-300">Auto Cash</span>
-                          <Toggle on={p.autoCash} onChange={(v) => setPanel(i, { autoCash: v })} />
+                          <Toggle on={p.autoCash} disabled={locked} onChange={(v) => setPanel(i, { autoCash: v })} />
                           <span
                             className="flex items-center rounded-full px-1.5 py-0.2"
                             style={{ background: T.panel, border: `1px solid ${T.line}` }}
                           >
                             <input
                               value={p.autoCashAt}
-                              disabled={!p.autoCash}
+                              disabled={!p.autoCash || locked}
+                              inputMode="decimal"
+                              min={1.01}
+                              max={state.config.maxCashout ?? 99.98}
+                              step={0.01}
                               onChange={(e) => setPanel(i, { autoCashAt: e.target.value })}
                               onBlur={() =>
                                 setPanel(i, {
-                                  autoCashAt: Math.max(1.01, Number(p.autoCashAt) || 1.01).toFixed(2),
+                                  autoCashAt: Math.min(state.config.maxCashout ?? 99.98, Math.max(1.01, Number(p.autoCashAt) || 1.01)).toFixed(2),
                                 })
                               }
                               className="w-8 bg-transparent text-center font-bold text-white outline-none disabled:opacity-40"
@@ -1599,11 +1605,17 @@ export function AviatorGame({
               </li>
               <li>
                 <b className="text-white">Auto Bet & Auto Cash Out</b> — Use Auto Bet to repeat your stake each round,
-                and set Auto Cash Out to automatically secure wins at your target multiplier.
+                and set Auto Cash Out before betting, from 1.01x to 99.98x. The server settles your saved target even if you disconnect.
               </li>
               <li>
-                <b className="text-white">Provably Fair</b> — Every round's outcome is mathematically generated and
-                100% transparent.
+                <b className="text-white">Crash rules</b> — Crash points range from 1.00x to 99.99x. Cashout must be strictly before the crash; equal targets lose.
+                The fixed-target theoretical RTP is approximately 80% before whole-paisa rounding, not a guarantee of session returns.
+                {state.config.theoreticalRtpAt199 === 79.6 && " This model crashes strictly below 2x with 60% long-run probability. The 1.99x cashout target has approximately 79.6% RTP before paisa rounding."}
+              </li>
+              <li>
+                <b className="text-white">Seed verification</b> — A SHA-256 seed commitment is published before betting; the seed is revealed after the crash.
+                {state.fairness && <span className="mt-1 block break-all text-[10px]">Current seed hash: {state.fairness.serverSeedHash}<br />Model: {state.fairness.version} · Nonce: {state.fairness.nonce}</span>}
+                {state.history[0]?.fairness?.serverSeed && <span className="mt-1 block break-all text-[10px]">Last revealed seed: {state.history[0].fairness.serverSeed}<br />Hash: {state.history[0].fairness.serverSeedHash}<br />Public client seed: {state.history[0].fairness.clientSeed} · Nonce: {state.history[0].fairness.nonce}</span>}
               </li>
             </ol>
           </div>
@@ -1613,10 +1625,11 @@ export function AviatorGame({
   );
 }
 
-function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+function Toggle({ on, onChange, disabled = false }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={() => onChange(!on)}
       className={`h-4 w-7 rounded-full p-0.5 transition ${on ? "bg-[#28a909]" : "bg-slate-600"}`}
     >

@@ -304,6 +304,7 @@ test("Lucky Wheel spectator API uses unchanged engine with zero stake; POST boun
   const loaded = { exports: {} }, stakes = [];
   new Function("require", "module", "exports", source)((name) => {
     if (name === "next/server") return { NextResponse: { json: (data, options) => ({ data, ...options }) } };
+    if (name === "@/lib/gameAvailability") return { LOCAL_GAMES_CONNECTED: true };
     if (name.endsWith("spin-engine")) return { spin: (stake) => { stakes.push(stake); return { index: 2, multiplier: 2, hash: "abc", payout: 0 }; } };
     return { MIN_BET: 1, MAX_BET: 10000 };
   }, loaded, loaded.exports);

@@ -24,7 +24,7 @@ import {
 } from "@/lib/roulette";
 import { sfx } from "@/lib/sound";
 
-const BET_TIME = 20;
+const BET_TIME = 10;
 
 type Phase = "betting" | "closing" | "spinning" | "result";
 

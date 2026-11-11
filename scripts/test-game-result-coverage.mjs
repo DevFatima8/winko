@@ -99,7 +99,7 @@ test("every catalog game has a shared completion path reachable from its game vi
   for (const game of catalog.GAME_SLUGS) assert.ok(covered.has(game), `${game}: missing a completion connection`);
 });
 
-test("each of the 70 game frames displays both a winning amount and a loss", () => {
+test("all 70 game frames show win amounts and suppress losses", () => {
   for (const game of catalog.GAME_SLUGS) {
     const p = popup(game);
     p.emit({ game, id: "win", win: 1234.5, won: true });
@@ -109,9 +109,22 @@ test("each of the 70 game frames displays both a winning amount and a loss", () 
     message.props.onDismiss();
     p.emit({ game, id: "loss", win: 0, won: false });
     message = p.render();
-    assert.equal(message.props.title, "You lose", game);
-    assert.equal(message.props.winAmount, undefined, game);
-    assert.equal(message.props.result, "", game);
+    assert.equal(message, null, game);
+    p.unmount();
+  }
+});
+
+test("both Aviator legacy event adapters ignore losses and retain the next win amount without a stake", () => {
+  for (const game of ["aviator", "aviator-x"]) {
+    const p = popup(game);
+    p.emit({ game: "Aviator", bet: 500, win: 0, won: false });
+    assert.equal(p.render(), null);
+    p.emit({ game: "Aviator", bet: 500, win: 750, won: true });
+    const message = p.render();
+    assert.equal(message.props.winAmount, 750);
+    assert.equal(message.props.bet, undefined);
+    message.props.onDismiss();
+    assert.equal(p.render(), null);
     p.unmount();
   }
 });
@@ -143,7 +156,7 @@ test("simultaneous game results are queued instead of losing a message", () => {
   p.unmount();
 });
 
-test("pending claims are disclosed and zero-claim results show no losing amount", () => {
+test("pending claims retain their disclosure and zero-claim losses are not queued", () => {
   const p = popup("fortune-toucan");
   p.emit({ game: "fortune-toucan", id: "a", win: 0, won: false, poolPending: true, poolClaim: 250 });
   const win = p.render();
@@ -151,10 +164,7 @@ test("pending claims are disclosed and zero-claim results show no losing amount"
   assert.match(win.props.result, /Provisional.*pending; not credited yet/);
   win.props.onDismiss();
   p.emit({ game: "fortune-toucan", id: "b", win: 0, won: false, bet: 100, poolPending: true, poolClaim: 0 });
-  const loss = p.render();
-  assert.equal(loss.props.title, "You lose");
-  assert.equal(loss.props.winAmount, undefined);
-  assert.equal(loss.props.result, "");
+  assert.equal(p.render(), null);
   p.unmount();
 });
 

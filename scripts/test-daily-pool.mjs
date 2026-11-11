@@ -23,6 +23,15 @@ async function wager(s, id, userId, amount, game = "aviator") {
   });
 }
 const close = (s, id, claim = 0, cancel = false) => run(s, tx => s.pool.closePoolWager(tx, id, claim, cancel));
+async function legacyFlightBet(s, userId, table, amount) {
+  await s.flight.placeBet(userId, table, amount, 0);
+  await run(s, async tx => {
+    const bet = s.data.gameresults.find(result => result.userId === userId && result.outcome === "pending");
+    delete bet.flightModel;
+    await s.pool.addPoolWager(tx, table, bet);
+    await tx.put("gameresults", bet._id, bet);
+  });
+}
 const settle = (s, game = "aviator") => run(s, tx => s.pool.settleDailyPools(tx, game));
 const paid = s => s.data.dailypoolentries.reduce((sum, entry) => sum + entry.payoutCents, 0);
 
@@ -250,10 +259,10 @@ test("missing wallet/result prevents silent money loss and duplicate close is re
 });
 
 for (const table of ["aviator", "aviator-x"]) {
-  test(`${table}: new cashout locks one claim without credit/hold; midnight settlement pays once`, async () => {
+  test(`${table}: already accepted legacy cashout retains its pool claim; midnight settlement pays once`, async () => {
     const s = scene();
     const first = await s.flight.getState("alice", table);
-    await s.flight.placeBet("alice", table, 100, 0);
+    await legacyFlightBet(s, "alice", table, 100);
     s.at(first.round.startsAt + 20);
     const replies = await Promise.all([s.flight.cashOut("alice", table, 0), s.flight.cashOut("alice", table, 0)]);
     const claimed = replies.find(reply => reply.ok);
@@ -275,7 +284,7 @@ test("Aviator X retains personal rounds and new-mode cancellation refunds once",
   s.at(day + 100);
   const bob = await s.flight.getState("bob", "aviator-x");
   assert.notEqual(alice.round.startsAt, bob.round.startsAt);
-  await s.flight.placeBet("alice", "aviator-x", 100);
+  await legacyFlightBet(s, "alice", "aviator-x", 100);
   assert.equal((await s.flight.getState("bob", "aviator-x")).bets.length, 0);
   assert.equal((await s.flight.cancelBet("alice", "aviator-x")).ok, true);
   assert.ok((await s.flight.cancelBet("alice", "aviator-x")).error);
@@ -286,8 +295,8 @@ test("Aviator X retains personal rounds and new-mode cancellation refunds once",
 for (const game of ["aviator", "aviator-x"]) {
   test(`${game}: scheduled processing advances abandoned wagers before daily settlement`, async () => {
     const s = scene();
-    await s.flight.placeBet("alice", game, 100);
-    await s.flight.placeBet("bob", game, 200);
+    await legacyFlightBet(s, "alice", game, 100);
+    await legacyFlightBet(s, "bob", game, 200);
     s.at(tomorrow);
     await s.poolService.processDailyPool(game);
     const aliceEntry = s.data.dailypoolentries.find(entry => entry.userId === "alice");

@@ -3,7 +3,7 @@ export type Phase = "betting" | "flying" | "crashed";
 export const WIN_RATE = 0.35;
 export const LOSS_RATE = 0.65;
 
-export const BETTING_MS = 6000;
+export const BETTING_MS = 10000;
 export const CRASH_HOLD_MS = 3200;
 export const MAX_MULTIPLIER = 250;
 

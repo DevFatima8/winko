@@ -8,7 +8,7 @@ import { assignPaymentAccounts } from "./platform";
 import { genReferralCode, genUsername, getSettings, payDepositCommission, recomputeVip, vipInfo, withdrawnToday } from "./platform";
 import { notifyAdmins, notifyUser } from "./notifications";
 import { CLOUDINARY_URL_RE } from "./cloudinary";
-import { requireProviderGame, saveProviderGame } from "./gregmornCatalog";
+import { requireSiteGame } from "./siteGameCatalog";
 
 export type ActionState = { error?: string; success?: string } | undefined;
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -347,7 +347,7 @@ export async function setUserGameBlockAction(userId: string, slug: string, block
   const me = await requireAdmin(1);
   if (!await canManagePlayer(me, userId)) throw new Error("Player is not in your team.");
   const normalizedSlug = slug.trim().toLowerCase();
-  await requireProviderGame(normalizedSlug);
+  await requireSiteGame(normalizedSlug);
   await User.updateOne({ _id: oid(userId) }, blocked ? { $addToSet: { blockedGames: normalizedSlug } } : { $pull: { blockedGames: normalizedSlug } });
   await logAdmin(me, blocked ? "restrict_user_game" : "unrestrict_user_game", userId, normalizedSlug);
   revalidatePath(`/admin/users/${userId}`);
@@ -378,14 +378,14 @@ export async function adjustVipBetPointsAction(userId: string, _: ActionState, f
 // games on/off
 export async function toggleGameAction(slug: string, isActive: boolean) {
   await requireSuper();
-  await saveProviderGame(await requireProviderGame(slug));
+  await requireSiteGame(slug);
   await Game.updateMany({ slug: { $regex: new RegExp(`^${slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") } }, { $set: { isActive, ...(isActive ? {} : { isHot: false }) } });
   revalidatePath("/admin/games"); revalidatePath("/"); revalidatePath("/player"); revalidatePath("/games-all");
 }
 
 export async function toggleGameHotAction(slug: string, isHot: boolean) {
   await requireSuper();
-  await saveProviderGame(await requireProviderGame(slug));
+  await requireSiteGame(slug);
   await Game.updateMany({ slug: { $regex: new RegExp(`^${slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }, isActive: { $ne: false } }, { $set: { isHot } });
   revalidatePath("/admin/games"); revalidatePath("/"); revalidatePath("/games-all"); revalidatePath("/player");
 }

@@ -3,7 +3,9 @@ import * as THREE from "three";
 const SEGMENT_LENGTH = 120;
 const SEGMENTS = 7;
 const WORLD_LENGTH = SEGMENT_LENGTH * SEGMENTS;
-const SPEED = 23;
+const SPEED = 36;
+const FLIGHT_SPEED = 110;
+const ACCELERATION = 0.6;
 const noise = (seed: number) => {
   const value = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
   return value - Math.floor(value);
@@ -387,7 +389,7 @@ export function createAviatorWorld() {
   plane.traverse(child => {
     if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) planePaints.set(child.material, child.material.color.clone());
   });
-  return { scene, camera, chunks, plane, propeller, impact, planePaints, lastTime: null as number | null, distance: 0, clock: 0, phase: "waiting", crashElapsed: 0 };
+  return { scene, camera, chunks, plane, propeller, impact, planePaints, lastTime: null as number | null, distance: 0, clock: 0, motionClock: 0, speed: SPEED, phase: "waiting", crashElapsed: 0 };
 }
 
 export function advanceAviatorWorld(world: ScenicWorld, now: number, phase: string, _endedAt: number | null) {
@@ -395,13 +397,19 @@ export function advanceAviatorWorld(world: ScenicWorld, now: number, phase: stri
   const delta = world.lastTime === null ? 0 : Math.max(0, Math.min(0.05, (now - world.lastTime) / 1000));
   world.lastTime = now;
   world.clock += delta;
-  world.distance = (world.distance + delta * SPEED) % WORLD_LENGTH;
+  const targetSpeed = phase === "running" ? FLIGHT_SPEED : SPEED;
+  const decay = Math.exp(-ACCELERATION * delta);
+  // Integrate the easing curve so acceleration and travel agree at every refresh rate.
+  const travel = targetSpeed * delta + (world.speed - targetSpeed) * (1 - decay) / ACCELERATION;
+  world.speed = targetSpeed + (world.speed - targetSpeed) * decay;
+  world.distance = (world.distance + travel) % WORLD_LENGTH;
+  world.motionClock += travel / SPEED;
   for (let index = 0; index < world.chunks.length; index++) {
     // Recycle only behind the camera; all seven segments retain their original meshes.
     const z = ((world.distance - index * SEGMENT_LENGTH + WORLD_LENGTH) % WORLD_LENGTH) - 660;
     world.chunks[index].position.z = z;
   }
-  world.propeller.rotation.z = world.clock * 65;
+  world.propeller.rotation.z = world.motionClock * 85;
   const cameraSway = Math.sin(world.clock * 0.13);
   world.camera.position.x = cameraSway * 2.5;
   world.camera.lookAt(cameraSway * 2, 3, -15);
@@ -409,8 +417,8 @@ export function advanceAviatorWorld(world: ScenicWorld, now: number, phase: stri
   world.crashElapsed = phase === "crashed" ? world.phase === "crashed" ? world.crashElapsed + delta : 0 : 0;
   world.phase = phase;
   const crash = Math.min(2.6, world.crashElapsed);
-  const sway = Math.sin(world.clock * 0.75);
-  world.plane.position.set(sway * 0.55 + crash * 0.8, 19 + Math.sin(world.clock * 1.45) * 0.25 - crash * 3 - crash * crash * 2.3, 10 - crash * 7);
+  const sway = Math.sin(world.motionClock * 1.05);
+  world.plane.position.set(sway * 0.55 + crash * 0.8, 19 + Math.sin(world.motionClock * 1.8) * 0.25 - crash * 3 - crash * crash * 2.3, 10 - crash * 7);
   world.plane.rotation.set(-0.025 - crash * 0.65, sway * 0.025 + crash * 0.35, sway * -0.085 + crash * 2.4);
   world.plane.scale.setScalar(1.05 * Math.max(0.35, 1 - crash * 0.23));
   world.plane.visible = phase !== "crashed" || crash < 2.5;

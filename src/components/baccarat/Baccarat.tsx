@@ -23,7 +23,7 @@ const CHIP_STYLES = [
 ];
 const CHIPS = BET_PRESETS.map((value, i) => ({ value: value as number, ...CHIP_STYLES[i] }));
 
-const BET_TIME = 15;
+const BET_TIME = 10;
 const money = (n: number) => `Rs. ${n.toLocaleString()}`;
 const BET_LABEL: Record<BetType, string> = { player: "PLAYER", banker: "BANKER", tie: "TIE" };
 

@@ -5,7 +5,8 @@ import { ensureHelp, getSettings, supportOnline } from "@/lib/platform";
 import { dbConnect } from "@/lib/mongo";
 import { GAME_SLUGS } from "@/lib/gameCatalog";
 import { LOCAL_GAMES_CONNECTED } from "@/lib/gameAvailability";
-import { getProviderCatalog } from "@/lib/gregmornCatalog";
+import { getSiteGameCatalog } from "@/lib/siteGameCatalog";
+import { PROVIDER_GAMES_VISIBLE } from "@/lib/gameAvailability";
 
 export const dynamic = "force-dynamic";
 
@@ -20,22 +21,13 @@ export async function GET(request: Request) {
             if (!slug || !GAME_SLUGS.includes(slug)) {
                 return NextResponse.json({ active: false }, { status: 404 });
             }
-            try {
-                let game = await Game.findOne({ slug }, "slug isActive").lean();
-                if (!game || !game.isActive) {
-                    const { ensureGames } = await import("@/lib/seed");
-                    await ensureGames();
-                    game = await Game.findOne({ slug }, "slug isActive").lean();
-                    if (!game) {
-                        await Game.create({ slug, name: slug, isActive: true });
-                    } else if (!game.isActive) {
-                        await Game.updateOne({ slug }, { $set: { isActive: true } });
-                    }
-                }
-                return NextResponse.json({ active: true });
-            } catch {
-                return NextResponse.json({ active: true });
+            let game = await Game.findOne({ slug }, "slug isActive").lean();
+            if (!game) {
+                const { ensureGames } = await import("@/lib/seed");
+                await ensureGames();
+                game = await Game.findOne({ slug }, "slug isActive").lean();
             }
+            return NextResponse.json({ active: game?.isActive === true }, { headers: { "Cache-Control": "no-store" } });
         }
         if (view === "help") {
             await ensureHelp();
@@ -53,15 +45,18 @@ export async function GET(request: Request) {
             });
             return NextResponse.json({ articles: unique, links: settings.links, me }, { headers: { "Cache-Control": "no-store" } });
         }
-        if (view === "games") {
-            const games = await getProviderCatalog();
+        if (view === "catalog" || view === "games") {
+            const [catalog, me] = await Promise.all([getSiteGameCatalog(), getServerSessionUser()]);
+            const games = catalog.filter(game => game.isActive && !(me?.blockedGames ?? []).includes(game.slug));
+            if (view === "catalog") return NextResponse.json({ games }, { headers: { "Cache-Control": "private, no-store" } });
             return NextResponse.json({
                 activeSlugs: games.filter((game) => game.isActive !== false).map((game) => game.slug),
                 hotSlugs: games.filter((game) => game.isActive !== false && game.isHot === true).map((game) => game.slug),
             }, { headers: { "Cache-Control": "no-store" } });
         }
         if (view === "recent-wins") {
-            const gameRows = await Game.find({ slug: { $regex: /^gregmorn-[a-f0-9]{40}$/ } }, "_id slug name isActive").lean();
+            const gameRows = await Game.find({ slug: PROVIDER_GAMES_VISIBLE
+                ? { $regex: /^gregmorn-[a-f0-9]{40}$/ } : { $in: [...GAME_SLUGS] } }, "_id slug name isActive").lean();
             const games = gameRows.filter((game) => game.isActive !== false);
             const gamesByReference = new Map(games.flatMap((game) => [
                 [String(game._id), game] as const,

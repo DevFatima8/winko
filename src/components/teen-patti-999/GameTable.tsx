@@ -319,6 +319,7 @@ export default function GameTable({
 
   return (
     <div className="relative mx-auto flex h-full w-full max-w-xl flex-col justify-between bg-slate-950 overflow-hidden px-1 sm:px-2 md:px-3 select-none">
+      {idleRound.countdown !== null && <p className="shrink-0 text-center text-xs text-amber-200" role="status">Next round in {idleRound.countdown}s</p>}
       {/* Top bar */}
       <header className="flex items-center gap-2 border-b border-amber-500/20 bg-slate-900/90 px-3 py-1.5 rounded-b-xl">
         <button

@@ -142,6 +142,7 @@ export default function Home() {
 
   return (
     <main className="h-full w-full overflow-hidden bg-gradient-to-b from-[#0b1a2e] via-[#10233f] to-[#050c18] text-white flex flex-col justify-between items-center px-1 sm:px-2 md:px-3 py-1 select-none">
+      {idleRound.countdown !== null && <p className="shrink-0 text-center text-xs text-amber-200" role="status">Next round in {idleRound.countdown}s</p>}
       {/* Header */}
       <header className="w-full max-w-4xl flex shrink-0 items-center justify-between px-2 sm:px-4 py-1 sm:py-2 border-b border-yellow-500/30">
         <h1 className="text-base sm:text-2xl font-black tracking-wider bg-gradient-to-r from-yellow-300 via-yellow-500 to-orange-500 bg-clip-text text-transparent">

@@ -6,7 +6,7 @@ export type CardPreviewFrame<T> = { at: number; view: T };
 
 /** Presentation-only rounds. No server, wallet or player-outcome calls belong here. */
 export function useIdleCardRound<T>({
-  idle, finished, busy = false, paused = false, frames, next, bettingMs = 5000, reviewMs = 3000,
+  idle, finished, busy = false, paused = false, frames, next, bettingMs = 10000, reviewMs = 3000,
 }: {
   idle: boolean;
   finished: boolean;
@@ -18,6 +18,7 @@ export function useIdleCardRound<T>({
   reviewMs?: number;
 }) {
   const [preview, setPreview] = useState<T | null>(null);
+  const [countdown, setCountdown] = useState<number | null>(Math.ceil(bettingMs / 1000));
   const [cycle, setCycle] = useState(0);
   const latest = useRef({ frames, next });
   const watching = useRef(false);
@@ -40,10 +41,15 @@ export function useIdleCardRound<T>({
     if (!idle) {
       watching.current = false;
       claimed.current = false;
-      later(0, () => setPreview(null));
-    } else if (!busy && !paused) {
+      later(0, () => { setPreview(null); setCountdown(null); });
+    } else if (!busy && !paused && !claimed.current) {
+      later(0, () => setCountdown(Math.ceil(bettingMs / 1000)));
+      for (let second = 1; second * 1000 < bettingMs; second++) {
+        later(second * 1000, () => setCountdown(Math.ceil(bettingMs / 1000) - second));
+      }
       later(bettingMs, () => {
         if (claimed.current) return;
+        setCountdown(null);
         const sequence = latest.current.frames();
         if (!sequence.length) return;
         watching.current = true;
@@ -64,11 +70,13 @@ export function useIdleCardRound<T>({
   }, [idle, finished, busy, paused, bettingMs, reviewMs, cycle]);
 
   return {
+    countdown: idle && !busy && !paused && preview === null ? countdown : null,
     preview: idle ? preview : null,
     watching: idle && preview !== null,
     claim: () => {
       if (!idle || busy || watching.current || claimed.current) return false;
       claimed.current = true;
+      setCountdown(null);
       // Invalidate all spectator timers synchronously, before accepting a wager.
       if (generation.current) generation.current.active = false;
       return true;

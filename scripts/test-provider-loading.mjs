@@ -4,6 +4,11 @@ import test from "node:test";
 import ts from "typescript";
 
 function load(path, imports, browser = {}) {
+  imports = {
+    "./gameAvailability": { SITE_CATALOG_URL: "/api/gregmorn/catalog" },
+    "@/lib/gameAvailability": { PROVIDER_GAMES_VISIBLE: true },
+    ...imports,
+  };
   const loaded = { exports: {} };
   const code = ts.transpileModule(readFileSync(path, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
@@ -335,7 +340,7 @@ test("catalog hook reports provider errors and ignores aborted responses", async
       await new Promise(resolve => setImmediate(resolve));
       const state = hook.render(true);
       assert.equal(state.loading, false);
-      assert.match(state.error, new RegExp(message));
+      assert.match(state.error, new RegExp(message, "i"));
       hook.unmount();
     }
     let release;

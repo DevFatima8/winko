@@ -45,7 +45,7 @@ test("Aviator: shared crash settles every actual pending player and cashouts pay
   const first = await s.flight.getState(null, "aviator");
   await s.flight.placeBet("alice", "aviator", 50, 0);
   await s.flight.placeBet("bob", "aviator", 100, 0);
-  s.at(first.round.startsAt + 20);
+  s.at(first.round.startsAt + 180);
   const paid = await s.flight.cashOut("alice", "aviator", 0, first.round.id);
   assert.equal(paid.ok, true, JSON.stringify(paid));
   assert.ok((await s.flight.cashOut("alice", "aviator", 0, first.round.id)).error);
@@ -55,7 +55,7 @@ test("Aviator: shared crash settles every actual pending player and cashouts pay
   assert.equal(guest.bets.find((bet) => bet.name === "b***b").outcome, "lose");
   assert.equal(s.users.get("alice").balance, 950 + paid.win);
   assert.equal(s.users.get("bob").balance, 900);
-  assert.equal(s.data.winholds.length, 1);
+  assert.equal(s.data.winholds.length, 0);
   const previous = s.users.get("alice").balance;
   await s.flight.getState("bob", "aviator");
   assert.equal(s.users.get("alice").balance, previous);
@@ -64,7 +64,7 @@ test("Aviator: shared crash settles every actual pending player and cashouts pay
 test("Aviator: in-flight reservations are isolated to N+1 and scoped cancellations refund once", async () => {
   const s = createLegacyScene();
   const first = await s.flight.getState(null, "aviator");
-  s.at(first.round.startsAt + 20);
+  s.at(first.round.startsAt + 180);
   assert.equal((await s.flight.placeBet("bob", "aviator", 100, 0)).queued, true);
   s.at(first.round.startsAt + 1000);
   await s.flight.getState("alice", "aviator");
@@ -102,9 +102,33 @@ test("Aviator: zero-stake rounds restart on the shared clock without wallet or r
   s.at(crashed.round.endedAt + 3500);
   const next = await s.flight.getState("alice", "aviator");
   assert.equal(next.round.id, first.round.id + 1);
-  assert.equal(next.round.startsAt, crashed.round.endedAt + 3500 + 6000);
+  assert.equal(next.round.startsAt, crashed.round.endedAt + 3500 + 10000);
   assert.deepEqual(s.changes, []);
   assert.deepEqual(s.data.gameresults, []);
+});
+
+test("Aviator and Aviator X each wait a full ten seconds before new flights", async () => {
+  const s = createLegacyScene();
+  const first = await s.flight.getState(null, "aviator");
+  assert.equal(first.config.waitMs, 10000);
+  assert.equal(first.round.startsAt - first.serverNow, 10000);
+  s.at(first.round.startsAt + 1000);
+  const crashed = await s.flight.getState(null, "aviator");
+  s.at(crashed.round.endedAt + 3500);
+  const next = await s.flight.getState(null, "aviator");
+  assert.equal(next.round.status, "waiting");
+  assert.equal(next.round.startsAt - next.serverNow, 10000);
+  s.at(next.round.startsAt - 1);
+  assert.equal((await s.flight.getState(null, "aviator")).round.status, "waiting");
+  s.at(next.round.startsAt);
+  assert.equal((await s.flight.getState(null, "aviator")).round.status, "running");
+  const x = await s.flight.getState(null, "aviator-x");
+  assert.equal(x.config.waitMs, 10000);
+  assert.equal(x.round.startsAt - x.serverNow, 10000);
+  s.at(x.round.startsAt - 1);
+  assert.equal((await s.flight.getState(null, "aviator-x")).round.status, "waiting");
+  s.at(x.round.startsAt);
+  assert.equal((await s.flight.getState(null, "aviator-x")).round.status, "running");
 });
 
 test("Aviator: failed reservation and failed cashout roll back wallet and ledger atomically", async () => {
@@ -115,7 +139,7 @@ test("Aviator: failed reservation and failed cashout roll back wallet and ledger
   assert.equal(s.users.get("alice").balance, 1000);
   assert.equal(s.data.gameresults.length, 0);
   await s.flight.placeBet("alice", "aviator", 50, 0);
-  s.at(first.round.startsAt + 20);
+  s.at(first.round.startsAt + 180);
   s.failNext("users");
   await assert.rejects(s.flight.cashOut("alice", "aviator", 0), /Injected/);
   assert.equal(s.data.gameresults[0].outcome, "pending");
@@ -159,7 +183,7 @@ test("Aviator: an opted-in bet delayed past takeoff reserves N+1 once and return
   assert.equal(s.users.get("alice").balance, 1000);
 });
 
-test("Aviator: current-round receipts preserve the exact amount and pool accounting", async () => {
+test("Aviator: current-round receipts preserve the exact amount without entering the legacy pool", async () => {
   const s = createLegacyScene(["alice"], { poolEnabled: true });
   const first = await s.flight.getState("alice", "aviator");
   const placed = await s.flight.placeBet("alice", "aviator", 125.5, 0, first.round.id, true);
@@ -168,9 +192,9 @@ test("Aviator: current-round receipts preserve the exact amount and pool account
   assert.equal(placed.round, first.round.id);
   assert.equal(placed.balance, 874.5);
   assert.equal(placed.bet.bet, 125.5);
-  assert.ok(placed.bet.poolVersion);
-  assert.equal(s.data.dailypoolentries.length, 1);
-  assert.equal(s.data.dailypoolentries[0].stakeCents, 12550);
+  assert.equal(placed.bet.poolVersion, undefined);
+  assert.equal(placed.bet.flightModel, "aviator-80-pre2-v2");
+  assert.equal(s.data.dailypoolentries.length, 0);
 });
 
 test("Aviator: takeoff during the wager read rechecks the next flight for duplicate panel reservations", async () => {
@@ -203,8 +227,8 @@ test("Aviator: concurrent cashouts cannot double credit", async () => {
   const s = createLegacyScene();
   const first = await s.flight.getState(null, "aviator");
   await s.flight.placeBet("alice", "aviator", 50, 0);
-  s.at(first.round.startsAt + 20);
+  s.at(first.round.startsAt + 180);
   const replies = await Promise.all([s.flight.cashOut("alice", "aviator", 0), s.flight.cashOut("alice", "aviator", 0)]);
   assert.equal(replies.filter((reply) => reply.ok).length, 1);
-  assert.equal(s.data.winholds.length, 1);
+  assert.equal(s.data.winholds.length, 0);
 });

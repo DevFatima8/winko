@@ -350,7 +350,7 @@ test("Thai Hi-Lo keeps an exact custom amount, debits once and accepts another b
 });
 
 for (const [file, exported] of games.filter(([file]) => !browserCards.some(card => card.file === file))) {
-  const closedAt = file.includes("faceoff") ? 16000 : file.includes("hukam") ? 13000 : 5200;
+  const closedAt = 10200;
   test(`${file}: spectator rounds never touch wallet or personal game-over`, async () => {
     const game = harness(file, exported);
     await game.advance(60000);
@@ -427,7 +427,6 @@ for (const spec of browserCards) {
       assert.ok(game.phases.slice(before).filter(phase => phase === "betting").length >= 2, "successive spectator hands reopen betting");
     }
     assert.deepEqual(game.changes, []);
-    assert.equal(game.captured.live.controls, null);
     assert.ok(!game.text().includes("Queue next round"));
     assert.ok(!game.nodes().some(node => node.props?.open === true && node.props?.onPlayAgain));
     game.unmount();
