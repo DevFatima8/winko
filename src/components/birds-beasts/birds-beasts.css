@@ -18,11 +18,10 @@
 @layer components {
   /* ---------- generic ---------- */
   .game-root {
-    background-image: repeating-linear-gradient(
-      45deg,
-      rgba(255, 255, 255, 0.012) 0 2px,
-      transparent 2px 12px
-    );
+    background-image: url("/inner-games/birds&beast.png");
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
   }
 
   .panel {

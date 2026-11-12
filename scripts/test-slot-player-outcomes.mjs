@@ -10,7 +10,7 @@ const games = ["treasure-bowl", "super-fruits", "sweet-bonanza", "hotline",
   "fortune-ox", "fortune-gems", "fortune-toucan", "gates-of-olympus", "diao-chan"];
 const selection = game => game === "hotline" ? { color: "fire", highRisk: true }
   : game === "fortune-gems" ? { extra: false, baseBet: 100000 } : {};
-const cycleId = game => `${game}:ten-player-wins:v1`;
+const cycleId = game => game === "hotline" ? "hotline:bet-wins-30-of-100:v1" : `${game}:ten-player-wins:v1`;
 
 test("all ten slot titles are covered, without changing unrelated card or payment policies", () => {
   const loaded = { exports: {} };
@@ -46,9 +46,29 @@ const resolve = (s, game, user, wagerId, enabled = true, input = selection(game)
     game, wagerId, operationId: randomUUID(), selection: input,
   }, enabled));
 
+test("Hotline repeat-player bets get exactly 30 random wins per 100, across colours and modes", async () => {
+  const s = scene(["alice"], false);
+  for (let block = 0; block < 3; block++) {
+    let wins = 0;
+    for (let bet = 0; bet < 100; bet++) {
+      const wagerId = randomUUID();
+      const input = { color: ["red", "black", "fire"][bet % 3], highRisk: bet % 2 === 0 };
+      await accept(s, "hotline", "alice", wagerId, 10, false);
+      const reply = await resolve(s, "hotline", "alice", wagerId, false, input);
+      wins += Number(reply.outcome.won);
+      assert.equal(reply.outcome.won, reply.outcome.color === input.color);
+      const payout = reply.outcome.won ? Math.round(10 * (input.color === "fire" || input.highRisk ? 2 : 1.95) * 100) / 100 : 0;
+      assert.equal(reply.claim, payout);
+    }
+    assert.equal(wins, 30);
+  }
+  const source = readFileSync("src\\components\\hotline\\HotlineGame.tsx", "utf8");
+  assert.doesNotMatch(source, /No win/i);
+});
+
 for (const enabled of [false, true]) {
   for (const game of games) {
-    test(`${game}, pool flag=${enabled}: exactly ten positive returns in each of two 100-player cycles; never 4x`, async () => {
+    test(`${game}, pool flag=${enabled}: exactly ${game === "hotline" ? 30 : 10} positive returns in each of two 100-wager cycles; never 4x`, async () => {
       const s = scene(players, enabled);
       for (let block = 0; block < 2; block++) {
         const replies = await Promise.all(players.slice(block * 100, (block + 1) * 100).map(async user => {
@@ -76,8 +96,10 @@ for (const enabled of [false, true]) {
           }
           return reply;
         }));
-        assert.equal(replies.filter(reply => reply.claim > 0).length, 10);
-        assert.deepEqual(s.data.multiplayerrooms.find(row => row._id === cycleId(game)).players, []);
+        assert.equal(replies.filter(reply => reply.claim > 0).length, game === "hotline" ? 30 : 10);
+        const saved = s.data.multiplayerrooms.find(row => row._id === cycleId(game));
+        if (game === "hotline") assert.equal(saved.remaining.length, 100);
+        else assert.deepEqual(saved.players, []);
       }
       assert.equal(s.data.dailypoolentries.length, 0);
       assert.equal(s.data.gameresults.length, 200);
@@ -109,8 +131,14 @@ for (const game of games) {
     const cycle = structuredClone(s.data.multiplayerrooms);
     const repeatId = randomUUID();
     await accept(s, game, "alice", repeatId);
-    assert.equal((await resolve(s, game, "alice", repeatId)).claim, 0);
-    assert.deepEqual(s.data.multiplayerrooms, cycle);
+    const repeated = await resolve(s, game, "alice", repeatId);
+    if (game === "hotline") {
+      assert.equal(repeated.claim, repeated.outcome.won ? 200000 : 0);
+      assert.equal(s.data.multiplayerrooms.find(row => row._id === cycleId(game)).remaining.length, 98);
+    } else {
+      assert.equal(repeated.claim, 0);
+      assert.deepEqual(s.data.multiplayerrooms, cycle);
+    }
     await assert.rejects(s.store.transact(game, tx => s.browser.playBrowserWager(tx, "bob", {
       game, wagerId: randomUUID(), stake: 100000, claim: 400000,
     }, true)), /server engine/);

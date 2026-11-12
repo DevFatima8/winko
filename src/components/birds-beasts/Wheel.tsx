@@ -188,11 +188,11 @@ export default function Wheel({
                 <span className="win-text mt-[1cqw] font-display text-[4.6cqw] font-bold leading-none text-emerald-300">
                   {poolEnabled ? `Daily payout pending · provisional claim ${formatMoney(result.payout)}` : `WIN +${formatMoney(result.payout)}`}
                 </span>
-              ) : (
+              ) : poolEnabled ? (
                 <span className="mt-[1cqw] font-display text-[4.2cqw] font-bold leading-none text-red-400">
-                  {poolEnabled ? `Daily payout pending · provisional claim ${formatMoney(result.payout)}` : "No win"}
+                  {`Daily payout pending · provisional claim ${formatMoney(result.payout)}`}
                 </span>
-              )}
+              ) : null}
             </div>
           )}
         </div>

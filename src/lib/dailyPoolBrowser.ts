@@ -266,7 +266,7 @@ async function serverOutcome(tx: MultiplayerTransaction, userId: string, game: s
     if (!colors.some(color => color === input.color) || typeof input.highRisk !== "boolean") {
       throw new BrowserWagerError("Select a valid Hotline colour and mode.");
     }
-    const won = await nextPlayerWin(tx, game, userId);
+    const won = await nextBetWin(tx, game, 30);
     const alternatives = colors.filter(color => color !== input.color);
     const color = won ? input.color : alternatives[randomInt(alternatives.length)];
     const multiplier = won ? Math.min(SLOT_GROSS_CAP, color === "fire" ? (input.highRisk ? 18 : 10) : input.highRisk ? 2.1 : 1.95) : 0;
@@ -348,7 +348,7 @@ async function serverOutcome(tx: MultiplayerTransaction, userId: string, game: s
   }
   if (game === "birds-beasts") {
     const rules = await import("@/components/birds-beasts/lib/game-config");
-    const engine = await import("@/components/birds-beasts/lib/engine");
+    const { resolveBirdsBeastsRound } = await import("./birdsBeastsRounds");
     const raw = input.bets;
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new BrowserWagerError("Invalid animal wager.");
     const bets: import("@/components/birds-beasts/lib/game-config").Bets = {};
@@ -357,12 +357,7 @@ async function serverOutcome(tx: MultiplayerTransaction, userId: string, game: s
       bets[key] = value;
     }
     if (cents(rules.totalOf(bets)) !== cents(stake)) throw new BrowserWagerError("Animal stakes do not match the accepted wager.");
-    const { winSlots, loseSlots } = engine.outcomeSlots(bets);
-    // Only wagers that can both win and lose consume a slot, so each 100 counted bets has exactly 30 winners.
-    const won = winSlots.length && loseSlots.length ? await nextBetWin(tx, game, rules.BET_WINNERS_PER_100) : winSlots.length > 0;
-    const decision = engine.decideFixedOutcome(bets, won, () => randomInt(0, 2 ** 31) / 2 ** 31);
-    return { claim: rules.evaluateBets(bets, decision.slot).payout,
-      outcome: { slot: decision.slot, animal: rules.ANIMALS[rules.WHEEL[decision.slot]].id, outcome: decision.outcome } };
+    return resolveBirdsBeastsRound(tx, bets);
   }
   throw new BrowserWagerError("Unsupported server browser engine.");
 }

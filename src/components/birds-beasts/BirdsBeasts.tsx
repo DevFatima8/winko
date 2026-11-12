@@ -23,7 +23,6 @@ import {
   type BetKey,
   type Bets,
 } from "./lib/game-config";
-import { decideOutcome } from "./lib/engine";
 import { useSounds } from "./hooks/useSounds";
 import "./birds-beasts.css";
 import Wheel from "./Wheel";
@@ -85,6 +84,7 @@ export default function BirdsBeasts({ backHref = "/player" }: { backHref?: strin
   const roundRef = useRef(1);
   const positionRef = useRef(0);
   const targetRef = useRef(0);
+  const idleRoundRef = useRef<{ round: number; id: string } | null>(null);
   const phaseRef = useRef<Phase>("betting");
   const settledRoundRef = useRef(0);
   const toastTimer = useRef<number | null>(null);
@@ -197,18 +197,34 @@ export default function BirdsBeasts({ backHref = "/player" }: { backHref?: strin
       const snapshot: Bets = { ...betsRef.current };
       if (totalOf(snapshot) > 0) setLastBets(snapshot);
       const pending = totalOf(snapshot) > 0
-        ? pool.resolveServer({ bets: snapshot }).then(outcome => {
+        ? pool.resolveServer({ bets: snapshot }, { holdBalance: true }).then(outcome => {
           if (!outcome) throw new Error("Server result confirmation failed. Retry before betting.");
           return (outcome as { slot: number }).slot;
-        }) : Promise.resolve(decideOutcome(snapshot).slot);
-      later(() => {
-        pending.then((slot) => {
+        }) : (async () => {
+          if (idleRoundRef.current?.round !== roundRef.current) {
+            idleRoundRef.current = { round: roundRef.current, id: crypto.randomUUID() };
+          }
+          const response = await fetch("/api/spin", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ roundId: idleRoundRef.current.id }),
+          });
+          const outcome = await response.json();
+          if (!response.ok) throw new Error(outcome.error || "Server result unavailable.");
+          if (!Number.isInteger(outcome.slot) || outcome.slot < 0 || outcome.slot >= SLOT_COUNT) {
+            throw new Error("Invalid server round result.");
+          }
+          return outcome.slot as number;
+        })();
+      void Promise.all([pending, new Promise<void>(resolve => later(resolve, TIMES_UP_MS))])
+        .then(([slot]) => {
           if (cancelled) return;
           targetRef.current = slot;
           phaseRef.current = "spinning";
           setPhase("spinning");
-        }).catch(error => showToast(error instanceof Error ? error.message : "Server result unavailable.", "error"));
-      }, TIMES_UP_MS);
+        }).catch(error => {
+          if (!cancelled) showToast(error instanceof Error ? error.message : "Server result unavailable.", "error");
+        });
       return cleanup;
     }
 
@@ -264,6 +280,7 @@ export default function BirdsBeasts({ backHref = "/player" }: { backHref?: strin
         setResult(record);
         setLastResult(record);
         setHistory((h) => [record, ...h].slice(0, 50));
+        pool.releaseBalance();
 
         if (ev.totalBet > 0) {
           notifyGameResult("birds-beasts", String(currentRound), ev.payout, pool.enabled);

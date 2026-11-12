@@ -98,10 +98,8 @@ export const TIMES_UP_MS = 1400;
 export const RESULT_MS = 5000;
 export const START_BANNER_MS = 1600;
 
-/** House setting: share of rounds (with bets placed) that end as a net win for the player. */
-export const PLAYER_WIN_RATE = 0.3;
-/** Server-confirmed wagers: exactly this many of every 100 counted bets end as a net player win. */
-export const BET_WINNERS_PER_100 = 30;
+/** Target net-winning round share; fixed appearance quotas and player selections can prevent this result. */
+export const PLAYER_WIN_RATE = 0.2;
 
 export const START_BALANCE = 10000;
 

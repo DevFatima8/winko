@@ -544,6 +544,7 @@ export function usePoolLifecycle(game: DailyPoolGame, slot = "main") {
   const outcome = useRef<unknown>(null);
   const pendingSettlement = useRef(false);
   const resolvedWager = useRef<string | null>(null);
+  const heldBalance = useRef<number | null>(null);
   const [enabled, setEnabled] = useState(!isCardGame(game) && !isRouletteGame(game) && !isSlotGame(game) && game !== "thai-hi-lo" && poolMode === true);
   const recovering = useRef(false);
   const mountedRecovery = useRef(typeof window !== "undefined" &&
@@ -551,6 +552,7 @@ export function usePoolLifecycle(game: DailyPoolGame, slot = "main") {
 
   const execute = useCallback(async (
     action: "accept" | "increment" | "complete" | "refund" | "award" | "reduce" | "resolve" | "card-action", amount: number, _legacy: () => void, selection?: unknown,
+    holdBalance = false,
   ) => {
     if (busy.current) return false;
     busy.current = true;
@@ -630,7 +632,12 @@ export function usePoolLifecycle(game: DailyPoolGame, slot = "main") {
         active.current = body.wagerId;
         localStorage.setItem(key, body.wagerId);
       }
-      broadcastBalanceUpdate(reply.balance, game);
+      // A held balance is shown only after the game reveals the already-confirmed result.
+      if (holdBalance) heldBalance.current = reply.balance;
+      else {
+        heldBalance.current = null;
+        broadcastBalanceUpdate(reply.balance, game);
+      }
       outcome.current = reply.outcome;
       if (action === "resolve" || action === "card-action" && reply.status === "closed") resolvedWager.current = body.wagerId;
       if (action === "complete" || action === "resolve" && game === "treasure-bowl") notifyGameResult(game, body.wagerId,
@@ -712,6 +719,12 @@ export function usePoolLifecycle(game: DailyPoolGame, slot = "main") {
     return () => { disposed = true; window.removeEventListener("online", online); };
   }, [resume]);
 
+  useEffect(() => () => {
+    const balance = heldBalance.current;
+    heldBalance.current = null;
+    if (balance !== null) broadcastBalanceUpdate(balance, game);
+  }, [game]);
+
   return {
     get enabled() { return enabled || !isCardGame(game) && !isRouletteGame(game) && !isSlotGame(game) && game !== "thai-hi-lo" && poolMode === true; },
     get busy() { return busy.current || recovering.current; },
@@ -754,9 +767,15 @@ export function usePoolLifecycle(game: DailyPoolGame, slot = "main") {
     reduce: (stake: number) => execute("reduce", stake, () => {}),
     increment: (stake: number, legacy: () => void = () => {}) => execute("increment", stake, legacy),
     award: (claim: number) => execute("award", claim, () => {}),
-    resolveServer: async (selection: unknown) => {
+    resolveServer: async (selection: unknown, options: { holdBalance?: boolean } = {}) => {
       localStorage.setItem(`${key}:selection`, JSON.stringify(selection));
-      return await execute("resolve", 0, () => {}, selection) ? outcome.current : null;
+      return await execute("resolve", 0, () => {}, selection, options.holdBalance === true) ? outcome.current : null;
+    },
+    /** Show a balance held by `resolveServer(..., { holdBalance: true })`. */
+    releaseBalance: () => {
+      const balance = heldBalance.current;
+      heldBalance.current = null;
+      if (balance !== null) broadcastBalanceUpdate(balance, game);
     },
     cardAction: async (move: string, selection?: unknown) =>
       await execute("card-action", 0, () => {}, { move, selection }) ? outcome.current : null,

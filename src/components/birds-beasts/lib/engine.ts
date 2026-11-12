@@ -1,4 +1,4 @@
-import { evaluateBets, PLAYER_WIN_RATE, SLOT_COUNT, totalOf, type Bets } from "./game-config";
+import { evaluateBets, PLAYER_WIN_RATE, SHARKS, SLOT_COUNT, totalOf, WHEEL, type Bets } from "./game-config";
 
 export type Outcome = "win" | "lose" | "idle";
 
@@ -35,12 +35,16 @@ export function decideFixedOutcome(bets: Bets, wantWin: boolean, rng: () => numb
 }
 
 export function decideOutcome(bets: Bets, rng: () => number = Math.random): Decision {
+  // Only the transactional paid resolver can authorize a late-cycle Shark landing.
+  const eligible = WHEEL.flatMap((animal, slot) => SHARKS.includes(animal) ? [] : [slot]);
   const total = totalOf(bets);
   if (total <= 0) {
-    return { slot: Math.floor(rng() * SLOT_COUNT) % SLOT_COUNT, outcome: "idle" };
+    return { slot: eligible[Math.floor(rng() * eligible.length) % eligible.length], outcome: "idle" };
   }
 
-  const { winSlots, loseSlots } = outcomeSlots(bets);
+  const allSlots = outcomeSlots(bets);
+  const winSlots = allSlots.winSlots.filter(slot => eligible.includes(slot));
+  const loseSlots = allSlots.loseSlots.filter(slot => eligible.includes(slot));
   const wantWin = rng() < PLAYER_WIN_RATE;
   let pool: number[];
   if (wantWin) pool = winSlots.length > 0 ? winSlots : loseSlots;

@@ -46,6 +46,9 @@ export default function RulesModal({ open, onClose }: RulesModalProps) {
           <li>You win when the light stops on an animal you bet on. Winning stakes are returned together with the profit.</li>
           <li>Chicken, Ostrich, Owl and Eagle are Birds. Rabbit, Monkey, Panda and Lion are Beasts.</li>
           <li>Sharks belong to neither side: when a Shark is drawn, BIRDS and BEASTS bets lose.</li>
+          <li>Each player-round counts once, regardless of how many options are staked. Idle rounds also advance the game-wide server cycle.</li>
+          <li>Every 100 server rounds contains two x8 landings combined (Owl/Panda), two x12 landings combined (Eagle/Lion), and one of each Shark in the final ten rounds.</li>
+          <li>The net-winning round target is 20%, not a guarantee. Your selections and the fixed appearance counts can change actual results.</li>
         </ol>
 
         <h3 className="font-display mt-5 text-lg font-bold text-white">Paytable</h3>

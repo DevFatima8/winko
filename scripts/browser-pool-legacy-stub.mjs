@@ -67,6 +67,7 @@ export function legacyBrowserPool({ balance, update, resolve, useState, cardEngi
         await complete(result.claim);
         return result.outcome;
       },
+      releaseBalance: () => {},
     };
   };
   return {

@@ -1,40 +1,41 @@
-import { randomInt } from "crypto";
-import { LOCAL_GAMES_CONNECTED, LOCAL_GAMES_UNAVAILABLE } from "@/lib/gameAvailability";
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
-import { decideOutcome } from "@/components/birds-beasts/lib/engine";
-import { ANIMALS, WHEEL, isBetKey, type Bets } from "@/components/birds-beasts/lib/game-config";
+import { LOCAL_GAMES_CONNECTED, LOCAL_GAMES_UNAVAILABLE } from "@/lib/gameAvailability";
+import { getServerSessionUser } from "@/lib/serverAuth";
+import { mysqlMultiplayerStore } from "@/lib/multiplayer-store";
+import { dailyPoolLock } from "@/lib/dailyPoolRules";
+import { resolveBirdsBeastsRound } from "@/lib/birdsBeastsRounds";
 
 export const dynamic = "force-dynamic";
 
-/** Cryptographically seeded uniform float in [0, 1) */
-const secureRandom = () => randomInt(0, 2 ** 31) / 2 ** 31;
-
+/** Idle rounds share the paid round schedule, but never settle stakes or credit a wallet. */
 export async function POST(req: Request) {
   if (!LOCAL_GAMES_CONNECTED) return NextResponse.json({ error: LOCAL_GAMES_UNAVAILABLE }, { status: 403 });
-  let body: unknown = null;
+  const me = await getServerSessionUser();
+  if (!me) return NextResponse.json({ error: "Login required." }, { status: 401 });
+  let body: unknown;
   try {
     body = await req.json();
   } catch {
-    body = null;
+    return NextResponse.json({ error: "Invalid round request." }, { status: 400 });
   }
-
-  const rawBets =
-    body && typeof body === "object" && "bets" in body ? (body as { bets?: unknown }).bets : undefined;
-
-  const bets: Bets = {};
-  if (rawBets && typeof rawBets === "object") {
-    for (const [key, value] of Object.entries(rawBets as Record<string, unknown>)) {
-      if (isBetKey(key) && typeof value === "number" && Number.isFinite(value) && value > 0) {
-        bets[key] = value;
-      }
-    }
+  if (!body || typeof body !== "object" || !("roundId" in body) ||
+      typeof body.roundId !== "string" || !/^[a-zA-Z0-9-]{16,80}$/.test(body.roundId) ||
+      ("bets" in body && (!body.bets || typeof body.bets !== "object" || Object.keys(body.bets).length))) {
+    return NextResponse.json({ error: "Only an identified idle round is accepted here." }, { status: 400 });
   }
-
-  const decision = decideOutcome(bets, secureRandom);
-
-  return NextResponse.json({
-    slot: decision.slot,
-    animal: ANIMALS[WHEEL[decision.slot]].id,
-    outcome: decision.outcome,
-  });
+  const id = createHash("sha256").update(`birds-beasts:idle:${me.id}:${body.roundId}`).digest("hex");
+  try {
+    const outcome = await mysqlMultiplayerStore.transact(dailyPoolLock("birds-beasts"), async tx => {
+      const saved = await tx.get<{ outcome: { slot: number; animal: string; outcome: string } }>("multiplayerrequests", id);
+      if (saved) return saved.outcome;
+      const { outcome } = await resolveBirdsBeastsRound(tx, {});
+      await tx.put("multiplayerrequests", id, { _id: id, outcome });
+      return outcome;
+    });
+    return NextResponse.json(outcome);
+  } catch (error) {
+    console.error("[birds-beasts idle round]", error);
+    return NextResponse.json({ error: "Round result unavailable. Retry with the same round ID." }, { status: 500 });
+  }
 }

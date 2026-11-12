@@ -173,7 +173,10 @@ export default function HotlineGame() {
   };
 
   return (
-    <div className="w-full h-full max-w-5xl mx-auto flex flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-b from-[#090e1f] via-[#0d1329] to-[#060814] border border-[#00f2ff]/30 shadow-2xl shadow-[#00f2ff]/10 px-2 sm:px-4 py-2 text-white select-none">
+    <div
+      className="w-full h-full max-w-5xl mx-auto flex flex-col justify-between overflow-hidden rounded-2xl bg-[#060814] border border-[#00f2ff]/30 shadow-2xl shadow-[#00f2ff]/10 px-2 sm:px-4 py-2 text-white select-none"
+      style={{ backgroundImage: 'url("/inner-games/hotline.png")', backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }}
+    >
       {/* Top Header Bar */}
       <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-white/10 shrink-0">
         <div className="flex items-center gap-2">
@@ -298,7 +301,7 @@ export default function HotlineGame() {
                 className={`text-sm sm:text-base font-black tracking-wide ${result.won ? "text-[#00e5a0]" : "text-[#ff3b69]"
                   }`}
               >
-                {pool.enabled ? "DAILY PAYOUT PENDING" : result.won ? "🎉 YOU WON!" : "No win"}
+                {pool.enabled ? "DAILY PAYOUT PENDING" : result.won ? "🎉 YOU WON!" : null}
               </div>
               <div className="text-[10px] text-slate-400">
                 Landed on <b className="uppercase text-white">{result.color}</b> · Multiplier:{" "}
@@ -309,7 +312,7 @@ export default function HotlineGame() {
           <div className="text-right">
             <div className="text-[10px] text-slate-400">{pool.enabled ? "Provisional claim" : "Payout"}</div>
             <div className={`text-sm sm:text-base font-black ${result.won ? "text-[#00e5a0]" : "text-slate-400"}`}>
-              {pool.enabled ? fmtMoney(result.won ? result.amount : 0) : result.won ? `+${fmtMoney(result.amount)}` : "No win"}
+              {pool.enabled ? fmtMoney(result.won ? result.amount : 0) : result.won ? `+${fmtMoney(result.amount)}` : null}
             </div>
           </div>
         </div>
@@ -508,7 +511,7 @@ export default function HotlineGame() {
                     <span>{h.color === "fire" ? "🔥" : h.color === "red" ? "♦" : "♠"}</span>
                     <span className="uppercase text-[9px]">{h.color}</span>
                   </div>
-                  <div>{pool.enabled ? `Provisional claim ${h.result}` : h.won ? `+${h.result}` : "No win"}</div>
+                  <div>{pool.enabled ? `Provisional claim ${h.result}` : h.won ? `+${h.result}` : null}</div>
                 </div>
               ))}
             </div>
