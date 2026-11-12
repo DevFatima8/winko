@@ -177,7 +177,7 @@ export default function PokerGame({ backHref }: { backHref?: string }) {
           setMsg(pool.enabled ? `Provisional claim Rs. ${won}; daily settlement pending` : `You win with ${HAND_NAMES[round.playerScore.category]}! +Rs. ${(bet * mult).toLocaleString()}`);
         } else {
           gameSfx.lose();
-          setMsg(pool.enabled ? "Daily payout pending — provisional claim Rs. 0" : "No win");
+          setMsg(pool.enabled ? "Daily payout pending — provisional claim Rs. 0" : "");
         }
         setHistory((h) => [
           {
@@ -421,7 +421,7 @@ export default function PokerGame({ backHref }: { backHref?: string }) {
           </div>
         </aside>
       </main>
-      <GameOverOverlay open={phase === "result" && bet > 0 && !!round && !endDismissed} winAmount={round?.playerWins ? payout : 0} result={pool.enabled ? "Daily payout pending. This hand records a provisional claim, not a wallet payment." : round?.playerWins ? "You won this hand." : "No win"} onPlayAgain={() => nextRound(false)} onClose={() => setEndDismissed(true)} />
+      <GameOverOverlay open={phase === "result" && bet > 0 && !!round && !endDismissed} winAmount={round?.playerWins ? payout : 0} result={pool.enabled ? "Daily payout pending. This hand records a provisional claim, not a wallet payment." : round?.playerWins ? "You won this hand." : ""} onPlayAgain={() => nextRound(false)} onClose={() => setEndDismissed(true)} />
     </div>
   );
 }

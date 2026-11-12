@@ -770,6 +770,7 @@ export default function RummyGame() {
                   <span className="font-bold text-[#f6e3a1]">5 · Fold:</span> If the hand is busted, press{" "}
                   <span className="font-bold text-[#b23a2c]">FORFEIT</span> to surrender and deal the next hand.
                 </li>
+                <li>The server deals 30 fully meldable hands per 100 dealt wagers, including repeat players. Correct declaration is required; forfeiting a winning hand still pays zero.</li>
               </ol>
               <button
                 type="button"

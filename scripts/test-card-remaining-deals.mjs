@@ -85,7 +85,7 @@ function check(game, result, bets) {
   }
 }
 
-test("remaining resolver engines independently produce 10 profitable, card-consistent payouts per 100 players", async () => {
+test("remaining resolver engines independently produce 30 profitable, card-consistent payouts per 100 players", async () => {
   for (const [game, bets] of Object.entries(games)) {
     const s = make(game);
     const { serverRemainingDealCardOutcome } = loader(s)("src\\lib\\browserCardRemainingDeals.ts");
@@ -109,12 +109,12 @@ test("remaining resolver engines independently produce 10 profitable, card-consi
       }, true, true));
       assert.equal(s.users.get(userId).balance, balance);
     }
-    assert.equal(winners, 10, game);
+    assert.equal(winners, 30, game);
   }
 });
 
 for (const [game, bets] of Object.entries(games)) {
-  test(`${game}: 100 distinct players, 10 card-matching wins, single instant debit/credit and immutable replay`, async () => {
+  test(`${game}: 100 distinct players, 30 card-matching wins, single instant debit/credit and immutable replay`, async () => {
     const s = make(game);
     const replies = await Promise.all(users.map(async userId => {
       const wagerId = randomUUID(), operationId = randomUUID();
@@ -129,8 +129,8 @@ for (const [game, bets] of Object.entries(games)) {
       assert.deepEqual((await resolveRound(s, game, userId, wagerId, bets)).outcome, reply.outcome);
       return reply;
     }));
-    assert.equal(replies.filter(reply => reply.claim > sum(bets)).length, 10);
-    assert.equal(replies.filter(reply => reply.claim > 0).length, 10);
+    assert.equal(replies.filter(reply => reply.claim > sum(bets)).length, 30);
+    assert.equal(replies.filter(reply => reply.claim > 0).length, 30);
     assert.equal(s.data.dailypoolentries.length, 0);
   });
 
@@ -169,7 +169,7 @@ test("side-only and multi-option allocations retain actual, card-derived awards"
       check(game, reply.outcome, bets);
       if (reply.claim > sum(bets)) winners++;
     }
-    assert.equal(winners, 10, `${game}: side and combined bets obey the same quota`);
+    assert.equal(winners, 30, `${game}: side and combined bets obey the same quota`);
   }
 });
 
@@ -189,7 +189,7 @@ test("covered allocations are explicitly rejected before quota, not settled as f
   }
 });
 
-test("Casino War: 100 users and both tie decisions preserve 10 net wins with true card payouts", async () => {
+test("Casino War: 100 users and both tie decisions preserve 30 net wins with true card payouts", async () => {
   for (const choice of ["war", "surrender"]) {
     const s = make("casino-war");
     const { actCasinoWar } = loader(s)("src\\lib\\browserCasinoWar.ts");
@@ -222,7 +222,7 @@ test("Casino War: 100 users and both tie decisions preserve 10 net wins with tru
       assert.equal(final.status, "closed");
       if (s.users.get(userId).balance > 1000) winners++;
     }
-    assert.equal(winners, 10);
+    assert.equal(winners, 30);
   }
 });
 

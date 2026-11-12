@@ -1414,7 +1414,7 @@ export function AviatorGame({
                       >
                         {mine.poolPending ? `Claim Rs. ${fmt2(mine.poolClaim ?? 0)} — daily payout pending` : mine.outcome === "win"
                           ? `Cashed out: +Rs. ${fmt2(mine.win)}`
-                          : "No win"}
+                          : ""}
                       </div>
                     )}
 

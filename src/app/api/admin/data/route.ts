@@ -719,7 +719,7 @@ async function loadData(request: Request) {
                 return NextResponse.json({ list, total, level: me.level }, { headers: { "Cache-Control": "no-store" } });
             }
             const [list, total] = await Promise.all([
-                Notification.find().sort({ createdAt: -1 }).limit(100).lean(),
+                Notification.find(me.dbRole === "owner" ? {} : { audience: { $ne: "owners" } }).sort({ createdAt: -1 }).limit(100).lean(),
                 User.countDocuments({ role: { $nin: ["owner", "admin", "subadmin"] } }),
             ]);
             return NextResponse.json({ list, total, level: me.level }, { headers: { "Cache-Control": "no-store" } });

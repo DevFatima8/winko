@@ -3,7 +3,7 @@ import { ChickenDash, Game, GameResult, User, oid, type ObjectId, type ChickenDa
 import type { Doc } from "./localdb";
 import { checkGameAccess } from "./gameAccess";
 import { payoutAfterHouseShare, MAX_MULTIPLIER } from "./outcomes";
-import { spreadCrashLane } from "./crashLane";
+import { sampleCrashLane } from "./crashLane";
 import { holdWinShare } from "./winHold";
 
 
@@ -61,10 +61,8 @@ export const ladderFor = (l: Level) => BUILT[l].ladder;
 export const survivalFor = (l: Level) => BUILT[l].surv;
 export const multiplierAt = (l: Level, k: number) => (k <= 0 ? 1 : Math.min(MAX_MULTIPLIER, BUILT[l].ladder[Math.min(k, LEVELS[l].steps) - 1]));
 
-export function rollCrashLane(l: Level, bet: number) {
-  const steps = LEVELS[l].steps;
-  const firstProfitIndex = ladderFor(l).findIndex((m) => payoutAfterHouseShare(bet * m) > bet);
-  return spreadCrashLane(survivalFor(l), firstProfitIndex < 0 ? steps : firstProfitIndex + 1);
+export function rollCrashLane(l: Level) {
+  return sampleCrashLane(survivalFor(l));
 }
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
@@ -154,7 +152,7 @@ export async function startGame(userId: string, amount: number, level: string) {
   if (r.modifiedCount === 0) return { error: "Insufficient balance. Pehle deposit karein." };
 
   const spec = LEVELS[level];
-  const crashLane = rollCrashLane(level, amount);
+  const crashLane = rollCrashLane(level);
   const { bagLane, bagMult } = bagFor(level);
   const gid = await gameId();
   const result = await GameResult.create({ gameId: gid, userId: uid, betAmount: amount, outcome: "pending", resultData: `${spec.label} · started` });

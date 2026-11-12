@@ -372,7 +372,7 @@ export default function MiniRoulette() {
               {activeStake > 0 && phase === "result" && result !== null && !bannerClosed && (
                 <GameOverOverlay open
                   winAmount={winAmount}
-                  title={pool.enabled ? "Round complete" : winAmount > 0 ? "Congratulations! You win" : "You lose"}
+                  title={pool.enabled ? "Round complete" : winAmount > 0 ? "Congratulations! You win" : ""}
                   result={`Winning number ${result} ${colorOf(result).toUpperCase()}${pool.enabled ? ` · Daily payout pending · provisional claim ${formatMoney(winAmount)} ${CURRENCY}` : winAmount > 0 ? ` · ${formatMoney(winAmount)} ${CURRENCY}` : ""}`}
                   onClose={() => setBannerClosed(true)} onPlayAgain={playAgain} />
               )}

@@ -107,6 +107,11 @@ function scene(spec) {
       balance: () => funds,
       update: value => { writes.push(value - funds); funds = value; walletSetter(value); },
       resolve: async (_game, _stake, selection) => {
+        if (_game === "derby-race") {
+          const rules = load(path.resolve(root, "derby-race", "lib", "derby.ts"));
+          const plan = rules.makeRacePlan(selection.horseId, _stake, selection.round, true);
+          return { outcome: plan, claim: rules.settleRace(plan).payout };
+        }
         const response = await fetch("/fixture", { body: JSON.stringify(selection) });
         return { outcome: await response.json(), claim: 0 };
       },

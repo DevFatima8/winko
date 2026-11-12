@@ -8,7 +8,7 @@ import { dailyPoolEnabled } from "./dailyPoolConfig";
 import { isCardGame } from "./cardGameRules";
 import type { GameResultDoc } from "@/models";
 import { isPrivateCardTable, privateCardPrize, privateCardOutcome, privateCardGross, PrivateCardError, type PrivateCardPrize } from "./privateCardTables";
-import { isRouletteGame, isLiveRouletteGame } from "./rouletteGameRules";
+import { isRouletteGame, isLiveRouletteGame, isWheelGame } from "./rouletteGameRules";
 import { privateRouletteOutcome, rouletteClaims, validRouletteAllocation } from "./privateRouletteTables";
 import { nextPlayerWin } from "./playerWinCycle";
 
@@ -293,7 +293,7 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
         if (action.action === "bet") {
           if ((isPrivateCardTable(game) || isLiveRouletteGame(game)) && !room.ownerId) throw new MultiplayerError("Finish the previously accepted shared round, then refresh to start your personal table.", 409);
           // Keep the accepted contract on old poolVersion wagers, not the current global flag.
-          const poolMode = dailyPoolEnabled() && !isCardGame(game) && !isRouletteGame(game);
+          const poolMode = dailyPoolEnabled() && !isCardGame(game) && !isRouletteGame(game) && !isWheelGame(game);
           if (poolMode && action.poolRulesVersion !== DAILY_POOL_VERSION) throw new MultiplayerError("Read and accept the daily-pool rules before placing a new bet.");
           if (!catalog.isActive) throw new MultiplayerError("Game is currently disabled.", 403);
           if (!open && (isCardGame(game) || isRouletteGame(game))) throw new MultiplayerError("Betting is closed. Wait for the next round to begin.", 409);

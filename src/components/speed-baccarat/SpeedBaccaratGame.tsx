@@ -162,7 +162,6 @@ export default function SpeedBaccaratGame() {
       pushToast(`${round.winner.toUpperCase()} ${round.pTotal}-${round.bTotal} · you win ${money(round.net)}`, "win");
       sound.win();
     } else if (round.graded === "loss") {
-      pushToast("No win", "lose");
       sound.lose();
     } else {
       pushToast("Tie — main bets pushed", "info");
@@ -255,7 +254,7 @@ export default function SpeedBaccaratGame() {
   };
 
   const winnerLabel =
-    round?.winner === "player" ? "PLAYER WINS" : round?.winner === "banker" ? "BANKER WINS" : "TIE — NO WINNER";
+    round?.winner === "player" ? "PLAYER WINS" : round?.winner === "banker" ? "BANKER WINS" : "TIE";
 
   const handsIntoShoe = roundId.current % 78;
   const shoePct = Math.round((handsIntoShoe / 78) * 100);
@@ -429,7 +428,7 @@ export default function SpeedBaccaratGame() {
                         f.net > 0 ? "text-[#8ff0b6]" : f.net < 0 ? "text-[#ff9a94]" : "text-white/35"
                       }`}
                     >
-                      {f.graded === "watched" ? "— no action" : f.net < 0 ? "No win" : `${f.net > 0 ? "+" : ""}${money(f.net)}`}
+                      {f.graded === "watched" ? "— no action" : f.net < 0 ? "" : `${f.net > 0 ? "+" : ""}${money(f.net)}`}
                     </span>
                   </li>
                 ))}
@@ -599,14 +598,14 @@ export default function SpeedBaccaratGame() {
                   }`}
                 >
                   <div className="font-num text-[8px] uppercase tracking-[0.2em] text-white/40">
-                    {round && round.graded !== "watched" ? (winning ? "you win" : losing ? "No win" : "push") : "no action"}
+                    {round && round.graded !== "watched" ? (winning ? "you win" : losing ? "" : "push") : "no action"}
                   </div>
                   <div
                     className={`font-num text-[16px] font-bold ${
                       winning ? "text-[#8ff0b6]" : losing ? "text-[#ff9a94]" : "text-white/50"
                     }`}
                   >
-                    {round && round.graded !== "watched" ? (round.net < 0 ? "No win" : `${round.net > 0 ? "+" : ""}${money(round.net)}`) : money(0)}
+                    {round && round.graded !== "watched" ? (round.net < 0 ? "" : `${round.net > 0 ? "+" : ""}${money(round.net)}`) : money(0)}
                   </div>
                 </div>
                 <button
@@ -651,7 +650,7 @@ export default function SpeedBaccaratGame() {
                             : "border-white/25 bg-black/70 text-white/65"
                       }`}
                     >
-                      {winning ? `+${money(round.net)}` : losing ? "No win" : "bets returned"}
+                      {winning ? `+${money(round.net)}` : losing ? "" : "bets returned"}
                     </div>
                   )}
                 </div>
@@ -684,7 +683,7 @@ export default function SpeedBaccaratGame() {
                                 : "border-white/25 bg-black/80 text-white/70"
                           }`}
                         >
-                          {s.profit > 0 ? `+${money(s.profit)}` : s.profit < 0 ? "No win" : "push"}
+                          {s.profit > 0 ? `+${money(s.profit)}` : s.profit < 0 ? "" : "push"}
                         </span>
                       )}
                       <BetSpot
@@ -735,7 +734,7 @@ export default function SpeedBaccaratGame() {
                               : "border-[rgba(255,154,148,.5)] bg-[rgba(48,8,12,.95)] text-[#ff9a94]"
                           }`}
                         >
-                          {s.profit > 0 ? `+${money(s.profit)}` : s.profit < 0 ? "No win" : money(s.profit)}
+                          {s.profit > 0 ? `+${money(s.profit)}` : s.profit < 0 ? "" : money(s.profit)}
                         </span>
                       )}
                       <BetSpot

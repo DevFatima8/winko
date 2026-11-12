@@ -133,7 +133,7 @@ export default function Home() {
       setMessage(pool.enabled ? `CLAIM Rs. ${amt} — daily settlement pending` : `YOU WIN Rs. ${amt}!`);
     } else {
       gameSfx.lose();
-      setMessage(pool.enabled ? "Daily payout pending — provisional claim Rs. 0" : "No win");
+      setMessage(pool.enabled ? "Daily payout pending — provisional claim Rs. 0" : "");
     }
     setHistory((h) => [{ win, amt: win ? Math.round(bet * MULTIPLIER) : bet }, ...h].slice(0, 12));
   };
@@ -159,7 +159,7 @@ export default function Home() {
         {history.length === 0 && <span className="text-[10px] text-white/40">No rounds yet</span>}
         {history.map((h, i) => (
           <span key={i} className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${h.win ? "bg-emerald-600 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-rose-700 shadow-[0_0_8px_rgba(225,29,72,0.4)]"}`}>
-            {h.win ? `+${h.amt}` : "No win"}
+            {h.win ? `+${h.amt}` : ""}
           </span>
         ))}
       </div>

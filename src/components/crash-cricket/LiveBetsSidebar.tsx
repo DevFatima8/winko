@@ -298,7 +298,7 @@ export default function LiveBetsSidebar({
                       ? `+${item.profit.toLocaleString("en-IN", {
                         maximumFractionDigits: 0,
                       })}`
-                      : "No win"}
+                      : ""}
                   </div>
                 </div>
               ))

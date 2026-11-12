@@ -165,7 +165,7 @@ export default function GatesOfOlympusGame({ backHref = "/player" }: { backHref?
           window.setTimeout(() => playTone(784, 0.28, "sine"), 150);
         }
       } else {
-        setMessage(pool.enabled ? "DAILY PAYOUT PENDING — PROVISIONAL CLAIM 0" : "NO WIN — TRY AGAIN");
+        setMessage(pool.enabled ? "DAILY PAYOUT PENDING — PROVISIONAL CLAIM 0" : "");
         playTone(170, 0.12, "triangle");
       }
       busyRef.current = false;

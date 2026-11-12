@@ -6,7 +6,7 @@ import { hashPassword, verifyPassword, isStaff, staffLevel, type CurrentUser } f
 import { getServerSessionUser } from "./serverAuth";
 import { assignPaymentAccounts } from "./platform";
 import { genReferralCode, genUsername, getSettings, payDepositCommission, recomputeVip, vipInfo, withdrawnToday } from "./platform";
-import { notifyAdmins, notifyUser } from "./notifications";
+import { notificationFilter, notifyAdmins, notifyUser } from "./notifications";
 import { CLOUDINARY_URL_RE } from "./cloudinary";
 import { requireSiteGame } from "./siteGameCatalog";
 
@@ -84,7 +84,7 @@ export async function claimReferralCommissionAction(_: ActionState, _form: FormD
 export async function markNotificationsReadAction() {
   const me = await getServerSessionUser();
   if (!me) return;
-  await Notification.updateMany({ isActive: true, readBy: { $ne: oid(me.id) } }, { $addToSet: { readBy: oid(me.id) } });
+  await Notification.updateMany({ ...await notificationFilter(me.id, me.dbRole), readBy: { $ne: oid(me.id) } }, { $addToSet: { readBy: oid(me.id) } });
   revalidatePath("/player/notifications");
 }
 
@@ -234,9 +234,9 @@ export async function toggleUserActiveAction(id: string, isActive: boolean, form
   const saved = await User.findById(id, "isActive").lean();
   if (!saved || saved.isActive !== isActive) return { error: "Account status save nahi ho saka. Dobara try karein." };
   if (isActive) {
-    await notifyUser(id, "Account unblocked", "Your account has been unblocked. You can use the website again.", "success", { href: "/player/profile" });
+    await notifyUser(id, "Account unblocked", "Your account has been unblocked. You can use the website again.", "success", { href: "/player/profile", actorRole: me.dbRole });
   } else {
-    await notifyUser(id, "Account blocked", `Your account has been blocked. Reason: ${reason || "Account blocked by administrator."} Contact Support if you believe this is incorrect.`, "warning", { href: "/player/profile" });
+    await notifyUser(id, "Account blocked", `Your account has been blocked. Reason: ${reason || "Account blocked by administrator."} Contact Support if you believe this is incorrect.`, "warning", { href: "/player/profile", actorRole: me.dbRole });
   }
   await logAdmin(me, isActive ? "unblock_user" : "block_user", t.phone, reason || t.adminNote || "No reason provided");
   revalidatePath("/admin/users"); revalidatePath(`/admin/users/${id}`);
@@ -304,7 +304,7 @@ export async function adjustUserBalanceAction(_: ActionState, form: FormData): P
   u.balance = (u.balance ?? 0) + change;
   await u.save();
   const label = direction === "add" ? "Balance added" : "Balance removed";
-  await notifyUser(id, label, `Super Admin ne aapke wallet mein Rs. ${amount.toLocaleString()} ${direction === "add" ? "add" : "remove"} kiye. New balance: Rs. ${u.balance.toLocaleString()}.`, direction === "add" ? "success" : "warning", { href: "/player/wallet" });
+  await notifyUser(id, label, `Super Admin ne aapke wallet mein Rs. ${amount.toLocaleString()} ${direction === "add" ? "add" : "remove"} kiye. New balance: Rs. ${u.balance.toLocaleString()}.`, direction === "add" ? "success" : "warning", { href: "/player/wallet", actorRole: me.dbRole });
   await logAdmin(me, direction === "add" ? "add_user_balance" : "remove_user_balance", u.phone, `Rs. ${amount.toLocaleString()} | new balance Rs. ${u.balance.toLocaleString()}`);
   revalidatePath("/admin/users"); revalidatePath(`/admin/users/${id}`);
   return { success: `Rs. ${amount.toLocaleString()} ${direction === "add" ? "add" : "remove"} ho gaye. New balance: Rs. ${u.balance.toLocaleString()}.` };
@@ -471,6 +471,7 @@ export async function saveSettingsAction(_: ActionState, form: FormData): Promis
 // notifications
 export async function sendNotificationAction(_: ActionState, form: FormData): Promise<ActionState> {
   const me = await requireAdmin(1);
+  if (me.dbRole === "owner") return { error: "Agent activity notifications are disabled." };
   const title = str(form, "title"), body = str(form, "body");
   const typeRaw = str(form, "type"), audRaw = str(form, "audience");
   const type = (["info", "promo", "warning", "success"].includes(typeRaw) ? typeRaw : "info") as "info" | "promo" | "warning" | "success";
@@ -501,7 +502,9 @@ export async function sendNotificationAction(_: ActionState, form: FormData): Pr
   return { success: audience === "user" ? "Notification us user ko bhej di gayi." : "Notification sab users ko bhej di gayi." };
 }
 export async function deleteNotificationAction(id: string) {
-  await requireSuper();
+  const me = await requireSuper();
+  const notification = await Notification.findById(oid(id), "audience").lean();
+  if (notification?.audience === "owners" && me.dbRole !== "owner") throw new Error("Agent access required for security alerts.");
   await Notification.deleteOne({ _id: oid(id) });
   revalidatePath("/admin/notifications");
 }

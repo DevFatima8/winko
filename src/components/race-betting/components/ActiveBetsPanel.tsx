@@ -134,7 +134,7 @@ export const ActiveBetsPanel: React.FC<ActiveBetsPanelProps> = ({
                   ) : bet.won ? (
                     <div className="text-emerald-400">+Rs. {bet.profit.toLocaleString()}</div>
                   ) : (
-                    <div className="text-rose-400">No win</div>
+                    <div className="text-rose-400">{""}</div>
                   )}
                 </div>
               </div>

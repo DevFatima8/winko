@@ -7,7 +7,7 @@ import { BrowserWagerError, browserPoolLifecycle, isBrowserPoolGame, playBrowser
 import { dailyPoolLock, isDailyPoolGame } from "@/lib/dailyPoolRules";
 import { mysqlMultiplayerStore } from "@/lib/multiplayer-store";
 import { isCardGame } from "@/lib/cardGameRules";
-import { isRouletteGame } from "@/lib/rouletteGameRules";
+import { isRouletteGame, isWheelGame } from "@/lib/rouletteGameRules";
 import { isSlotGame } from "@/lib/slotGameRules";
 import { actBrowserCard } from "@/lib/browserCardActions";
 import { LOCAL_GAMES_CONNECTED, LOCAL_GAMES_UNAVAILABLE } from "@/lib/gameAvailability";
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: LOCAL_GAMES_UNAVAILABLE }, { status: 403 });
     }
     const game = String(body.game ?? "game").trim();
-    const poolEnabled = !isCardGame(game) && !isRouletteGame(game) && !isSlotGame(game) && game !== "thai-hi-lo" && dailyPoolEnabled();
+    const poolEnabled = !isCardGame(game) && !isRouletteGame(game) && !isWheelGame(game) && !isSlotGame(game) && game !== "thai-hi-lo" && dailyPoolEnabled();
     if (body.action && body.ownerId !== me.id) {
       return NextResponse.json({ error: "Saved wager account does not match the signed-in account." }, { status: 409 });
     }
@@ -105,7 +105,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: error instanceof BrowserWagerError ? error.message : "Wager unavailable. Retry the same wager identity." }, { status: error instanceof BrowserWagerError ? 409 : 500 });
       }
     }
-    if (isCardGame(game) || isRouletteGame(game) || isSlotGame(game) || game === "thai-hi-lo") {
+    if (isCardGame(game) || isRouletteGame(game) || isWheelGame(game) || isSlotGame(game) || game === "thai-hi-lo") {
       return NextResponse.json({
         error: "This game requires an explicit accepted-wager lifecycle; balance deltas cannot create stakes or winnings.",
       }, { status: 409 });

@@ -1,8 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { GameDoc, GameResultDoc, MinesGameDoc, UserDoc } from "@/models";
+import type { GameDoc, GameResultDoc, MinesGameDoc, UserDoc, WinHoldDoc } from "@/models";
 import { mysqlMultiplayerStore, type MultiplayerTransaction } from "./multiplayer-store";
 import { addPoolWager, cents, closePoolWager, settleDailyPools, type PoolFields } from "./dailyPool";
 import { DAILY_POOL_VERSION, dailyPoolLock } from "./dailyPoolRules";
+import { payoutAfterHouseShare } from "./outcomes";
+import { heldPortion } from "./winHold";
 
 type Slug = "plinko" | "limbo" | "lucky-777" | "mines";
 type Mine = MinesGameDoc & PoolFields;
@@ -80,15 +82,16 @@ export async function acceptDedicatedInstant(slug: Exclude<Slug, "mines">, userI
   });
 }
 
-export async function acceptPoolMines(userId: string, amount: number, mines: number, mineCells: number[], publish: (g: Mine) => unknown) {
+export async function acceptPoolMines(userId: string, amount: number, mines: number, mineCells: number[], publish: (g: Mine) => unknown, pooled = true) {
   return dedicatedTransaction("mines", async tx => {
     if ((await tx.findWhere<Mine>("minesgames", { userId, status: "active" }, 1)).length) return { error: "Pehle wali game abhi chal rahi hai." };
     const account = await wallet(tx, userId, "mines", amount);
     if ("error" in account) return account;
     const now = new Date(await tx.now());
     const result = resultDocument(randomUUID(), await gameId(tx, "mines", now), userId, amount, now, `${mines} mines · started`);
-    const game: Mine = { _id: randomUUID(), userId, resultId: result._id, betAmount: amount, mines, mineCells, revealed: [], status: "active", winAmount: 0, poolVersion: DAILY_POOL_VERSION, poolPending: true, poolClaim: 0, createdAt: now, updatedAt: now };
-    await addPoolWager(tx, "mines", result, { sourceTable: "minesgames", sourceId: game._id });
+    const game: Mine = { _id: randomUUID(), userId, resultId: result._id, betAmount: amount, mines, mineCells, revealed: [], status: "active", winAmount: 0,
+      ...(pooled ? { poolVersion: DAILY_POOL_VERSION, poolPending: true, poolClaim: 0 } : {}), createdAt: now, updatedAt: now };
+    if (pooled) await addPoolWager(tx, "mines", result, { sourceTable: "minesgames", sourceId: game._id });
     account.user.balance = (cents(account.user.balance) - cents(amount)) / 100;
     account.user.updatedAt = now;
     await tx.put("users", userId, account.user);
@@ -98,11 +101,12 @@ export async function acceptPoolMines(userId: string, amount: number, mines: num
   });
 }
 
-/** Only pre-version accepted active Mines may fall through to legacy accounting. */
+/** Resolve a pooled or instant MySQL Mines wager under the same lock as acceptance. */
 export async function actPoolMines(userId: string, action: "reveal" | "cashout", cell: number, multiplier: (mines: number, safe: number) => number, publish: (g: Mine) => unknown) {
   return dedicatedTransaction("mines", async tx => {
     const game = (await tx.findWhere<Mine>("minesgames", { userId, status: "active" }, 1))[0];
-    if (!game || game.poolVersion !== DAILY_POOL_VERSION) return null;
+    if (!game) return null;
+    if (game.poolVersion && game.poolVersion !== DAILY_POOL_VERSION) throw new Error("Unsupported Mines wager version.");
     if (action === "reveal" && (!Number.isInteger(cell) || cell < 0 || cell >= 25 || game.revealed.includes(cell))) return { error: "Invalid cell." };
     if (action === "cashout" && !game.revealed.length) return { error: "Kam az kam ek gem kholen." };
     let event: "mine" | "gem" | "cleared" | "cashed" = "cashed";
@@ -115,19 +119,40 @@ export async function actPoolMines(userId: string, action: "reveal" | "cashout",
     }
     const m = multiplier(game.mines, game.revealed.length);
     const now = new Date(await tx.now());
+    const pooled = game.poolVersion === DAILY_POOL_VERSION;
+    const user = await tx.get<UserDoc>("users", userId, true);
+    if (!user || !Number.isFinite(user.balance)) throw new Error("Mines wallet unavailable.");
     if (event !== "gem") {
-      const claim = event === "mine" ? 0 : cents(game.betAmount * m) / 100;
-      if (event !== "mine") game.status = "cashed";
-      game.poolClaim = claim;
-      await closePoolWager(tx, game.resultId, claim);
+      const gross = event === "mine" ? 0 : game.betAmount * m;
+      const claim = event === "mine" ? 0 : cents(gross) / 100;
       const result = await tx.get<GameResultDoc>("gameresults", game.resultId);
-      if (!result || result.poolVersion !== DAILY_POOL_VERSION) throw new Error("Daily-pool Mines result missing.");
-      Object.assign(result, { poolClaim: claim, winAmount: 0, outcome: "pending", resultData: `${game.mines} mines · ${event} @ ${m}x | Pending daily pool settlement`, updatedAt: now });
+      if (!result || result.userId !== userId || result.outcome !== "pending" ||
+          (result.poolVersion ?? null) !== (game.poolVersion ?? null)) throw new Error("Mines result missing or inconsistent.");
+      if (event !== "mine") game.status = "cashed";
+      if (pooled) {
+        game.poolClaim = claim;
+        if (!await closePoolWager(tx, game.resultId, claim)) throw new Error("Daily-pool Mines entry missing.");
+      } else if (event !== "mine") {
+        game.winAmount = payoutAfterHouseShare(gross);
+        const balanceCents = cents(user.balance) + cents(game.winAmount);
+        if (!Number.isSafeInteger(balanceCents)) throw new Error("Mines wallet balance exceeds safe precision.");
+        user.balance = balanceCents / 100;
+        user.updatedAt = now;
+        await tx.put("users", userId, user);
+        const holdAmount = heldPortion(gross);
+        if (holdAmount > 0) {
+          const id = randomUUID();
+          const hold: WinHoldDoc = { _id: id, userId, amount: holdAmount, claimed: false, claimedAt: null, unlockAt: now, createdAt: now, updatedAt: now };
+          await tx.insert("winholds", id, hold);
+        }
+      }
+      Object.assign(result, pooled
+        ? { poolClaim: claim, winAmount: 0, outcome: "pending", resultData: `${game.mines} mines · ${event} @ ${m}x | Pending daily pool settlement`, updatedAt: now }
+        : { winAmount: game.winAmount, outcome: event === "mine" ? "lose" : "win", resultData: `${game.mines} mines · ${event} @ ${m}x`, updatedAt: now });
       await tx.put("gameresults", result._id, result);
     }
     game.updatedAt = now;
     await tx.put("minesgames", game._id, game);
-    const user = await tx.get<UserDoc>("users", userId, true);
-    return { ok: true, event, cell, multiplier: m, win: 0, poolPending: true, poolClaim: game.poolClaim, game: publish(game), balance: user?.balance ?? 0 };
+    return { ok: true, event, cell, multiplier: m, win: game.winAmount, ...(pooled ? { poolPending: true, poolClaim: game.poolClaim } : {}), game: publish(game), balance: user.balance };
   });
 }

@@ -60,8 +60,25 @@ function assertOutcome(game, reply) {
 }
 
 for (const game of games) {
-  test(`${game}: actual lifecycle, 100 distinct players, 10 real winners, capped instant settlement and immutable replay`, async () => {
+  test(`${game}: the same player gets exactly 30 paid wins in 100 new rounds`, async () => {
+    const s = scene(game, ["alice"]);
+    s.users.get("alice").balance = 10000;
+    let wins = 0;
+    for (let round = 0; round < 100; round++) {
+      const wagerId = randomUUID();
+      await accept(s, game, "alice", wagerId);
+      const reply = await resolve(s, game, "alice", wagerId);
+      assertOutcome(game, reply);
+      wins += Number(reply.claim > stake);
+      assert.equal((await resolve(s, game, "alice", wagerId)).claim, reply.claim);
+    }
+    assert.equal(wins, 30);
+  });
+
+  test(`${game}: actual lifecycle, 100 distinct players, 30 real winners, capped instant settlement and immutable replay`, async () => {
     const s = scene(game);
+    const historical = { _id: `${game}:ten-player-wins:v1`, players: ["previous"], remaining: [false] };
+    s.data.multiplayerrooms.push(structuredClone(historical));
     const replies = await Promise.all(players.map(async userId => {
       const wagerId = randomUUID(), operationId = randomUUID();
       await accept(s, game, userId, wagerId, operationId);
@@ -77,9 +94,10 @@ for (const game of games) {
       await assert.rejects(resolve(s, game, userId, wagerId, { bets: { changed: stake } }), /cannot change/);
       return reply;
     }));
-    assert.equal(replies.filter(reply => reply.claim > 0).length, 10);
+    assert.equal(replies.filter(reply => reply.claim > 0).length, 30);
     assert.equal(s.data.dailypoolentries.length, 0);
-    assert.deepEqual(s.data.multiplayerrooms.find(row => row._id === `${game}:ten-player-wins:v1`).players, []);
+    assert.equal(s.data.multiplayerrooms.find(row => row._id === `${game}:bet-wins-30-of-100:v1`).remaining.length, 100);
+    assert.deepEqual(s.data.multiplayerrooms.find(row => row._id === historical._id), historical);
   });
 
   test(`${game}: no unverified payouts; failed atomic settlement consumes neither slot nor wallet credit`, async () => {
@@ -109,8 +127,8 @@ for (const game of games) {
     assert.deepEqual(s.data, completed);
     const second = randomUUID();
     await accept(s, game, "alice", second);
-    assert.equal((await resolve(s, game, "alice", second)).claim, 0);
-    assert.equal(s.data.multiplayerrooms.find(row => row._id === `${game}:ten-player-wins:v1`).players.length, 1);
+    assertOutcome(game, await resolve(s, game, "alice", second));
+    assert.equal(s.data.multiplayerrooms.find(row => row._id === `${game}:bet-wins-30-of-100:v1`).remaining.length, 98);
   });
 
   test(`${game}: new wagers are instant even without the global pool flag`, async () => {

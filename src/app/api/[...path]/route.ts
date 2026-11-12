@@ -74,20 +74,20 @@ async function dispatch(request: Request) {
                 return response(await startPoolChicken(me!.id, "chicken-road-2", Number(body.amount), String(body.difficulty)));
             case path === "/api/chicken/step" && method === "POST":
                 if (!requirePlayer()) return errorResponse("Khelne ke liye Login / Register karein.", 401);
-                return response(await actPoolChicken(me!.id, "chicken-road-2", "step") ?? await chicken.step(me!.id));
+                return response(await actPoolChicken(me!.id, "chicken-road-2", "step") ?? { error: "Koi active game nahi." });
             case path === "/api/chicken/cashout" && method === "POST":
                 if (!requirePlayer()) return errorResponse("Khelne ke liye Login / Register karein.", 401);
-                return response(await actPoolChicken(me!.id, "chicken-road-2", "cashout") ?? await chicken.cashOut(me!.id));
+                return response(await actPoolChicken(me!.id, "chicken-road-2", "cashout") ?? { error: "Cash out ke liye kam az kam ek lane cross karein." });
             case path === "/api/chickendash/state": return response(await dash.getState(userId));
             case path === "/api/chickendash/start" && method === "POST":
                 if (!requirePlayer()) return errorResponse("Khelne ke liye Login / Register karein.", 401);
                 return response(await startPoolChicken(me!.id, "chicken-dash", Number(body.amount), String(body.level ?? "")));
             case path === "/api/chickendash/step" && method === "POST":
                 if (!requirePlayer()) return errorResponse("Khelne ke liye Login / Register karein.", 401);
-                return response(await actPoolChicken(me!.id, "chicken-dash", "step") ?? await dash.step(me!.id));
+                return response(await actPoolChicken(me!.id, "chicken-dash", "step") ?? { error: "Koi active game nahi." });
             case path === "/api/chickendash/cashout" && method === "POST":
                 if (!requirePlayer()) return errorResponse("Khelne ke liye Login / Register karein.", 401);
-                return response(await actPoolChicken(me!.id, "chicken-dash", "cashout") ?? await dash.cashOut(me!.id));
+                return response(await actPoolChicken(me!.id, "chicken-dash", "cashout") ?? { error: "Cash out ke liye kam az kam ek tile cross karein." });
             case path === "/api/plinko/state": return response(await plinko.getState(userId));
             case path === "/api/plinko/drop" && method === "POST":
                 if (!requirePlayer()) return errorResponse("Khelne ke liye Login / Register karein.", 401);

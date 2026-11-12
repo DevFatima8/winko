@@ -249,7 +249,7 @@ export function PlinkoGame({ backHref = "/player" }: { backHref?: string }) {
           <div className="rounded-md bg-[#0f212e] p-2 text-[10px] text-slate-400">
             <div className="flex justify-between"><span>{st?.dailyPoolEnabled ? "Max claim weight" : "Max payout"}</span><b className="text-white">{table.length ? fmtMult(Math.max(...table.filter(multiplier => multiplier < 25))) : "-"}</b></div>
             {st?.dailyPoolEnabled && <p className="mt-1 text-[10px] text-amber-200">daily pool · Multipliers are provisional claims, not immediate payouts.</p>}
-            <div className="flex justify-between"><span>Positive returns</span><b className="text-white">{st?.dailyPoolEnabled ? "10 / 100 players" : "10% per drop"}</b></div>
+            {!st?.dailyPoolEnabled && <div className="flex justify-between"><span>Positive returns</span><b className="text-white">10% per drop</b></div>}
           </div>
         </aside>
 

@@ -11,11 +11,13 @@ const make = (game, users = players) => {
 };
 const request = (roundNo, option, amount = 100) => ({ action: "bet", requestId: randomUUID(), roundNo, option, amount });
 const option = game => game === "auto-roulette" ? "n:17" : "n-17";
-const cycle = (s, game) => s.data.multiplayerrooms.find(room => room._id === `${game}:ten-player-wins:v1`);
+const cycle = (s, game) => s.data.multiplayerrooms.find(room => room._id === `${game}:bet-wins-30-of-100:v1`);
 
 for (const game of ["auto-roulette", "lightning-roulette"]) {
-  test(`${game}: 100 personal players have ten wheel-matching wins, single debit/credit and a 2x aggregate gross cap`, async () => {
+  test(`${game}: 100 personal players have thirty wheel-matching wins, single debit/credit and a 2x aggregate gross cap`, async () => {
     const s = make(game);
+    const historical = { _id: `${game}:ten-player-wins:v1`, players: ["previous"], remaining: [false] };
+    s.data.multiplayerrooms.push(structuredClone(historical));
     let paid = 0;
     for (const userId of players) {
       s.at(100000);
@@ -44,10 +46,11 @@ for (const game of ["auto-roulette", "lightning-roulette"]) {
       assert.deepEqual(s.data, before);
       if (payout) paid++;
     }
-    assert.equal(paid, 10);
+    assert.equal(paid, 30);
     assert.equal(s.data.gameresults.length, 100);
     assert.equal(s.data.dailypoolentries.length, 0, "new roulette bets are instant even with pool mode on");
-    assert.equal(cycle(s, game).players.length, 0);
+    assert.equal(cycle(s, game).remaining.length, 100);
+    assert.deepEqual(s.data.multiplayerrooms.find(room => room._id === historical._id), historical);
   });
 
   test(`${game}: multiple feasible spots stay playable, covering bets and failed writes roll back`, async () => {
@@ -78,7 +81,7 @@ for (const game of ["auto-roulette", "lightning-roulette"]) {
     const gross = done.myBets.reduce((sum, bet) => sum + bet.payout, 0)
       + s.data.winholds.reduce((sum, hold) => sum + hold.amount, 0);
     assert.ok(gross <= 600);
-    assert.equal(cycle(s, game).players.length, 1);
+    assert.equal(cycle(s, game).remaining.length, 99);
     if (gross > 0) {
       assert.ok(done.myBets.reduce((sum, bet) => sum + bet.payout, 0) > 300);
       for (const bet of done.myBets.filter(bet => bet.payout > 0)) {
@@ -148,7 +151,7 @@ for (const game of ["auto-roulette", "lightning-roulette"]) {
     assert.equal(cycle(s, game), undefined);
   });
 
-  test(`${game}: repeat players cannot reroll and must wait for the next betting window`, async () => {
+  test(`${game}: repeat players consume a new slot only in the next betting window`, async () => {
     const s = make(game, ["alice"]);
     const start = await s.multiplayer.read(game, "alice");
     await s.multiplayer.act(game, "alice", request(start.round.roundNo, option(game)));
@@ -166,15 +169,14 @@ for (const game of ["auto-roulette", "lightning-roulette"]) {
     const balance = s.users.get("alice").balance;
     s.at(next.round.resultAt);
     const done = await s.multiplayer.read(game, "alice");
-    assert.equal(done.myBets[0].payout, 0);
-    assert.equal(s.users.get("alice").balance, balance);
-    assert.deepEqual(cycle(s, game), assigned);
+    assert.equal(s.users.get("alice").balance, balance + done.myBets[0].payout);
+    assert.equal(cycle(s, game).remaining.length, assigned.remaining.length - 1);
   });
 
   test(`${game}: 1 crore winning stake is capped at 2 crore, including holds`, async () => {
     const s = make(game, ["alice"]);
     s.users.get("alice").balance = 20000000;
-    s.data.multiplayerrooms.push({ _id: `${game}:ten-player-wins:v1`, players: Array.from({ length: 99 }, (_, i) => `prior-${i}`), remaining: [true] });
+    s.data.multiplayerrooms.push({ _id: `${game}:bet-wins-30-of-100:v1`, players: Array.from({ length: 99 }, (_, i) => `prior-${i}`), remaining: [true] });
     const start = await s.multiplayer.read(game, "alice");
     await s.multiplayer.act(game, "alice", request(start.round.roundNo, option(game), 10000000));
     assert.equal(s.users.get("alice").balance, 10000000);

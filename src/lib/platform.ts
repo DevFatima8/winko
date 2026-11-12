@@ -133,7 +133,7 @@ export async function withdrawalCountToday(userId: ObjectId) {
 }
 
 /** Hold new referral / agent commission until the player claims it. */
-export async function payDepositCommission(depositorId: ObjectId, amount: number) {
+export async function payDepositCommission(depositorId: ObjectId, amount: number, actorRole?: string) {
   const dep = await User.findById(depositorId, "referredBy name").lean();
   if (!dep?.referredBy) return;
   const ref = await User.findById(dep.referredBy, "isActive").lean();
@@ -149,7 +149,7 @@ export async function payDepositCommission(depositorId: ObjectId, amount: number
     pendingReferralCommission: c, commissionEarned: c, [`pendingReferralCommissionByUnlock.${unlockAt}`]: c,
   } });
   await Commission.create({ beneficiaryId: ref._id, fromUserId: depositorId, kind: "deposit", baseAmount: amount, pct, amount: c, note: `First deposit commission from ${dep.name}` });
-  await notifyUser(String(ref._id), "Referral commission received", `Your 1.5% referral commission of Rs. ${c.toLocaleString("en-PK")} for ${dep.name}'s first approved deposit is visible on the withdrawal page. Claim it any time after the next 12 AM Pakistan time. It will enter your balance after you tap Claim.`, "success", { href: "/player/withdraw#referral-commission" });
+  await notifyUser(String(ref._id), "Referral commission received", `Your 1.5% referral commission of Rs. ${c.toLocaleString("en-PK")} for ${dep.name}'s first approved deposit is visible on the withdrawal page. Claim it any time after the next 12 AM Pakistan time. It will enter your balance after you tap Claim.`, "success", { href: "/player/withdraw#referral-commission", actorRole });
 }
 
 export function genReferralCode(name: string) {

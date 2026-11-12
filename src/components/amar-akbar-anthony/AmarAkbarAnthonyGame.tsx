@@ -181,7 +181,7 @@ export default function AmarAkbarAnthonyGame({ backHref }: { backHref?: string }
         gameSfx.lose();
         setResultWin(false);
         setPayout(0);
-        setResultText(pool.enabled ? "Daily payout pending — provisional claim 0" : "No win");
+        setResultText(pool.enabled ? "Daily payout pending — provisional claim 0" : "");
       }
 
       setHistory((h) => [outcome.win, ...h].slice(0, 12));

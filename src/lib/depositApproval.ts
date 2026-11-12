@@ -15,7 +15,7 @@ const parseData = <T,>(row: DataRow<T>): T => typeof row.data === "string" ? JSO
 export const FIRST_DEPOSIT_BONUS_TITLE = "Congratulations! First deposit bonus received";
 
 /** Commit approval, principal, first-deposit bonus and its notice together. */
-export async function approveDeposit(id: string, userId: string, details: ApprovalDetails) {
+export async function approveDeposit(id: string, userId: string, details: ApprovalDetails, actorRole?: string) {
   const pool = await getMysqlPool();
   if (!pool) throw new Error("Deposit approval requires the configured database.");
   const connection = await pool.getConnection();
@@ -47,7 +47,7 @@ export async function approveDeposit(id: string, userId: string, details: Approv
     if (eligible) user.firstDepositBonusTransactionId = id;
     await connection.execute("UPDATE users SET data = ?, updated_at = ? WHERE id = ?", [JSON.stringify(user), now, userId]);
     await connection.execute("UPDATE transactions SET data = ?, updated_at = ? WHERE id = ?", [JSON.stringify(transaction), now, id]);
-    if (bonus > 0) {
+    if (bonus > 0 && actorRole !== "owner") {
       const noticeId = randomUUID();
       const notification = {
         _id: noticeId, title: FIRST_DEPOSIT_BONUS_TITLE,

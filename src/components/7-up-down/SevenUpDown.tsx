@@ -440,7 +440,7 @@ function BetCell({
       )}
       {losing && (
         <div className="absolute inset-0 grid place-items-center bg-black/30">
-          <span className="px-3 py-1 rounded-full bg-rose-500 text-white font-bold text-xs shadow-lg">No win</span>
+          <span className="px-3 py-1 rounded-full bg-rose-500 text-white font-bold text-xs shadow-lg">{""}</span>
         </div>
       )}
     </button>
@@ -459,7 +459,7 @@ function ResultBanner({ result }: { result: RoundResult }) {
           YOU WIN <span className="text-yellow-300">+Rs. {result.payout.toLocaleString()}</span>
         </p>
       ) : (
-        <p className="text-2xl font-extrabold text-rose-300">NO WIN</p>
+        <p className="text-2xl font-extrabold text-rose-300">{""}</p>
       )}
     </div>
   );

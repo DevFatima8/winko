@@ -623,7 +623,7 @@ export function ChickenDashGame({ backHref = "/player" }: { backHref?: string })
         v.killer = {
           lane: target, y: -140, type: pick(CAR_TYPES), color: pick(CAR_COLORS), hit: false, done: () => {
             v.status = "dead"; setPhase("idle"); setBusyBoth(false);
-            setMsg({ t: "err", m: g.poolPending ? "Round ended — daily pool payout pending" : "No win" }); refresh();
+            setMsg({ t: "err", m: g.poolPending ? "Round ended — daily pool payout pending" : "" }); refresh();
             window.dispatchEvent(new CustomEvent("wx:game-result", { detail: { game: "Chicken Dash", bet: g.bet, win: 0, won: false, poolPending: g.poolPending, poolClaim: 0 } }));
           }
         };
@@ -658,7 +658,7 @@ export function ChickenDashGame({ backHref = "/player" }: { backHref?: string })
       playGameSound("cashout");
       if (won) speakGameVoice("chickenWin");
       v.status = "cashed"; burst(v, v.cx, ROW_Y, "coin", 18); setGame(j.game); setPhase("idle");
-      setMsg(j.poolPending ? { t: "ok", m: `Claim ${money(j.poolClaim)} locked @ ${fmtMult(j.multiplier)} — daily payout pending` } : won ? { t: "ok", m: `Cashed out @ ${fmtMult(j.multiplier)} — ${money(j.win)} jeete!` } : { t: "err", m: "No win" });
+      setMsg(j.poolPending ? { t: "ok", m: `Claim ${money(j.poolClaim)} locked @ ${fmtMult(j.multiplier)} — daily payout pending` } : won ? { t: "ok", m: `Cashed out @ ${fmtMult(j.multiplier)} — ${money(j.win)} jeete!` } : { t: "err", m: "" });
       window.dispatchEvent(new CustomEvent("wx:game-result", { detail: { game: "Chicken Dash", bet: j.game.bet, win: j.win, won, poolPending: j.poolPending, poolClaim: j.poolClaim } }));
     }
     setBusyBoth(false); refresh();
@@ -707,7 +707,7 @@ export function ChickenDashGame({ backHref = "/player" }: { backHref?: string })
       <div ref={wrapRef} className="relative flex-1 min-h-0 w-full overflow-hidden flex items-center justify-center bg-[#0d1017]">
         <canvas ref={canvasRef} onClick={() => step()} className={`block w-full ${phase === "active" && !busy ? "cursor-pointer" : ""}`} />
         {!st && <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-white">Loading…</div>}
-        {msg && <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-3 z-20"><div className={`rounded-xl px-4 py-1.5 text-center text-xs font-bold shadow-lg ${msg.t === "ok" ? "bg-[#16a34a] border border-[#22c55e] text-white" : "bg-[#dc2626] border border-[#ef4444] text-white"}`}>{msg.m}</div></div>}
+        {msg?.m && <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-3 z-20"><div className={`rounded-xl px-4 py-1.5 text-center text-xs font-bold shadow-lg ${msg.t === "ok" ? "bg-[#16a34a] border border-[#22c55e] text-white" : "bg-[#dc2626] border border-[#ef4444] text-white"}`}>{msg.m}</div></div>}
         {phase === "active" && !busy && <div className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-lg bg-black/80 px-3 py-1 text-[10px] font-semibold text-white">Tap road ya <kbd className="rounded bg-white/20 px-1">SPACE</kbd> = aage barho</div>}
         {showRules && (
           <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/75 p-4" onClick={() => setShowRules(false)}>

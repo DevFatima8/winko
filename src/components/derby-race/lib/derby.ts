@@ -35,7 +35,7 @@ export type RaceResult = {
 };
 
 export const STARTING_BALANCE = 1_000;
-export const WIN_PROBABILITY = 0.35;
+export const WIN_PROBABILITY = 0.3;
 export const PAYOUT_MULTIPLIER = 2.75;
 export const RACE_DURATION = 12_000;
 export const RACE_DISTANCE = 1_800;
@@ -59,22 +59,22 @@ function randomUnit(): number {
   return Math.random();
 }
 
-export function makeRacePlan(selectedHorseId: number, stake: number, round: number): RacePlan {
-  const playerWon = randomUnit() < WIN_PROBABILITY;
+export function makeRacePlan(selectedHorseId: number, stake: number, round: number, assignedWin?: boolean, rng = randomUnit): RacePlan {
+  const playerWon = assignedWin ?? rng() < WIN_PROBABILITY;
   const rivals = HORSES.filter((horse) => horse.id !== selectedHorseId);
   const winnerId = playerWon
     ? selectedHorseId
-    : rivals[Math.floor(randomUnit() * rivals.length)].id;
+    : rivals[Math.floor(rng() * rivals.length)].id;
 
   return {
-    id: `${round}-${Date.now()}-${Math.floor(randomUnit() * 1_000_000)}`,
+    id: `${round}-${Date.now()}-${Math.floor(rng() * 1_000_000)}`,
     round,
     winnerId,
     selectedHorseId,
     stake,
     playerWon,
-    finishingPaces: HORSES.map((horse) => horse.id === winnerId ? 1 : 0.916 + randomUnit() * 0.062),
-    seed: randomUnit() * 100,
+    finishingPaces: HORSES.map((horse) => horse.id === winnerId ? 1 : 0.916 + rng() * 0.062),
+    seed: rng() * 100,
   };
 }
 

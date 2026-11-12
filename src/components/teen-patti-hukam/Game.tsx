@@ -99,7 +99,7 @@ export default function Game() {
       const total = b.A + b.B;
       if (total > 0) pool.announce();
       if (won > 0) gameSfx.win(); else if (total > 0) gameSfx.lose();
-      setMsg(total === 0 ? null : pool.enabled ? { text: `Daily payout pending — provisional claim Rs. ${won.toFixed(0)}`, win: won > 0 } : won > 0 ? { text: `You Win Rs. ${won.toFixed(0)}`, win: true } : { text: "No win", win: false });
+      setMsg(total === 0 ? null : pool.enabled ? { text: `Daily payout pending — provisional claim Rs. ${won.toFixed(0)}`, win: won > 0 } : won > 0 ? { text: `You Win Rs. ${won.toFixed(0)}`, win: true } : { text: "", win: false });
       setHistory((h) => [r.winner, ...h].slice(0, 20));
       setPhase("result");
     }, steps * 850 + 1600);

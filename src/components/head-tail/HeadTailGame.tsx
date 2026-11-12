@@ -397,7 +397,7 @@ export default function HeadTailGame({ backHref = "/player" }: { backHref?: stri
                 {recent.slice(0, 7).map((r) => (
                   <span
                     key={r.id}
-                    title={`${r.result.toUpperCase()} · ${r.win ? "Win" : "No win"}`}
+                    title={`${r.result.toUpperCase()} · ${r.win ? "Win" : ""}`}
                     className={`grid h-4.5 w-4.5 sm:h-5 sm:w-5 place-items-center rounded-full border text-[8px] sm:text-[9px] font-black ${
                       r.win ? "border-emerald-400/60 bg-emerald-500/15 text-emerald-300" : "border-red-400/60 bg-red-500/15 text-red-300"
                     }`}
@@ -434,10 +434,10 @@ export default function HeadTailGame({ backHref = "/player" }: { backHref?: stri
                 }`}
               >
                 <p className={`text-[11px] sm:text-sm font-black uppercase tracking-wider leading-tight ${lastRound.win ? "text-emerald-400" : "text-red-400"}`}>
-                  {poolEnabled ? "DAILY PAYOUT PENDING" : lastRound.win ? "🎉 You Won!" : "No win"}
+                  {poolEnabled ? "DAILY PAYOUT PENDING" : lastRound.win ? "🎉 You Won!" : ""}
                 </p>
                 <p className="text-[9px] sm:text-[10px] text-slate-300 leading-tight">
-                  Landed on <strong className="text-white uppercase">{lastRound.result}</strong> · {poolEnabled ? `Provisional claim ${fmt(lastRound.win ? lastRound.amount * PAYOUT_MULTIPLIER : 0)}` : lastRound.win ? `+${fmt(lastRound.amount * (PAYOUT_MULTIPLIER - 1))}` : "No win"}
+                  Landed on <strong className="text-white uppercase">{lastRound.result}</strong> · {poolEnabled ? `Provisional claim ${fmt(lastRound.win ? lastRound.amount * PAYOUT_MULTIPLIER : 0)}` : lastRound.win ? `+${fmt(lastRound.amount * (PAYOUT_MULTIPLIER - 1))}` : ""}
                 </p>
               </div>
             )}
@@ -603,9 +603,9 @@ export default function HeadTailGame({ backHref = "/player" }: { backHref?: stri
                         <td className="py-1.5 px-2"><SideTag side={r.pick} /></td>
                         <td className="py-1.5 px-2"><SideTag side={r.result} /></td>
                         <td className="py-1.5 px-2">{fmt(r.amount)}</td>
-                        <td className="py-1.5 px-2"><span className={r.win ? "text-emerald-400 font-bold" : "text-rose-400 font-bold"}>{r.win ? "Win" : "No win"}</span></td>
+                        <td className="py-1.5 px-2"><span className={r.win ? "text-emerald-400 font-bold" : "text-rose-400 font-bold"}>{r.win ? "Win" : ""}</span></td>
                         <td className={`py-1.5 px-2 text-right font-bold ${r.win ? "text-emerald-400" : "text-rose-400"}`}>
-                          {poolEnabled ? fmt(r.win ? r.amount * PAYOUT_MULTIPLIER : 0) : r.win ? `+${fmt(r.amount * (PAYOUT_MULTIPLIER - 1))}` : "No win"}
+                          {poolEnabled ? fmt(r.win ? r.amount * PAYOUT_MULTIPLIER : 0) : r.win ? `+${fmt(r.amount * (PAYOUT_MULTIPLIER - 1))}` : ""}
                         </td>
                       </tr>
                     ))

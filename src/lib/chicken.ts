@@ -2,7 +2,7 @@ import { dbConnect } from "./mongo";
 import { ChickenGame, Game, GameResult, User, oid, type ObjectId } from "@/models";
 import { checkGameAccess } from "./gameAccess";
 import { payoutAfterHouseShare, MAX_MULTIPLIER } from "./outcomes";
-import { spreadCrashLane } from "./crashLane";
+import { sampleCrashLane } from "./crashLane";
 import { holdWinShare } from "./winHold";
 
 
@@ -43,9 +43,7 @@ export function survivalTable(d: Difficulty) {
 
 /** Decide (secretly, at game start) on which lane the chicken gets hit. lanes+1 = never. */
 export function rollCrashLane(d: Difficulty) {
-  const lanes = lanesFor(d);
-  const firstProfit = multiplierTable(d).findIndex((m) => payoutAfterHouseShare(m * 100) > 100) + 1;
-  return spreadCrashLane(survivalTable(d), firstProfit > 0 ? firstProfit : lanes);
+  return sampleCrashLane(survivalTable(d));
 }
 
 let cachedGameId: ObjectId | null = null;

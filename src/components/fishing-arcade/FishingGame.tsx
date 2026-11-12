@@ -469,6 +469,7 @@ export default function FishingGame({ backHref = "/player" }: { backHref?: strin
                 </div>
                 <div className="mt-4 rounded-xl bg-black/30 px-4 py-2 text-center text-[14px] font-bold text-sky-100">
                   Aim for high-multiplier fish and mega boss creatures to win massive coin rewards!
+                  <div className="mt-1 text-xs">The server assigns 30 winning opportunities per 100 accepted shots. A missed or unfinished shot can forfeit an opportunity; 30 paid wins are not guaranteed.</div>
                 </div>
               </div>
             </div>

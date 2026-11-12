@@ -75,13 +75,16 @@ const games = {
 };
 
 for (const [game, spec] of Object.entries(games)) {
-  test(`${game}: 100 distinct players get exactly 10 winning slots; qualifying play yields exactly 10 profitable, wallet-exact rounds`, async () => {
-    const t = table(game);
+  test(`${game}: 100 repeat-player wagers get 30 winning slots with qualifying, wallet-exact play`, async () => {
+    const t = table(game, ["alice"]);
+    t.s.data.users[0].balance = 100000;
     let winners = 0;
-    for (const userId of users) {
+    for (let round = 0; round < 100; round++) {
+      const userId = "alice";
+      const before = t.balance(userId);
       const wagerId = randomUUID();
       await t.accept(userId, wagerId, spec.stake);
-      assert.equal(t.balance(userId), 1000 - spec.stake, "accepted stake is debited instantly");
+      assert.equal(t.balance(userId), before - spec.stake, "accepted stake is debited instantly");
       const act = (move, selection) => t.act(userId, wagerId, move, selection);
       const dealOp = randomUUID();
       const dealt = await t.act(userId, wagerId, "deal", spec.selection, dealOp);
@@ -89,16 +92,33 @@ for (const [game, spec] of Object.entries(games)) {
       const final = await spec.play(act, dealt);
       assert.equal(final.status, "closed");
       assert.equal(final.balance, t.balance(userId), "reply carries the authoritative balance");
-      const result = t.s.data.gameresults.find(r => r.userId === userId && r.browserGame === game && r.browserCardState);
+      const resultId = createHash("sha256").update(`browser-active:${userId}:${game}:${wagerId}`).digest("hex");
+      const result = t.s.data.gameresults.find(r => r._id === resultId && r.browserCardState);
       assert.ok(result?.browserCardState.closed, "round state persisted and closed");
       // Net = credited claim minus everything debited for this round; it shows directly in the wallet.
-      if (t.balance(userId) > 1000) winners++;
-      assert.equal(final.outcome.payout, Math.round((t.balance(userId) - 1000 + result.betAmount) * 100) / 100,
+      if (t.balance(userId) > before) winners++;
+      assert.equal(final.outcome.payout, Math.round((t.balance(userId) - before + result.betAmount) * 100) / 100,
         "claim credited exactly once and equals the displayed payout");
     }
-    assert.equal(winners, 10, game);
+    assert.equal(winners, 30, game);
   });
 }
+
+test("Rummy repeat players count every new hand, while winning-hand forfeits still lose", async () => {
+  const t = table("rummy", ["alice"]);
+  let opportunities = 0;
+  for (let bet = 0; bet < 100; bet++) {
+    const wagerId = randomUUID();
+    await t.accept("alice", wagerId, 10);
+    const dealt = await t.act("alice", wagerId, "deal");
+    opportunities += Number(Boolean(rummy.solve(dealt.outcome.view.hand)));
+    const before = t.balance("alice");
+    const final = await t.act("alice", wagerId, "forfeit");
+    assert.equal(final.outcome.payout, 0);
+    assert.equal(t.balance("alice"), before);
+  }
+  assert.equal(opportunities, 30);
+});
 
 test("forged moves, payouts and selections are rejected without touching the wallet or cycle", async () => {
   const cases = [
@@ -153,7 +173,7 @@ test("rummy: a forged declaration on an unwinnable hand is rejected; forfeit pay
     assert.equal(forfeit.outcome.payout, 0);
     assert.equal(t.balance(userId), 990);
   }
-  assert.equal(losing, 90);
+  assert.equal(losing, 70);
 });
 
 test("folds, packs and early cash-outs forfeit honestly: an assigned winning slot is not a guaranteed profit", async () => {
@@ -277,7 +297,7 @@ test("legacy accepted wagers without server flags can be dealt; unverified clien
   }
 });
 
-test("Hold'em: two 100-player crore-stake cycles have ten winners, exact stakes and at most 2x combined returns", async () => {
+test("Hold'em: two 100-round crore-stake cycles have thirty winners, exact stakes and at most 2x combined returns", async () => {
   const players = Array.from({ length: 200 }, (_, index) => `holdem-large-${index}`);
   const t = table("texas-holdem", players);
   const initial = 1000000000;
@@ -308,14 +328,8 @@ test("Hold'em: two 100-player crore-stake cycles have ten winners, exact stakes 
       }
       assert.equal(t.balance(userId), initial - reply.outcome.stake + reply.outcome.payout);
       if (t.balance(userId) > initial) winners++;
-      if (userId === players[(block + 1) * 100 - 1]) continue;
-      const repeat = randomUUID();
-      await t.accept(userId, repeat, openingBet);
-      let again = await t.act(userId, repeat, "deal", { openingBet });
-      for (let guard = 0; again.status === "active" && guard < 20; guard++) again = await t.act(userId, repeat, "call");
-      assert.equal(again.outcome.payout, 0, "repeat player cannot gain another winning slot in this cycle");
     }
-    assert.equal(winners, 10);
+    assert.equal(winners, 30);
   }
 });
 
@@ -435,5 +449,5 @@ test("old pooled wagers use real deals and extra-stake moves but defer every ter
     assert.deepEqual(t.s.data, closed);
     assert.equal(t.s.changes.length, closedChanges, "terminal replay and recovery never credit the deferred claim");
   }
-  assert.equal(profitableClaims, 10, "test covers positive deferred claims as well as losses");
+  assert.equal(profitableClaims, 30, "test covers positive deferred claims as well as losses");
 });

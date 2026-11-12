@@ -160,7 +160,7 @@ export function BetPanel({
           </span>
         )}
         {placed && phase === "crashed" && cashedOutAt === null && (
-          <span className="text-rose-600">{poolEnabled ? "Daily payout pending · provisional claim 0" : "No win"}</span>
+          <span className="text-rose-600">{poolEnabled ? "Daily payout pending · provisional claim 0" : ""}</span>
         )}
         {!placed && phase === "betting" && amount > balance && (
           <span className="text-amber-600">Not enough balance</span>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { DeviceSession } from "@/models";
 import { getCurrentDeviceSessionId, getServerSessionUser } from "@/lib/serverAuth";
+import { activeDeviceSessions } from "@/lib/deviceSessions";
 
 export async function GET() {
     const me = await getServerSessionUser();
@@ -13,7 +14,7 @@ export async function GET() {
 
     return NextResponse.json({
         currentSessionId,
-        devices: sessions.map(({ sessionId, deviceName, userAgent, ip, lastSeenAt }) => ({
+        devices: activeDeviceSessions(sessions, Date.now()).map(({ sessionId, deviceName, userAgent, ip, lastSeenAt }) => ({
             sessionId,
             deviceName,
             userAgent,

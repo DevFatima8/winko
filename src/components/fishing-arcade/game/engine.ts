@@ -56,7 +56,7 @@ export interface EngineCallbacks {
   onChange: (s: Snapshot) => void;
   onBigWin: (info: BigWinInfo) => void;
   onNoFunds: (balance: number) => void;
-  onAccept: (wagerId: string, stake: number, outcome: { win: boolean; platformCut: boolean; targetId: number | null }, snapshot: EngineRecovery) => Promise<string | null>;
+  onAccept: (wagerId: string, stake: number, outcome: { win: boolean; platformCut: boolean; targetId: number | null }, snapshot: EngineRecovery) => Promise<string | { wagerId: string; win: boolean } | null>;
   onComplete: (wagerId: string, claim: number) => Promise<boolean>;
   onCheckpoint: (snapshot: EngineRecovery) => void;
 }
@@ -472,12 +472,9 @@ export class FishingEngine {
       platformCut = true;
     }
 
-    let target: Fish | null = null;
-    if (win) {
-      target = this.pickTarget(tx, ty);
-      if (target) target.claimed = true;
-      else win = false;
-    }
+    const target = this.pickTarget(tx, ty);
+    if (target) target.claimed = true;
+    else win = false;
 
     this.pendingShot = { wagerId: crypto.randomUUID(), bet, level: this.betIdx, tx, ty, win, platformCut, targetId: target?.id ?? null };
     this.cb.onCheckpoint(this.snapshot());
@@ -487,12 +484,15 @@ export class FishingEngine {
   private async launchPendingShot() {
     const shot = this.pendingShot;
     if (!shot) return false;
-    const { wagerId, bet, level, tx, ty, win, platformCut, targetId } = shot;
+    const { wagerId, bet, level, tx, ty, platformCut, targetId } = shot;
+    let win = shot.win;
     const target = this.fish.find(fish => fish.id === targetId) ?? null;
     this.accepting = true;
     const accepted = await this.cb.onAccept(wagerId, bet, { win, platformCut, targetId }, this.snapshot());
     this.accepting = false;
     if (!accepted) { if (target) target.claimed = false; this.auto = false; this.pointer.down = false; return false; }
+    if (typeof accepted !== "string") win = accepted.win && target !== null;
+    if (!win && target) target.claimed = false;
     this.pendingShot = null;
     this.totalBet += bet;
     this.shots += 1;

@@ -1,5 +1,7 @@
 import { randomInt } from "node:crypto";
 import type { MultiplayerTransaction } from "./multiplayer-store";
+import { isCardGame } from "./cardGameRules";
+import { isRouletteGame, isWheelGame } from "./rouletteGameRules";
 
 type Cycle = { _id: string; players: string[]; remaining: boolean[] };
 
@@ -24,6 +26,8 @@ export async function nextBetWin(tx: MultiplayerTransaction, game: string, winne
 
 /** Called under the game's transaction lock, only after validating an accepted wager. */
 export async function nextPlayerWin(tx: MultiplayerTransaction, game: string, userId: string) {
+  if (isCardGame(game) || isRouletteGame(game) || isWheelGame(game)) return nextBetWin(tx, game, 30);
+  const winners = 10;
   const id = `${game}:ten-player-wins:v1`;
   const saved = await tx.get<Cycle>("multiplayerrooms", id);
   if (saved && (!Array.isArray(saved.players) || !Array.isArray(saved.remaining) ||
@@ -31,16 +35,17 @@ export async function nextPlayerWin(tx: MultiplayerTransaction, game: string, us
     saved.players.some(player => typeof player !== "string" || !player) ||
     new Set(saved.players).size !== saved.players.length ||
     saved.remaining.some(slot => typeof slot !== "boolean") ||
-    saved.remaining.filter(Boolean).length > 10 || saved.remaining.filter(slot => !slot).length > 90)) {
+    saved.remaining.filter(Boolean).length > winners || saved.remaining.filter(slot => !slot).length > 100 - winners)) {
     throw new Error(`${game} player win cycle is invalid. Contact support.`);
   }
   if (saved?.players.includes(userId)) return false;
-  const remaining = saved ? [...saved.remaining] : [...Array<boolean>(10).fill(true), ...Array<boolean>(90).fill(false)];
+  const fresh = () => [...Array<boolean>(winners).fill(true), ...Array<boolean>(100 - winners).fill(false)];
+  const remaining = saved ? [...saved.remaining] : fresh();
   const index = randomInt(remaining.length);
   const [win] = remaining.splice(index, 1);
   await tx.put("multiplayerrooms", id, remaining.length ? {
     _id: id, players: [...saved?.players ?? [], userId], remaining,
-  } : { _id: id, players: [], remaining: [...Array<boolean>(10).fill(true), ...Array<boolean>(90).fill(false)] });
+  } : { _id: id, players: [], remaining: fresh() });
   return win;
 }
 

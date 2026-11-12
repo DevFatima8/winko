@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
 
-function render(path, props, enabled, dependencies = {}) {
+function render(path, props, enabled, dependencies = {}, exportName) {
   const jsx = (type, props) => ({ type, props });
   const module = { exports: {} };
   const code = ts.transpileModule(readFileSync(`src\\components\\${path}`, "utf8"), {
@@ -20,7 +20,7 @@ function render(path, props, enabled, dependencies = {}) {
     if (Object.hasOwn(dependencies, name)) return dependencies[name];
     throw new Error(`Unexpected import ${name}`);
   }, module, module.exports);
-  return (module.exports.default ?? module.exports.BetPanel)(props);
+  return (exportName ? module.exports[exportName] : module.exports.default ?? module.exports.BetPanel)(props);
 }
 
 function text(node) {
@@ -39,7 +39,8 @@ test("Ludo terminal win and loss both remain pending, with the authoritative wal
   for (const winner of [0, 1]) {
     const props = { deal: { winner, players: Array.from({ length: 4 }, (_, id) => ({ name: `Player ${id}`, avatar: "" })) }, balance: 900 };
     const legacy = text(render("ludo\\components\\ludo\\ResultOverlay.tsx", props, false, dependencies));
-    assert.match(legacy, winner === 0 ? /\bWIN\b/ : /No win/);
+    if (winner === 0) assert.match(legacy, /\bWIN\b/);
+    else assert.doesNotMatch(legacy, /No win|You lose|\bLOSE\b/i);
     assert.doesNotMatch(legacy, /-100/, "Loss amounts are not presented as result winnings");
     const pending = text(render("ludo\\components\\ludo\\ResultOverlay.tsx", props, true, dependencies));
     assert.match(pending, /DAILY PAYOUT PENDING/);
@@ -54,7 +55,8 @@ test("Crash Goal terminal panel separates claims from wallet winnings on both ou
   for (const cashedOutAt of [null, 2]) {
     const props = { amount: 50, autoTarget: 2, autoEnabled: false, placed: true, cashedOutAt, phase: "crashed", balance: 900 };
     const legacy = text(render("crash-goal\\BetPanel.tsx", props, false, dependencies));
-    assert.match(legacy, cashedOutAt ? /WON/ : /No win/);
+    if (cashedOutAt) assert.match(legacy, /WON/);
+    else assert.doesNotMatch(legacy, /No win|You lose|\bLOSE\b/i);
     if (!cashedOutAt) assert.doesNotMatch(legacy, /LOST|Lost|-50/, "A no-win result must not display the lost stake");
     const pending = text(render("crash-goal\\BetPanel.tsx", props, true, dependencies));
     assert.match(pending, /Daily payout pending/);
@@ -72,7 +74,8 @@ test("Birds/Beasts preserves the drawn animal but never announces a final pendin
     const props = { phase: "result", secondsLeft: 0, round: 1, activeSlot: 0, resultSlot: 0,
       result: { animal: "bird", payout, net: payout - 100, totalBet: 100 }, showStartBanner: false, coveredSlots: new Set() };
     const legacy = text(render("birds-beasts\\Wheel.tsx", props, false, dependencies));
-    assert.match(legacy, payout ? /WIN \+200/ : /No win/);
+    if (payout) assert.match(legacy, /WIN \+200/);
+    else assert.doesNotMatch(legacy, /No win|You lose|\bLOSE\b/i);
     if (!payout) assert.doesNotMatch(legacy, /LOSE|Lost|-100/, "A no-win result must not display the lost stake");
     const pending = text(render("birds-beasts\\Wheel.tsx", props, true, dependencies));
     assert.match(pending, /Daily payout pending/);
@@ -86,13 +89,13 @@ test("critical browser result surfaces guard legacy final-loss wording with pend
     ["hotline\\HotlineGame.tsx", /pool\.enabled \? "DAILY PAYOUT PENDING" : result\.won/],
     ["keno\\components\\keno\\KenoGame.tsx", /pool\.enabled \? "Daily payout pending" : result\.win/],
     ["head-tail\\HeadTailGame.tsx", /poolEnabled \? "DAILY PAYOUT PENDING" : lastRound\.win/],
-    ["three-cards\\Game.tsx", /setMessage\(pool\.enabled \? "Daily payout pending[^"]*" : "No win"\)/],
+    ["three-cards\\Game.tsx", /setMessage\(pool\.enabled \? "Daily payout pending[^"]*" : ""\)/],
     ["three-card-poker\\ThreeCardPoker.tsx", /setHeadline\(pool\.enabled \? "DAILY PAYOUT PENDING"/],
     ["thai-hi-lo\\hi-lo-game.tsx", /pool\.enabled \? "DAILY PAYOUT PENDING" : roundResult\.won/],
     ["teen-patti-hukam\\Game.tsx", /pool\.enabled \? \{ text: `Daily payout pending/],
     ["teen-patti-faceoff\\GameTable.tsx", /pool\.enabled \? "DAILY PAYOUT PENDING" : outcome\.net/],
-    ["rock-paper-scissors\\RockPaperScissorsGame.tsx", /poolPending \? "DAILY PAYOUT PENDING[^"]*" : "No win"/],
-    ["crash-bonus\\CrashGame.tsx", /showToast\(pool\.enabled \? "Daily payout pending/],
+    ["rock-paper-scissors\\RockPaperScissorsGame.tsx", /poolPending \? "DAILY PAYOUT PENDING[^"]*" : ""/],
+    ["crash-bonus\\CrashGame.tsx", /if \(pool\.enabled\) showToast\("Daily payout pending/],
     ["evo-casino\\EvoCasinoGame.tsx", /pool\.enabled \? `LAST[^`]*PROVISIONAL CLAIM[^`]*DAILY PAYOUT PENDING/],
   ];
   for (const [path, expected] of surfaces) assert.match(readFileSync(`src\\components\\${path}`, "utf8"), expected, path);
@@ -106,6 +109,36 @@ test("critical browser result surfaces guard legacy final-loss wording with pend
   assert.match(teenPatti, /pool\.start\(bet\)/, "The selected stake is charged without an added boot");
   assert.match(teenPatti, /claim: currentBet \* 2/);
   assert.match(teenPatti, /pool\.complete\(win \? currentBet \* 2 : 0\)/);
+});
+
+test("wheel history keeps payouts, successful results and pending claims without loss labels", () => {
+  const records = [
+    { id: "zero", bet: 50, multiplier: 0, payout: 0, profit: -50 },
+    { id: "win", bet: 50, multiplier: 2, payout: 100, profit: 50 },
+  ];
+  const dependencies = { "./lib/wheel": {
+    formatMoney: amount => `Rs. ${amount}`,
+    multiplierChipClass: () => "",
+    segmentLabel: multiplier => `${multiplier}x`,
+  } };
+  function nodes(node) {
+    if (node == null || typeof node !== "object") return [];
+    if (Array.isArray(node)) return node.flatMap(nodes);
+    return [node, ...nodes(node.props?.children)];
+  }
+  for (const enabled of [false, true]) {
+    const table = render("wheel-betting\\HistoryPanels.tsx", { records }, enabled, dependencies, "HistoryTable");
+    const strip = render("wheel-betting\\HistoryPanels.tsx", { records }, enabled, dependencies, "ResultStrip");
+    assert.doesNotMatch(text(table), /No win|You lose|\bLose\b/i);
+    assert.match(text(table), /Rs\. 50/);
+    assert.match(text(table), /Rs\. 0/);
+    assert.match(text(table), /Rs\. 100/);
+    assert.match(text(table), enabled ? /Daily payout pending/ : /\+Rs\. 50/);
+    const titles = nodes(strip).filter(node => "title" in node.props).map(node => node.props.title);
+    assert.equal(titles[0], enabled ? "Daily payout pending · provisional claim Rs. 0" : "");
+    assert.equal(titles[1], enabled ? "Daily payout pending · provisional claim Rs. 100" : "Won Rs. 50");
+  }
+  assert.equal(records[0].profit, -50);
 });
 
 test("card games with removed extra result panels retain shared lifecycle notifications", () => {

@@ -129,7 +129,7 @@ export default function EvoCasinoGame({ backHref = "/player" }: { backHref?: str
       setHistory((prev) => [number, ...prev].slice(0, 8));
       setBets([]);
       setPhase('result');
-      setNotice(stake === 0 ? `NUMBER ${number}` : pool.enabled ? `PROVISIONAL CLAIM ${money(win)} — daily settlement pending` : win > stake ? `YOU WON ${money(win - stake)}` : `NUMBER ${number} - NO WIN`);
+      setNotice(stake === 0 ? `NUMBER ${number}` : pool.enabled ? `PROVISIONAL CLAIM ${money(win)} — daily settlement pending` : win > stake ? `YOU WON ${money(win - stake)}` : `NUMBER ${number}`);
       timer.current = setTimeout(() => { setPhase('betting'); setNotice('PLACE YOUR BETS'); }, 2800);
     }, 4700);
   };

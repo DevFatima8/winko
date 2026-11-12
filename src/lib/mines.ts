@@ -7,6 +7,7 @@ import { dailyPoolEnabled } from "./dailyPoolConfig";
 import { acceptPoolMines, actPoolMines } from "./dailyPoolDedicated";
 import { DAILY_POOL_VERSION } from "./dailyPoolRules";
 import type { PoolFields } from "./dailyPool";
+import { isMysqlEnabled } from "./mysql";
 
 export const MIN_BET = 10, MAX_BET = Number.MAX_SAFE_INTEGER, MAX_WIN = Number.MAX_SAFE_INTEGER;
 export const RTP = 0.97; // Spribe Mines 97%
@@ -81,7 +82,7 @@ export async function start(userId: string, amount: number, mines: number) {
     }
   }
   const mineCells = cells.slice(0, mines).sort((a, b) => a - b);
-  if (dailyPoolEnabled()) return acceptPoolMines(userId, amount, mines, mineCells, pub);
+  if (isMysqlEnabled() || dailyPoolEnabled()) return acceptPoolMines(userId, amount, mines, mineCells, pub, dailyPoolEnabled());
   const upd = await User.updateOne({ _id: uid, balance: { $gte: amount } }, { $inc: { balance: -amount } });
   if (!upd.modifiedCount) return { error: "Insufficient balance." };
   const gid = await gameId();
@@ -92,6 +93,7 @@ export async function start(userId: string, amount: number, mines: number) {
 
 export async function reveal(userId: string, cell: number) {
   await dbConnect();
+  if (isMysqlEnabled()) return await actPoolMines(userId, "reveal", cell, multiplier, pub) ?? { error: "Koi active game nahi." };
   const g = await MinesGame.findOne({ userId: oid(userId), status: "active" });
   if (!g) return { error: "Koi active game nahi." };
   if ((g as PoolFields).poolVersion === DAILY_POOL_VERSION) return await actPoolMines(userId, "reveal", cell, multiplier, pub) ?? { error: "Koi active game nahi." };
@@ -120,6 +122,7 @@ export async function reveal(userId: string, cell: number) {
 
 export async function cashOut(userId: string) {
   await dbConnect();
+  if (isMysqlEnabled()) return await actPoolMines(userId, "cashout", 0, multiplier, pub) ?? { error: "Kam az kam ek gem kholen." };
   const active = await MinesGame.findOne({ userId: oid(userId), status: "active" }).lean();
   if ((active as PoolFields | null)?.poolVersion === DAILY_POOL_VERSION) return await actPoolMines(userId, "cashout", 0, multiplier, pub) ?? { error: "Koi active game nahi." };
   const g = await MinesGame.findOneAndUpdate({ userId: oid(userId), status: "active", "revealed.0": { $exists: true } }, { $set: { status: "cashed" } }, { returnDocument: "after" });

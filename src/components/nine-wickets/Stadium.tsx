@@ -253,7 +253,7 @@ export default function Stadium({
             }`}
           >
             <div className="text-[10px] font-bold tracking-[0.2em] opacity-90 sm:text-xs">
-              {result.win ? "YOU WON" : "No win"}
+              {result.win ? "YOU WON" : ""}
             </div>
             {result.win && (
               <div className="text-xl font-black sm:text-3xl">

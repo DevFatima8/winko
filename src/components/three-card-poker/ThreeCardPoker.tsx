@@ -183,7 +183,7 @@ export function ThreeCardPoker() {
         setSubMessage(pool.enabled ? `Provisional claim ${formatMoney(settled.returned)}; daily settlement pending` : `You won ${formatMoney(settled.profit)}`);
         playWin();
       } else if (settled.profit < 0) {
-        setSubMessage(pool.enabled ? `Daily payout pending — provisional claim ${formatMoney(settled.returned)}` : "No win");
+        setSubMessage(pool.enabled ? `Daily payout pending — provisional claim ${formatMoney(settled.returned)}` : "");
         playLose();
       } else {
         setSubMessage(pool.enabled ? `Daily payout pending — provisional claim ${formatMoney(settled.returned)}` : "Bets returned");

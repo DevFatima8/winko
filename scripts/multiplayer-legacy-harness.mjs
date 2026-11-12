@@ -136,6 +136,7 @@ export function createLegacyScene(userIds = ["alice", "bob"], { poolEnabled = fa
   return {
     get multiplayer() { return load("multiplayer").createMultiplayerService(store); },
     flight: load("aviator"), cards: load("cards"), pool: load("dailyPool"), poolRules: load("dailyPoolRules"), get chicken() { return load("dailyPoolChicken"); }, get browser() { return load("dailyPoolBrowser"); }, get poolService() { return load("dailyPoolService"); }, get slot() { return load("slot777"); }, get limbo() { return load("limbo"); }, get plinko() { return load("plinko"); }, store, data, changes,
+    get crashLanes() { return load("crashLane"); },
     get users() { return new Map(data.users.map((user) => [user._id, user])); },
     at(value) { now = value; },
     setPoolEnabled(value) { poolEnabled = value; },

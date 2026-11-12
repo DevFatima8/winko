@@ -197,7 +197,7 @@ export default function TeenPattiGame() {
       const headline =
         pool.enabled ? "DAILY PAYOUT PENDING — INDICATIVE GAME NET (NOT PAID)" : kind === "win" ? "YOU WIN"
           : kind === "push" ? "TIE — PUSH"
-            : "No win";
+            : "";
       setResult({
         kind,
         amount: net,

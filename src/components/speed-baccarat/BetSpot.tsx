@@ -105,7 +105,7 @@ export default function BetSpot({ meta, amount, disabled, queueable, size = "lg"
             state === "win" ? "text-[#8ff0b6]" : state === "lose" ? "text-[#ff9a94]" : state === "push" ? "text-white/50" : "text-transparent"
           }`}
         >
-          {state === "win" ? "won" : state === "lose" ? "No win" : state === "push" ? "push" : "·"}
+          {state === "win" ? "won" : state === "lose" ? "" : state === "push" ? "push" : "·"}
         </span>
       )}
     </div>

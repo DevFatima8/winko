@@ -70,7 +70,7 @@ export default function GameStudio({ backHref = "/player" }: { backHref?: string
     : {
       kind: stake > 0 && !poolMessage ? payout > stake ? "win" : "loss" : "wait",
       title: poolMessage ?? (stake <= 0 ? `LIVE RESULT · ${outcome?.finalSpot ?? "…"}`
-        : payout >= stake * 10 ? "MEGA WIN" : payout >= stake * 3 ? "BIG WIN" : payout > stake ? "WINNER" : payout > 0 ? "PUSH" : "No win"),
+        : payout >= stake * 10 ? "MEGA WIN" : payout >= stake * 3 ? "BIG WIN" : payout > stake ? "WINNER" : payout > 0 ? "PUSH" : ""),
       sub: `${outcome?.finalSpot ?? "…"} · Table ×${tableMultiplier} · Place bets for next round`,
       ...(stake > 0 && !poolMessage ? { amount: payout } : {}),
     };
@@ -80,7 +80,7 @@ export default function GameStudio({ backHref = "/player" }: { backHref?: string
   })) ?? [];
   const [stats, setStats] = useState<SessionStats>({ rounds: 0, wins: 0, wagered: 0, returned: 0 });
   const floaters: Array<{ id: number; text: string; tone: "win" | "loss" }> = phase === "settling" && stake > 0 && !poolMessage
-    ? [{ id: serverRound!.roundNo, text: payout > 0 ? `+${formatMoney(payout)}` : "No win", tone: payout > stake ? "win" : "loss" }] : [];
+    ? [{ id: serverRound!.roundNo, text: payout > 0 ? `+${formatMoney(payout)}` : "", tone: payout > stake ? "win" : "loss" }] : [];
   const confetti = phase === "settling" && payout > stake && stake > 0;
   const [muted, setMuted] = useState(false);
   const [autoSpin, setAutoSpin] = useState(false);

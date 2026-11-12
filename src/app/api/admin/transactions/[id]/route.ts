@@ -25,7 +25,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (!member) return NextResponse.json({ error: "Ye player aapki team mein nahi hai." }, { status: 403 });
     }
     const depositApproval = pending.type === "deposit" && decision === "approved"
-      ? await approveDeposit(String(pending._id), String(pending.userId), { adminNote: note, processedById: me.id, processedByName: me.name, accountName: account?.accountTitle ?? null })
+      ? await approveDeposit(String(pending._id), String(pending.userId), { adminNote: note, processedById: me.id, processedByName: me.name, accountName: account?.accountTitle ?? null }, me.dbRole)
       : null;
     const updated = pending.type === "deposit" && decision === "approved" ? null : await Transaction.updateOneAtomic(
       { _id: oid(id), status: "pending" },
@@ -36,7 +36,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     if (transaction.type === "deposit" && decision === "approved") {
       await recomputeVip(transaction.userId);
-      await payDepositCommission(transaction.userId, transaction.amount);
+      await payDepositCommission(transaction.userId, transaction.amount, me.dbRole);
     }
     if (transaction.type === "withdraw" && decision === "rejected") {
       await User.updateOneAtomic({ _id: transaction.userId }, { $inc: { balance: transaction.amount } });
@@ -45,7 +45,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const actionLabel = decision === "approved" ? "approved" : "rejected";
     const transactionLabel = transaction.type === "deposit" ? "Purchase/deposit" : "Withdrawal";
-    await notifyUser(String(transaction.userId), `${transactionLabel} ${actionLabel}`, `Your ${transactionLabel.toLowerCase()} of Rs. ${transaction.amount.toLocaleString()} has been ${actionLabel} by admin.${note ? ` Note: ${note}` : ""}`, decision === "approved" ? "success" : "warning", { href: "/player/wallet" });
+    await notifyUser(String(transaction.userId), `${transactionLabel} ${actionLabel}`, `Your ${transactionLabel.toLowerCase()} of Rs. ${transaction.amount.toLocaleString()} has been ${actionLabel} by admin.${note ? ` Note: ${note}` : ""}`, decision === "approved" ? "success" : "warning", { href: "/player/wallet", actorRole: me.dbRole });
     await AdminLog.create({ actorId: me.id, actorName: me.name, actorRole: me.dbRole, action: `${decision}_${transaction.type}`, target: String(transaction.userId), details: `Rs. ${transaction.amount}` });
     return NextResponse.json({ success: `${transactionLabel} ${actionLabel}.` });
   } catch (error) {

@@ -11,13 +11,13 @@ const GUEST_TTL_SECONDS = 60 * 60 * 24 * 365;
 
 async function clientIdentity() {
     const user = await getServerSessionUser();
-    if (user) return { userId: user.id, guestId: null, name: user.name, newGuestId: null as string | null };
+    if (user) return { userId: user.id, dbRole: user.dbRole, guestId: null, name: user.name, newGuestId: null as string | null };
 
     const cookieStore = await cookies();
     let guestId = cookieStore.get(GUEST_COOKIE)?.value;
     const newGuestId = guestId ? null : randomUUID();
     guestId ??= newGuestId!;
-    return { userId: null, guestId, name: "Guest", newGuestId };
+    return { userId: null, dbRole: null, guestId, name: "Guest", newGuestId };
 }
 
 export function setGuestCookie(response: Response, guestId: string | null) {
@@ -78,7 +78,7 @@ export async function sendClientSupportMessage(textRaw: string, name?: string) {
     const settings = await getSettings();
     const online = supportOnline(settings.support);
     await SupportThread.updateOne({ _id: thread._id }, { $set: { lastMessage: text, lastMessageAt: new Date(), status: "open" }, $inc: { unreadForAdmin: 1 } });
-    await notifyAdmins("New support message", `${authorName}: ${text.slice(0, 160)}`, "info", { href: "/admin/support" });
+    await notifyAdmins("New support message", `${authorName}: ${text.slice(0, 160)}`, "info", { href: "/admin/support", actorRole: identity.dbRole ?? undefined });
     const userMessageCount = await SupportMessage.countDocuments({ threadId: thread._id, from: "user" });
     if (userMessageCount === 1 && settings.support?.welcomeMessage) {
         await SupportMessage.create({ threadId: thread._id, from: "system", text: settings.support.welcomeMessage.replace("{name}", identity.name) });

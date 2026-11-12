@@ -166,7 +166,7 @@ export default function PokerGame() {
         if (round.playerWins) {
           setMsg(pool.enabled ? `Provisional claim Rs. ${won}; daily settlement pending` : `You win with ${HAND_NAMES[round.playerScore.category]}! +Rs. ${(bet * mult).toLocaleString()}`);
         } else {
-          setMsg(pool.enabled ? "Daily payout pending — provisional claim Rs. 0" : "No win");
+          setMsg(pool.enabled ? "Daily payout pending — provisional claim Rs. 0" : "");
         }
         setHistory((h) => [
           {
@@ -498,7 +498,7 @@ export default function PokerGame() {
                       {history.map((h) => (
                         <li key={h.id} className="flex items-center justify-between rounded-lg bg-black/40 px-3 py-2 text-xs">
                           <span className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${h.win ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"}`}>
-                            {h.win ? "WIN" : "No win"}
+                            {h.win ? "WIN" : ""}
                           </span>
                           <span className="text-white/70">{h.hand}</span>
                           <span className={`font-mono font-bold ${h.win ? "text-emerald-300" : "text-rose-300"}`}>
@@ -514,7 +514,7 @@ export default function PokerGame() {
           </div>
         </div>
       )}
-      <GameOverOverlay open={phase === "result" && bet > 0 && !!round && !endDismissed} winAmount={round?.playerWins ? payout : 0} result={pool.enabled ? "Daily payout pending. This hand records a provisional claim, not a wallet payment." : round?.playerWins ? "You won this hand." : "No win"} onPlayAgain={() => nextRound(false)} onClose={() => setEndDismissed(true)} />
+      <GameOverOverlay open={phase === "result" && bet > 0 && !!round && !endDismissed} winAmount={round?.playerWins ? payout : 0} result={pool.enabled ? "Daily payout pending. This hand records a provisional claim, not a wallet payment." : round?.playerWins ? "You won this hand." : ""} onPlayAgain={() => nextRound(false)} onClose={() => setEndDismissed(true)} />
     </div>
   );
 }

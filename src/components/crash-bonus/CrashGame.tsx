@@ -432,7 +432,7 @@ export default function CrashGame() {
         setMyRounds((r) =>
           [{ id, amount: b.amount, cashout: null, profit: -b.amount, crash: c }, ...r].slice(0, 50)
         );
-        showToast(pool.enabled ? "Daily payout pending — provisional claim Rs. 0" : "No win", false);
+        if (pool.enabled) showToast("Daily payout pending — provisional claim Rs. 0", false);
       }
       nextAtRef.current = performance.now() + CRASHED_MS;
     };
@@ -924,7 +924,7 @@ export default function CrashGame() {
                       className={`text-right font-bold ${r.profit >= 0 ? "text-emerald-400" : "text-rose-400"
                         }`}
                     >
-                      {r.profit >= 0 ? `+${money(r.profit)}` : "No win"}
+                      {r.profit >= 0 ? `+${money(r.profit)}` : ""}
                     </span>
                   </div>
                 ))}

@@ -38,14 +38,14 @@ export default function HomePage() {
   const [phase, setPhase] = useState<RacePhase>("idle");
   const [countdown, setCountdown] = useState(10);
   const [progress, setProgress] = useState(0);
-  const [plan, setPlan] = useState<RacePlan | null>(null);
+  const [plan, setPlan] = usePoolRoundState<RacePlan | null>("derby-race", "plan", null);
   const [lastResult, setLastResult] = useState<RaceResult | null>(null);
   const [history, setHistory] = useState<RaceResult[]>([]);
   const phaseRef = useRef<RacePhase>("idle");
   const roundRef = useRef(7);
-  const planRef = useRef<RacePlan | null>(null);
+  const planRef = useRef<RacePlan | null>(plan);
   const balanceRef = useRef(balance);
-  const [bet, setBet] = usePoolRoundState<{ horseId: number; amount: number } | null>("derby-race", "bet", null);
+  const [bet, setBet] = usePoolRoundState<{ horseId: number; amount: number; round?: number } | null>("derby-race", "bet", null);
   const betRef = useRef(bet);
   const queue = useRoundQueue<{ horseId: number; amount: number }>();
   const settledRace = useRef<string | null>(null);
@@ -67,7 +67,8 @@ export default function HomePage() {
     settledRace.current = racePlan.id;
     const result = settleRace(racePlan);
     if (betRef.current) {
-      if (!await pool.complete(result.payout)) { settledRace.current = null; return; }
+      pool.releaseBalance();
+      pool.announce();
       setHistory((current) => [result, ...current].slice(0, 5));
     }
     setLastResult(result);
@@ -85,13 +86,17 @@ export default function HomePage() {
       queue.setStatus("Bet rejected — invalid stake or insufficient balance");
       return;
     }
-    const next = makeRacePlan(wager.horseId, wager.amount, roundRef.current);
-    pool.plan(settleRace(next).payout, next);
-    pool.checkpoint({ bet: wager, plan: next });
-    if (!await pool.start(wager.amount)) return;
+    const selection = { horseId: wager.horseId, round: roundRef.current };
+    const acceptedWager = { ...wager, round: selection.round };
+    pool.checkpoint({ bet: acceptedWager });
+    if (!await pool.start(wager.amount, () => {}, selection)) return;
+    betRef.current = acceptedWager;
+    setBet(acceptedWager);
+    const outcome = await pool.resolveServer(selection, { holdBalance: true });
+    if (!outcome) { queue.setStatus("Waiting for server race confirmation"); return; }
+    const next = outcome as RacePlan;
+    pool.checkpoint({ bet: acceptedWager, plan: next });
     planRef.current = next;
-    betRef.current = wager;
-    setBet(wager);
     queue.setStatus("Bet accepted for this race");
   }, [queue.setStatus, setBalance]);
 
@@ -104,13 +109,26 @@ export default function HomePage() {
   useEffect(() => {
     if (phase === "idle") {
       let timer: ReturnType<typeof setTimeout>;
-      const startRace = () => {
+      let disposed = false;
+      const startRace = async () => {
+        if (disposed) return;
         if (pool.busy) {
           queue.setStatus("Waiting for wallet confirmation");
           timer = setTimeout(startRace, 200);
           return;
         }
         const wager = betRef.current;
+        if (wager && !planRef.current) {
+          const outcome = await pool.resolveServer({ horseId: wager.horseId, round: wager.round ?? roundRef.current }, { holdBalance: true });
+          if (disposed) return;
+          if (!outcome) {
+            queue.setStatus("Waiting for server race confirmation");
+            timer = setTimeout(startRace, 1000);
+            return;
+          }
+          planRef.current = outcome as RacePlan;
+          pool.checkpoint({ bet: wager, plan: planRef.current });
+        }
         // Spectator plans use the existing race engine with zero financial stake.
         const horseId = wager?.horseId ?? HORSES[Math.floor(Math.random() * HORSES.length)].id;
         const next = planRef.current ?? makeRacePlan(horseId, wager?.amount ?? 0, roundRef.current);
@@ -123,7 +141,7 @@ export default function HomePage() {
       const ticks = Array.from({ length: 9 }, (_, i) =>
         setTimeout(() => setCountdown(9 - i), (i + 1) * 1000));
       timer = setTimeout(startRace, 10000);
-      return () => { clearTimeout(timer); ticks.forEach(clearTimeout); };
+      return () => { disposed = true; clearTimeout(timer); ticks.forEach(clearTimeout); };
     }
     if (phase === "racing") {
       const timer = window.setTimeout(() => {

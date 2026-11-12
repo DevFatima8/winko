@@ -543,7 +543,7 @@ export default function MonsterHiloGame() {
                   Revealing card...
                 </span>
               ) : lastResult === "loss" ? (
-                <span className="text-rose-400">No win</span>
+                <span className="text-rose-400">{""}</span>
               ) : phase === "cashed" ? (
                 <span className="text-[#b9f757]">
                   Nice cash out! Collected Rs. {cashoutValue.toLocaleString()}.
@@ -598,7 +598,7 @@ export default function MonsterHiloGame() {
           {showOver && (phase === "lost" || phase === "cashed") && (
             <GameOverOverlay open
               winAmount={phase === "cashed" ? cashoutValue : 0}
-              result={pool.enabled ? `Daily payout pending — provisional claim Rs. ${(phase === "cashed" ? cashoutValue : 0).toLocaleString()}` : phase === "cashed" ? `You won Rs. ${cashoutValue.toLocaleString()}` : "You lose"}
+              result={pool.enabled ? `Daily payout pending — provisional claim Rs. ${(phase === "cashed" ? cashoutValue : 0).toLocaleString()}` : phase === "cashed" ? `You won Rs. ${cashoutValue.toLocaleString()}` : ""}
               onClose={() => setShowOver(false)} onPlayAgain={startGame} />
           )}
 
@@ -683,7 +683,7 @@ export default function MonsterHiloGame() {
                     className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${h.result === "Win" ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
                       }`}
                   >
-                    {h.result === "Win" ? "Win" : "No win"}
+                    {h.result === "Win" ? "Win" : ""}
                   </span>
                 </div>
                 <div className="flex items-center gap-4">
@@ -691,7 +691,7 @@ export default function MonsterHiloGame() {
                     {h.multiplier > 0 ? `${h.multiplier.toFixed(2)}Ã—` : "â€”"}
                   </span>
                   <span className={h.result === "Win" ? "text-emerald-400 font-black" : "text-rose-400 font-black"}>
-                    {h.result === "Win" ? `+Rs. ${h.amount.toLocaleString()}` : "No win"}
+                    {h.result === "Win" ? `+Rs. ${h.amount.toLocaleString()}` : ""}
                   </span>
                 </div>
               </div>

@@ -1,11 +1,14 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import type { NextResponse } from "next/server";
-import { DeviceSession, User, WinHold } from "@/models";
+import { DeviceSession, Notification, User, WinHold } from "@/models";
 import { claimWinHolds } from "./winHold";
 import { dbConnect } from "./mongo";
 import { toCurrentUser, type CurrentUser } from "./auth";
 import { getPlayerDisplayId } from "./playerDisplayId";
+import { mysqlMultiplayerStore } from "./multiplayer-store";
+import { isMysqlEnabled } from "./mysql";
+import { activeDeviceSessions, DEVICE_SESSION_TTL_MS, recordDeviceLogin } from "./deviceSessions";
 
 const COOKIE_NAME = "wx_auth";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
@@ -20,7 +23,16 @@ function signature(payload: string) {
     return createHmac("sha256", sessionSecret()).update(payload).digest("base64url");
 }
 
-export function setAuthCookie(response: NextResponse, userId: string, sessionId: string) {
+function browserDeviceId(request: Request | undefined, fallback: string) {
+    const token = request?.headers.get("cookie")?.split(";").map(value => value.trim()).find(value => value.startsWith("wx_device="))?.slice("wx_device=".length);
+    if (!token) return fallback;
+    const [id, supplied] = token.split(".");
+    if (!/^[a-f0-9-]{36}$/i.test(id ?? "") || !supplied) return fallback;
+    const expected = Buffer.from(signature(`device:${id}`)), actual = Buffer.from(supplied);
+    return expected.length === actual.length && timingSafeEqual(expected, actual) ? id : fallback;
+}
+
+export function setAuthCookie(response: NextResponse, userId: string, sessionId: string, request?: Request) {
     const payload = Buffer.from(JSON.stringify({ sub: userId, sid: sessionId, exp: Date.now() + SESSION_TTL_SECONDS * 1000 })).toString("base64url");
     response.cookies.set(COOKIE_NAME, `${payload}.${signature(payload)}`, {
         httpOnly: true,
@@ -28,6 +40,10 @@ export function setAuthCookie(response: NextResponse, userId: string, sessionId:
         sameSite: "lax",
         path: "/",
         maxAge: SESSION_TTL_SECONDS,
+    });
+    const deviceId = browserDeviceId(request, sessionId);
+    response.cookies.set("wx_device", `${deviceId}.${signature(`device:${deviceId}`)}`, {
+        httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 365 * 24 * 60 * 60,
     });
     return response;
 }
@@ -70,17 +86,32 @@ function deviceName(userAgent: string) {
 }
 
 export async function createDeviceSession(userId: string, request: Request, ip: string | null) {
+    sessionSecret();
     const sessionId = randomUUID();
     const userAgent = (request.headers.get("user-agent") ?? "").slice(0, 500);
-    await DeviceSession.create({
+    const input = {
         userId,
         sessionId,
+        deviceId: browserDeviceId(request, sessionId),
         deviceName: deviceName(userAgent),
         userAgent,
         ip,
-        lastSeenAt: new Date(),
-        revokedAt: null,
-    });
+    };
+    if (isMysqlEnabled()) {
+        await mysqlMultiplayerStore.transact(`security:login:${userId}`, tx => recordDeviceLogin(tx, input));
+    } else {
+        const [user, previous] = await Promise.all([User.findById(userId).lean(), DeviceSession.findOne({ userId, deviceId: input.deviceId }).lean()]);
+        if (!user || user.isActive === false) throw new Error("Active account required for device login.");
+        const device = await DeviceSession.create({ ...input, lastSeenAt: new Date(), expiresAt: new Date(Date.now() + DEVICE_SESSION_TTL_MS), revokedAt: null });
+        if (user?.role === "admin" && !previous) {
+            try {
+                await Notification.create({ title: "Security alert: Super Admin new device login", body: `${user.name} signed in on ${input.deviceName}${ip ? ` | IP ${ip}` : ""}.`, type: "warning", audience: "owners", href: "/admin/devices" });
+            } catch (error) {
+                await DeviceSession.deleteOne({ _id: device._id });
+                throw error;
+            }
+        }
+    }
     return sessionId;
 }
 
@@ -102,7 +133,10 @@ export async function getServerSessionUser(): Promise<CurrentUser | null> {
     const session = readSession((await cookies()).get(COOKIE_NAME)?.value);
     if (!session) return null;
     await dbConnect();
-    if (session.sessionId && !await DeviceSession.findOne({ userId: session.userId, sessionId: session.sessionId, revokedAt: null }, "_id").lean()) return null;
+    if (session.sessionId) {
+        const device = await DeviceSession.findOne({ userId: session.userId, sessionId: session.sessionId, revokedAt: null }).lean();
+        if (!device || !activeDeviceSessions([device], Date.now()).length) return null;
+    }
     let user = await User.findById(session.userId).lean();
     if (!user || user.isActive === false) return null;
     if ((user.role === "client" || user.role === "agent") && await WinHold.findOne({ userId: session.userId, claimed: false }, "_id").lean()) {

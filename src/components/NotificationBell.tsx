@@ -110,7 +110,7 @@ export function NotificationBell({ loggedIn }: { loggedIn: boolean }) {
         </div>
       )}
       {toast && (
-        <button type="button" className="fixed inset-x-3 top-16 z-[70] mx-auto max-w-sm animate-[pop_.3s_ease-out] rounded-2xl border border-[#ffb800]/50 bg-[#1b1038] p-3 text-left shadow-2xl md:right-6 md:left-auto" onClick={() => { if (toast.href) window.location.assign(toast.href); else setToast(null); }}>
+        <button type="button" role={toast.type === "warning" ? "alert" : undefined} className="fixed inset-x-3 top-16 z-[70] mx-auto max-w-sm animate-[pop_.3s_ease-out] rounded-2xl border border-[#ffb800]/50 bg-[#1b1038] p-3 text-left shadow-2xl md:right-6 md:left-auto" onClick={() => { if (toast.href) window.location.assign(toast.href); else setToast(null); }}>
           <div className="flex gap-3"><span className="text-[#ffb800]">{icon(toast.type)}</span><div><div className="text-sm font-black text-white">{toast.title}</div><div className="text-xs text-[#e9ddff]">{toast.body}</div></div></div>
           <style>{`@keyframes pop{0%{transform:translateY(-10px);opacity:0}100%{transform:translateY(0);opacity:1}}`}</style>
         </button>

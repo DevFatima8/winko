@@ -316,7 +316,7 @@ export default function FootballStudioGame({ backHref = "/player" }: { backHref?
               </div>
               {roundNet !== null && (
                 <div className={`text-[10px] sm:text-xs font-bold leading-tight ${betWon ? "text-emerald-100" : outcome === "DRAW" ? "text-red-800" : "text-red-100"}`}>
-                  {betWon ? `🎉 Won Rs. ${fmt(roundNet)}` : roundNet < 0 ? "No win" : `Rs. ${fmt(Math.abs(roundNet))}`}
+                  {betWon ? `🎉 Won Rs. ${fmt(roundNet)}` : roundNet < 0 ? "" : `Rs. ${fmt(Math.abs(roundNet))}`}
                 </div>
               )}
             </div>

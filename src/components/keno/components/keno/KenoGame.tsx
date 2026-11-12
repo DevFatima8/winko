@@ -464,7 +464,7 @@ export default function KenoGame() {
                     <span>{formatMultiplier(result.multiplier)}</span>
                     <span className="opacity-60">•</span>
                     <span>
-                      {result.profit >= 0 ? `+Rs. ${formatMoney(result.profit)}` : "No win"}
+                      {result.profit >= 0 ? `+Rs. ${formatMoney(result.profit)}` : ""}
                     </span>
                   </div>
                 ) : !busy ? (
@@ -561,8 +561,8 @@ export default function KenoGame() {
               {resultOpen && result && !busy && !autoRunning ? (
                 <GameOverOverlay open
                   winAmount={result.win ? Math.max(0, result.profit) : 0}
-                  title={pool.enabled ? "Round complete" : result.win ? "Congratulations! You win" : "You lose"}
-                  result={`${result.hits}/${picks} hits · ${formatMultiplier(result.multiplier)} · ${pool.enabled ? `Daily payout pending · Claim Rs. ${formatMoney(result.payout)}` : result.profit >= 0 ? `+Rs. ${formatMoney(result.profit)}` : "You lose"}`}
+                  title={pool.enabled ? "Round complete" : result.win ? "Congratulations! You win" : ""}
+                  result={`${result.hits}/${picks} hits · ${formatMultiplier(result.multiplier)} · ${pool.enabled ? `Daily payout pending · Claim Rs. ${formatMoney(result.payout)}` : result.profit >= 0 ? `+Rs. ${formatMoney(result.profit)}` : ""}`}
                   onClose={() => setResultOpen(false)} />
               ) : null}
 
@@ -602,7 +602,7 @@ export default function KenoGame() {
                 history.slice(0, 16).map((entry) => (
                   <span
                     key={entry.id}
-                    title={`${entry.hits}/${entry.picks} hits • ${entry.risk} • ${entry.win ? "Win" : "No win"
+                    title={`${entry.hits}/${entry.picks} hits • ${entry.risk} • ${entry.win ? "Win" : ""
                       }`}
                     className={cn(
                       "keno-chip-in flex h-7 min-w-9 items-center justify-center rounded-full px-2 font-mono text-[10px] font-bold tabular-nums",
@@ -626,7 +626,7 @@ export default function KenoGame() {
               />
               <Stat
                 label={pool.enabled ? "Game net (not paid)" : "Profit"}
-                value={stats.profit >= 0 ? `+Rs. ${formatMoney(stats.profit)}` : "No win"}
+                value={stats.profit >= 0 ? `+Rs. ${formatMoney(stats.profit)}` : ""}
                 tone={stats.profit > 0 ? "win" : stats.profit < 0 ? "lose" : "flat"}
               />
             </div>
@@ -645,7 +645,7 @@ export default function KenoGame() {
                 autoProgress.profit >= 0 ? "text-[#00e701]" : "text-[#ff6b6b]",
               )}
             >
-              {autoProgress.profit >= 0 ? `${pool.enabled ? "Game net (not paid): " : ""}+Rs. ${formatMoney(autoProgress.profit)}` : "No win"}
+              {autoProgress.profit >= 0 ? `${pool.enabled ? "Game net (not paid): " : ""}+Rs. ${formatMoney(autoProgress.profit)}` : ""}
             </span>
           </div>
         ) : null}

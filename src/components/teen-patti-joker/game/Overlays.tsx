@@ -120,7 +120,7 @@ export function ResultBanner({ result }: { result: ResultInfo | null }) {
                 result.kind === "win" ? "text-amber-200" : result.kind === "push" ? "text-slate-300" : "text-rose-300/90"
               }`}
             >
-              {result.amount < 0 ? "No win" : `+Rs. ${formatChips(result.amount)}`}
+              {result.amount < 0 ? "" : `+Rs. ${formatChips(result.amount)}`}
             </div>
             <div className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/50 md:text-xs">
               {result.detail}

@@ -555,7 +555,7 @@ export function ChickenRoadGame({ backHref = "/player" }: { backHref?: string })
           lane: target, y: -120, type: pick(CAR_TYPES), hit: false, done: () => {
             playGameSound("crash"); speakGameVoice("chickenCrash");
             v.status = "dead"; setPhase("idle"); setBusyBoth(false);
-            setMsg({ t: "err", m: g.poolPending ? "Round ended — daily pool payout pending" : "No win" }); refresh();
+            setMsg({ t: "err", m: g.poolPending ? "Round ended — daily pool payout pending" : "" }); refresh();
             window.dispatchEvent(new CustomEvent("wx:game-result", { detail: { game: "Chicken Road 2", bet: g.bet, win: 0, won: false, poolPending: g.poolPending, poolClaim: 0 } }));
           }
         };
@@ -658,7 +658,7 @@ export function ChickenRoadGame({ backHref = "/player" }: { backHref?: string })
       <div ref={wrapRef} className="relative flex-1 min-h-0 w-full flex items-center justify-center overflow-hidden bg-[#0d1017]">
         <canvas ref={canvasRef} onClick={onCanvasClick} className={`block w-full ${phase === "active" && !busy ? "cursor-pointer" : ""}`} />
         {!st && <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-white">Loading…</div>}
-        {msg && (
+        {msg?.m && (
           <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-3 z-10">
             <div className={`rounded-xl px-4 py-1.5 text-center text-xs sm:text-sm font-bold shadow-lg ${msg.t === "ok" ? "bg-emerald-500 text-slate-950" : "bg-red-600 text-white"}`}>{msg.m}</div>
           </div>

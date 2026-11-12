@@ -167,7 +167,7 @@ export function showdown(s: GameState): GameState {
       ? `Tie! The pot of Rs. ${fmt(amount)} is split — both hold ${describeScore(playerScore)}.`
       : winner === 'player'
         ? `You win Rs. ${fmt(amount)}! ${playerDesc} beats ${dealerDesc}.`
-        : "No win";
+        : "";
   return {
     ...s,
     phase: 'handOver',
@@ -195,7 +195,7 @@ export function settleRound(s: GameState): GameState {
     const msg =
       winner === 'player'
         ? `House folds — you win Rs. ${fmt(amount)}!`
-        : "No win";
+        : "";
     return {
       ...s,
       phase: 'handOver',

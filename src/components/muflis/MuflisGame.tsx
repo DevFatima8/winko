@@ -138,8 +138,8 @@ export default function MuflisGame({ backHref = "/player" }: { backHref?: string
         gameSfx.lose();
         setLastWin(0);
         setLosses((l) => l + 1);
-        setMessage(pool.enabled ? "Daily payout pending — provisional claim Rs. 0" : "No win");
-        setFloatText({ text: pool.enabled ? "Provisional claim Rs. 0" : "No win", win: false });
+        setMessage(pool.enabled ? "Daily payout pending — provisional claim Rs. 0" : "");
+        setFloatText({ text: pool.enabled ? "Provisional claim Rs. 0" : "", win: false });
       }
     }, 5000);
     timers.current.push(t1);
@@ -305,7 +305,7 @@ export default function MuflisGame({ backHref = "/player" }: { backHref?: string
           </section>
         </div>
       </main>
-      <GameOverOverlay open={phase === "revealed" && bet > 0 && !!result && !endDismissed} winAmount={result?.playerWins ? lastWin : 0} result={pool.enabled ? "Daily payout pending. This hand records a provisional claim, not a wallet payment." : result?.playerWins ? "You won this hand." : "No win"} onPlayAgain={nextRound} onClose={() => setEndDismissed(true)} />
+      <GameOverOverlay open={phase === "revealed" && bet > 0 && !!result && !endDismissed} winAmount={result?.playerWins ? lastWin : 0} result={pool.enabled ? "Daily payout pending. This hand records a provisional claim, not a wallet payment." : result?.playerWins ? "You won this hand." : ""} onPlayAgain={nextRound} onClose={() => setEndDismissed(true)} />
     </div>
   );
 }

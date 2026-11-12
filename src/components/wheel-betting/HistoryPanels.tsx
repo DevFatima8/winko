@@ -30,7 +30,7 @@ export function ResultStrip({ records }: { records: BetRecord[] }) {
                 r.multiplier,
               )}`}
               style={{ fontFamily: "var(--font-num)" }}
-              title={poolEnabled ? `Daily payout pending · provisional claim ${formatMoney(r.payout)}` : r.profit > 0 ? `Won ${formatMoney(r.profit)}` : "No win"}
+              title={poolEnabled ? `Daily payout pending · provisional claim ${formatMoney(r.payout)}` : r.profit > 0 ? `Won ${formatMoney(r.profit)}` : ""}
             >
               {segmentLabel(r.multiplier)}
             </div>
@@ -90,7 +90,7 @@ export function HistoryTable({ records }: { records: BetRecord[] }) {
                   }`}
                   style={{ fontFamily: "var(--font-num)" }}
                 >
-                  {poolEnabled ? "Daily payout pending" : r.profit > 0 ? `+${formatMoney(r.profit)}` : "No win"}
+                  {poolEnabled ? "Daily payout pending" : r.profit > 0 ? `+${formatMoney(r.profit)}` : ""}
                 </td>
               </tr>
             ))}

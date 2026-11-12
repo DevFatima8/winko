@@ -3,6 +3,20 @@ import { isWinOutcome } from "./outcomes";
 
 const unit = () => randomInt(0, 2 ** 47) / 2 ** 47;
 
+/** Sample the saved crash point from the game's survival curve, independently of the player. */
+export function sampleCrashLane(survival: readonly number[]): number {
+  if (survival.length < 2 || survival[0] !== 1 ||
+      survival.some((value, index) => !Number.isFinite(value) || value < 0 || value > 1 ||
+        index > 0 && value > survival[index - 1])) {
+    throw new Error("Invalid crash survival curve.");
+  }
+  const roll = unit();
+  for (let lane = 1; lane < survival.length; lane++) {
+    if (roll >= survival[lane]) return lane;
+  }
+  return survival.length;
+}
+
 function pickWeighted(entries: [lane: number, weight: number][], fallback: number) {
   const total = entries.reduce((s, [, w]) => s + Math.max(0, w), 0);
   if (!(total > 0)) return fallback;

@@ -279,7 +279,7 @@ export default function SicBoGame() {
                   </div>
                   <div className={`roll-announcement${lastResult && phase === "result" ? lastResult.win ? " announcement-win" : " announcement-loss" : ""}`} aria-live="polite">
                     {phase === "rolling" ? <><span className="announcement-dot" /> THE DICE ARE ROLLING</> : lastResult && phase === "result" ? lastResult.win ? <>LUCK IS ON YOUR SIDE <span>+Rs. {formatCoins(lastResult.profit)}</span></>
- : <>No win</> : <>PLACE YOUR BETS <span>·</span> TRUST YOUR INSTINCT</>}
+ : <>{""}</> : <>PLACE YOUR BETS <span>·</span> TRUST YOUR INSTINCT</>}
                   </div>
 
                   <div className="board-section-heading"><span>CHOOSE YOUR OUTCOME</span><span className="board-section-note">SELECT ONE BETTING AREA</span></div>
@@ -353,7 +353,7 @@ export default function SicBoGame() {
               {lastResult && phase === "result" && (
                 <div className={`result-summary${lastResult.win ? " summary-win" : " summary-loss"}`}>
                   <span className="result-summary-icon">{lastResult.win ? "✓" : "×"}</span>
-                  <span><strong>{lastResult.win ? "YOU WON" : "No win"}</strong><small>{lastResult.market} · {formatCoins(lastResult.stake)} stake</small></span>
+                  <span><strong>{lastResult.win ? "YOU WON" : ""}</strong><small>{lastResult.market} · {formatCoins(lastResult.stake)} stake</small></span>
                   {lastResult.win && <b>+{formatCoins(lastResult.profit)}</b>}
                 </div>
               )}
@@ -403,7 +403,7 @@ export default function SicBoGame() {
                 {history.slice(0, 5).map((item) => <div className="history-row" key={`${item.round}-${item.market}`}>
                   <span className="history-result-icon">{item.win ? "✓" : "×"}</span>
                   <span className="history-detail"><strong>Round {String(item.round).padStart(4, "0")}</strong><small>{item.market} · {item.dice.join("–")}</small></span>
-                  <span className={`history-profit${item.win ? " profit-win" : " profit-loss"}`}>{item.win ? `+${formatCoins(item.profit)}` : "No win"}</span>
+                  <span className={`history-profit${item.win ? " profit-win" : " profit-loss"}`}>{item.win ? `+${formatCoins(item.profit)}` : ""}</span>
                 </div>)}
               </div> : <div className="history-empty"><span className="history-empty-icon">◷</span><strong>No rounds yet</strong><small>Your settled bets will appear here.</small></div>}
               <div className="history-footer"><span>SESSION HISTORY</span><button type="button" onClick={resetSession} disabled={phase === "rolling"}>REFRESH LIVE TABLE <span>↗</span></button></div>

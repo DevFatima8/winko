@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------
 //  Fishing Arcade – game configuration
-//  Rs. balance. No database.
+//  Rs. balance with server-assigned winning opportunities.
 // ---------------------------------------------------------------
 
 import { BET_PRESETS } from "@/lib/betPresets";
@@ -8,8 +8,8 @@ import { BET_PRESETS } from "@/lib/betPresets";
 export const W = 1280;
 export const H = 720;
 
-export const WIN_RATE = 0.35;
-export const LOSS_RATE = 0.63;
+export const WIN_RATE = 0.3;
+export const LOSS_RATE = 0.68;
 export const PLATFORM_RATE = 0.02;
 
 export const START_BALANCE = 10000;

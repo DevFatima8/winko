@@ -297,7 +297,7 @@ export default function HomePage() {
             </div>
             <div className="panel-divider"><span>RECENT SPINS</span></div>
             <div className="history-row" aria-label="Recent spin results">
-              {history.map((item, index) => <span key={`${item}-${index}`} className={`history-chip history-chip--${item}`} title={item === "loss" ? "No win" : item}>{item === "huge" ? "✦" : item === "win" ? "✓" : "×"}</span>)}
+              {history.map((item, index) => <span key={`${item}-${index}`} className={`history-chip history-chip--${item}`} title={item === "loss" ? "" : item}>{item === "huge" ? "✦" : item === "win" ? "✓" : "×"}</span>)}
               <span className="history-caption">last {history.length}</span>
             </div>
             <div className="panel-divider"><span>PAYTABLE</span></div>

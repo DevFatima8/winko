@@ -435,7 +435,7 @@ export default function AutoRoulette({ backHref }: { backHref?: string }) {
                   }`}
                 >
                   <span className={`text-lg tracking-widest ${won ? "text-amber-300" : "text-red-300"}`}>
-                    {won ? "YOU WIN!" : lost ? "No win" : "PUSH"}
+                    {won ? "YOU WIN!" : lost ? "" : "PUSH"}
                   </span>
                   <span className={`text-xl tabular-nums ${won ? "text-emerald-300" : "text-red-300"}`}>
                     {won ? `+Rs. ${fmtMoney(roundNet)}` : lost ? "" : `Rs. ${fmtMoney(Math.abs(roundNet))}`}

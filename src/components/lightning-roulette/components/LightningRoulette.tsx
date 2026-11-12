@@ -372,7 +372,7 @@ export default function LightningRoulette() {
         {phase === "result" && resultOpen && roundWin !== null && (
           <GameOverOverlay key={live.state?.round.roundNo} open
             winAmount={roundWin > 0 ? roundWin : 0}
-            title={roundWin > 0 ? "Congratulations! You win" : "You lose"}
+            title={roundWin > 0 ? "Congratulations! You win" : ""}
             result={`${roundWin > 0 ? `YOU WIN ${fmt(roundWin)}` : ""}${result !== null ? ` · Number ${result} ${colorOf(result).toUpperCase()}` : ""}`}
             onClose={() => setResultOpen(false)} onPlayAgain={playAgain} />
         )}

@@ -55,7 +55,7 @@ export function HistoryRail({ history }: { history: HistoryEntry[] }) {
                 <span className="ml-auto text-[11px] font-bold tabular-nums">
                   <span className="text-violet-200/50">bet {formatMoney(entry.stake)}</span>
                   <span className={won ? "ml-2 text-emerald-300" : "ml-2 text-rose-300/80"}>
-                    {won ? `+${formatMoney(entry.payout - entry.stake)}` : "No win"}
+                    {won ? `+${formatMoney(entry.payout - entry.stake)}` : ""}
                   </span>
                 </span>
               </div>
@@ -82,7 +82,7 @@ export function StatsPanel({ stats }: { stats: SessionStats }) {
         <Stat label="Wagered" value={formatMoney(stats.wagered)} />
         <Stat
           label="Result"
-          value={net > 0 ? `+${formatMoney(net)}` : "No win"}
+          value={net > 0 ? `+${formatMoney(net)}` : ""}
           tone={net >= 0 ? "good" : "bad"}
         />
       </div>

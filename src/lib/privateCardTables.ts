@@ -6,28 +6,29 @@ import { nextPlayerWin } from "./playerWinCycle";
 
 export class PrivateCardError extends Error {}
 export const isPrivateCardTable = (game: string) =>
-  game === "baccarat" || game === "speed-baccarat" || game === "32-cards";
+  game === "baccarat" || game === "speed-baccarat" || game === "32-cards" || game === "football-studio" || game === "dream-catcher";
 export type PrivateCardPrize = "win" | "even" | "odd" | null;
 type ParityCycle = { _id: string; players: string[]; remaining: ("even" | "odd" | null)[] };
 
 export async function privateCardPrize(
   tx: MultiplayerTransaction, game: MultiplayerGame, userId: string, option: string,
 ): Promise<PrivateCardPrize> {
+  if (game === "dream-catcher" && option.endsWith("x")) throw new PrivateCardError("Choose a numbered Dream Catcher spot; multiplier segments are not payable betting spots.");
   if (game !== "32-cards") return await nextPlayerWin(tx, game, userId) ? "win" : null;
-  const id = "32-cards:private-parity-cycle:v1";
-  const fresh = (): ParityCycle["remaining"] => [...Array<"even">(8).fill("even"), "odd", "odd", ...Array<null>(90).fill(null)];
+  const id = "32-cards:private-parity-rounds-30:v3";
+  const fresh = (): ParityCycle["remaining"] => [
+    ...Array<"even">(24).fill("even"), ...Array<"odd">(6).fill("odd"), ...Array<null>(70).fill(null),
+  ];
   const saved = await tx.get<ParityCycle>("multiplayerrooms", id);
   if (saved && (!Array.isArray(saved.players) || !Array.isArray(saved.remaining) ||
       saved.players.length + saved.remaining.length !== 100 || !saved.remaining.length ||
       saved.players.some(player => typeof player !== "string" || !player) ||
-      new Set(saved.players).size !== saved.players.length ||
       saved.remaining.some(slot => slot !== null && slot !== "even" && slot !== "odd") ||
-      saved.remaining.filter(slot => slot === "even").length > 8 ||
-      saved.remaining.filter(slot => slot === "odd").length > 2 ||
-      saved.remaining.filter(slot => slot === null).length > 90)) {
+      saved.remaining.filter(slot => slot === "even").length > 24 ||
+      saved.remaining.filter(slot => slot === "odd").length > 6 ||
+      saved.remaining.filter(slot => slot === null).length > 70)) {
     throw new Error("32 Cards parity cycle is invalid. Contact support.");
   }
-  if (saved?.players.includes(userId)) return null;
   const remaining = [...saved?.remaining ?? fresh()];
   const eligible = remaining.map((slot, index) => ({ slot, index })).filter(({ slot }) =>
     slot === null || option !== "ODD" && option !== "EVEN" || slot === option.toLowerCase());
@@ -56,5 +57,6 @@ export function privateCardOutcome(game: MultiplayerGame, option: string, prize:
 }
 
 export function privateCardGross(game: MultiplayerGame, option: string, stake: number, outcome: MultiplayerOutcome) {
+  if (game === "football-studio" || game === "dream-catcher") return grossPayout(game, option, stake, outcome);
   return Math.min(grossPayout(game, option, stake, outcome), Math.round(stake * 200) / 100);
 }

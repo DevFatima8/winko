@@ -13,6 +13,37 @@ const make = (game, users = players) => {
 const bet = (roundNo, option, amount = 100) => ({ action: "bet", requestId: randomUUID(), roundNo, option, amount });
 const total = cards => cards.reduce((sum, card) => sum + card.value, 0) % 10;
 
+for (const [game, option] of [["baccarat", "player"], ["32-cards", "A"], ["football-studio", "HOME"], ["dream-catcher", "1"]]) {
+  test(`${game}: 100 rounds by one player produce 30 paid winners; extra chips and replays do not draw again`, async () => {
+    const s = make(game, ["alice"]);
+    s.users.get("alice").balance = 100000;
+    let wins = 0;
+    for (let round = 0; round < 100; round++) {
+      const start = await s.multiplayer.read(game, "alice");
+      assert.equal(start.tableMode, "personal");
+      const request = bet(start.round.roundNo, option, 10);
+      await s.multiplayer.act(game, "alice", request);
+      await s.multiplayer.act(game, "alice", request);
+      await s.multiplayer.act(game, "alice", bet(start.round.roundNo, option, 10));
+      s.at(start.round.resultAt);
+      const done = await s.multiplayer.read(game, "alice");
+      const payout = done.myBets.reduce((sum, row) => sum + row.payout, 0);
+      assert.ok(payout === 0 || payout > 20);
+      if (game === "dream-catcher" && payout > 0) {
+        const gross = 20 * (Number(option) + 1) * done.round.result.totalMultiplier;
+        assert.equal(payout, Math.floor(gross * 0.98 * 100 + 1e-8) / 100);
+      }
+      wins += Number(payout > 20);
+      const balance = s.users.get("alice").balance;
+      await s.multiplayer.read(game, "alice");
+      assert.equal(s.users.get("alice").balance, balance);
+      s.at(done.round.endsAt);
+    }
+    assert.equal(wins, 30);
+    assert.equal(s.data.dailypoolentries.length, 0);
+  });
+}
+
 for (const [game, option] of [["baccarat", "tie"], ["speed-baccarat", "playerPair"], ["32-cards", "A"]]) {
   test(`${game}: a request crossing the betting deadline never reserves the following round`, async () => {
     const s = make(game, ["alice"]);
@@ -22,7 +53,7 @@ for (const [game, option] of [["baccarat", "tie"], ["speed-baccarat", "playerPai
     await assert.rejects(s.multiplayer.act(game, "alice", bet(start.round.roundNo, option)), /Betting is closed|Betting closed/);
     assert.equal(s.users.get("alice").balance, 1000);
     assert.equal(s.data.gameresults.length, 0);
-    assert.ok(!s.data.multiplayerrooms.some(room => room._id.includes("ten-player-wins") || room._id.includes("parity-cycle")));
+    assert.ok(!s.data.multiplayerrooms.some(room => room._id.includes("thirty-player-wins") || room._id.includes("parity-cycle")));
     s.setReadDelay(0);
     s.at(start.round.endsAt);
     const next = await s.multiplayer.read(game, "alice");
@@ -54,10 +85,10 @@ for (const [game, option] of [["baccarat", "tie"], ["speed-baccarat", "playerPai
     assert.equal(s.users.get("alice").balance, 1000);
     assert.equal(s.data.gameresults.length, 0);
     assert.equal(s.data.winholds.length, 0);
-    assert.ok(!s.data.multiplayerrooms.some(room => room._id.includes("ten-player-wins") || room._id.includes("parity-cycle")));
+    assert.ok(!s.data.multiplayerrooms.some(room => room._id.includes("thirty-player-wins") || room._id.includes("parity-cycle")));
   });
 
-  test(`${game}: 100 personal players have ten paid wins, genuine cards, gross at most 2x and immutable wallets`, async () => {
+  test(`${game}: 100 personal players have thirty paid wins, genuine cards, gross at most 2x and immutable wallets`, async () => {
     const s = make(game);
     const replies = [];
     for (const userId of players) {
@@ -99,10 +130,10 @@ for (const [game, option] of [["baccarat", "tie"], ["speed-baccarat", "playerPai
       replies.push(done);
     }
     const wins = replies.filter(reply => reply.myBets[0].payout > 100);
-    assert.equal(wins.length, 10);
+    assert.equal(wins.length, 30);
     if (game === "32-cards") {
-      assert.equal(wins.filter(({ round: { result: r } }) => r.totals[r.winner] % 2 === 0).length, 8);
-      assert.equal(wins.filter(({ round: { result: r } }) => r.totals[r.winner] % 2 === 1).length, 2);
+      assert.equal(wins.filter(({ round: { result: r } }) => r.totals[r.winner] % 2 === 0).length, 24);
+      assert.equal(wins.filter(({ round: { result: r } }) => r.totals[r.winner] % 2 === 1).length, 6);
     }
     assert.equal(s.data.dailypoolentries.length, 0);
     assert.equal(s.data.gameresults.length, 100);
@@ -143,7 +174,7 @@ test("private tables isolate users and spectators; covered bets and failed write
 test("32 Cards parity admission refuses incompatible final slots before debit", async () => {
   const s = make("32-cards", ["alice"]);
   s.data.multiplayerrooms.push({
-    _id: "32-cards:private-parity-cycle:v1",
+    _id: "32-cards:private-parity-rounds-30:v3",
     players: Array.from({ length: 98 }, (_, i) => `old-${i}`), remaining: ["odd", "odd"],
   });
   const start = await s.multiplayer.read("32-cards", "alice");
@@ -157,7 +188,7 @@ test("32 Cards parity admission refuses incompatible final slots before debit", 
   assert.equal(done.myBets[0].payout, 191.1);
 });
 
-test("32 Cards EVEN/ODD buttons pay eight even winners and two odd winners across a completed admitted-player cycle", async () => {
+test("32 Cards EVEN/ODD buttons pay 24 even winners and six odd winners across a completed admitted-player cycle", async () => {
   const s = make("32-cards");
   let evenWins = 0, oddWins = 0, rejected = 0;
   for (const userId of players) {
@@ -182,9 +213,9 @@ test("32 Cards EVEN/ODD buttons pay eight even winners and two odd winners acros
       if (parity === 0) evenWins++; else oddWins++;
     }
   }
-  assert.equal(evenWins, 8);
-  assert.equal(oddWins, 2);
-  assert.equal(rejected, 2);
+  assert.equal(evenWins, 24);
+  assert.equal(oddWins, 6);
+  assert.equal(rejected, 6);
 });
 
 test("private card bets wait for the next betting window without reserving or drawing early", async () => {
@@ -194,7 +225,7 @@ test("private card bets wait for the next betting window without reserving or dr
   s.at(start.round.bettingEndsAt + 1);
   const request = bet(start.round.roundNo + 1, "tie");
   const balanceBefore = s.users.get("alice").balance;
-  const reserved = structuredClone(s.data.multiplayerrooms.find(room => room._id === "baccarat:ten-player-wins:v1"));
+  const reserved = structuredClone(s.data.multiplayerrooms.find(room => room._id === "baccarat:bet-wins-30-of-100:v1"));
   await assert.rejects(s.multiplayer.act("baccarat", "alice", request), /Wait for the next round/);
   assert.equal(s.users.get("alice").balance, balanceBefore);
   assert.deepEqual(s.data.multiplayerrooms.find(room => room._id === reserved._id), reserved);
@@ -206,8 +237,8 @@ test("private card bets wait for the next betting window without reserving or dr
   await s.multiplayer.act("baccarat", "alice", request);
   s.at(next.round.resultAt);
   const done = await s.multiplayer.read("baccarat", "alice");
-  assert.equal(done.myBets[0].payout, 0, "repeat player has no extra winning slot");
-  assert.equal(s.data.multiplayerrooms.find(room => room._id === roomId("baccarat", "alice")).cardPrize, null);
+  assert.equal(s.data.multiplayerrooms.find(room => room._id === reserved._id).remaining.length, reserved.remaining.length - 1);
+  assert.equal(done.myBets[0].payout > 0, s.data.multiplayerrooms.find(room => room._id === roomId("baccarat", "alice")).cardPrize === "win");
 });
 
 test("an already accepted shared wager keeps its original visible result and high paytable before migration", async () => {
@@ -237,8 +268,8 @@ test("Rs. 1 crore new wagers never return Rs. 14 crore: the ledger and holds tog
     const s = make(game, ["alice"]);
     s.users.get("alice").balance = 20000000;
     s.data.multiplayerrooms.push(game === "32-cards"
-      ? { _id: "32-cards:private-parity-cycle:v1", players: Array.from({ length: 99 }, (_, i) => `old-${i}`), remaining: ["even"] }
-      : { _id: `${game}:ten-player-wins:v1`, players: Array.from({ length: 99 }, (_, i) => `old-${i}`), remaining: [true] });
+      ? { _id: "32-cards:private-parity-rounds-30:v3", players: Array.from({ length: 99 }, (_, i) => `old-${i}`), remaining: ["even"] }
+      : { _id: `${game}:bet-wins-30-of-100:v1`, players: Array.from({ length: 99 }, (_, i) => `old-${i}`), remaining: [true] });
     const start = await s.multiplayer.read(game, "alice");
     const input = bet(start.round.roundNo, option, 10000000);
     await s.multiplayer.act(game, "alice", input);

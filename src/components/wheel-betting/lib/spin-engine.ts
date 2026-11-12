@@ -5,7 +5,7 @@ import { LOSE_INDICES, SEGMENT_MULTIPLIERS, WIN_INDICES } from "./wheel";
 /**
  * House-configured outcome split.
  */
-export const WIN_PROBABILITY = 0.35;
+export const WIN_PROBABILITY = 0.30;
 
 export type SpinResult = {
   /** index of the segment the wheel stops on */
@@ -22,9 +22,9 @@ export type SpinResult = {
   profit: number;
   /** long random hex used as the server seed for this round */
   serverSeed: string;
-  /** sha256(serverSeed:clientSeed:nonce) — verifiable outcome source */
+  /** Hash used to select a segment within the assigned outcome's segment group. */
   hash: string;
-  /** deterministic float used to decide win / loss */
+  /** Standalone probability roll; paid outcomes use the server's 30-of-100 cycle. */
   roll: number;
 };
 
@@ -32,7 +32,7 @@ function toFloat(hex: string): number {
   return parseInt(hex, 16) / 0x1_0000_0000;
 }
 
-export function spin(bet: number, clientSeed?: string): SpinResult {
+export function spin(bet: number, clientSeed?: string, assignedWin?: boolean): SpinResult {
   const serverSeed = randomBytes(16).toString("hex");
   const client = clientSeed?.slice(0, 64) || randomBytes(8).toString("hex");
   const nonce = randomBytes(4).readUInt32BE(0);
@@ -44,7 +44,7 @@ export function spin(bet: number, clientSeed?: string): SpinResult {
   const roll = toFloat(hash.slice(0, 8));
   const slot = toFloat(hash.slice(8, 16));
 
-  const win = roll < WIN_PROBABILITY;
+  const win = assignedWin ?? roll < WIN_PROBABILITY;
   const pool = win ? WIN_INDICES : LOSE_INDICES;
   const index = pool[Math.min(pool.length - 1, Math.floor(slot * pool.length))];
   const multiplier = SEGMENT_MULTIPLIERS[index];

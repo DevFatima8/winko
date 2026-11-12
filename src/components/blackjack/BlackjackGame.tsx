@@ -282,7 +282,7 @@ export default function BlackjackGame({ backHref = "/player" }: { backHref?: str
         ? natural
           ? "Blackjack — your hand paid 3:2."
           : "A winning hand ? your winnings are on the way."
-        : "No win"
+        : ""
     );
     setStats((current) => ({
       wins: current.wins + (selectedOutcome === "win" ? 1 : 0),
@@ -467,7 +467,7 @@ export default function BlackjackGame({ backHref = "/player" }: { backHref?: str
                     <div className={`round-result result-${outcome} z-10`} role="status">
                       <span className="result-icon">{outcome === "win" ? "✦" : "♠"}</span>
                       <span>
-                        <b>{pool.enabled ? "DAILY PAYOUT PENDING" : outcome === "win" ? "NICE HAND" : "No win"}</b>
+                        <b>{pool.enabled ? "DAILY PAYOUT PENDING" : outcome === "win" ? "NICE HAND" : ""}</b>
                         <small>{pool.enabled ? `Provisional claim Rs. ${formatCredits(outcome === "win" ? Math.round(activeBet * (isBlackjack(playerCards) ? 2.5 : 2)) : 0)}` : outcome === "win" ? `+Rs. ${formatCredits(Math.round(activeBet * (isBlackjack(playerCards) ? 1.5 : 1)))} · WIN` : "TRY AGAIN"}</small>
                       </span>
                     </div>
@@ -590,7 +590,7 @@ export default function BlackjackGame({ backHref = "/player" }: { backHref?: str
           </section>
         </div>
       )}
-      <GameOverOverlay open={overlayReady && status === "settled" && !!outcome && !endDismissed} title={outcome === "win" ? "Congratulations! You win" : "You lose"} winAmount={outcome === "win" ? Math.round(activeBet * (isBlackjack(playerCards) ? 2.5 : 2)) : 0} result={pool.enabled ? "Daily payout pending. This hand records a provisional claim, not a wallet payment." : outcome === "win" ? "You won this hand." : "No win"} onPlayAgain={dealRound} onClose={() => setEndDismissed(true)} />
+      <GameOverOverlay open={overlayReady && status === "settled" && !!outcome && !endDismissed} title={outcome === "win" ? "Congratulations! You win" : ""} winAmount={outcome === "win" ? Math.round(activeBet * (isBlackjack(playerCards) ? 2.5 : 2)) : 0} result={pool.enabled ? "Daily payout pending. This hand records a provisional claim, not a wallet payment." : outcome === "win" ? "You won this hand." : ""} onPlayAgain={dealRound} onClose={() => setEndDismissed(true)} />
     </main>
   );
 }

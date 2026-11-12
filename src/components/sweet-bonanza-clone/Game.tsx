@@ -198,7 +198,7 @@ export default function SweetBonanzaGamePage() {
           setMessage(
             pool.enabled ? `Provisional claim Rs. ${formatCredits(payout)}; daily settlement pending.` : won
               ? `Lovely cluster! 8+ matching candies connected — Rs. ${formatCredits(payout)} paid.`
-              : "No win",
+              : "",
           );
           setRound((current) => current + 1);
           setHistory((current) =>
@@ -468,7 +468,7 @@ export default function SweetBonanzaGamePage() {
                   return (
                     <li key={record.id}>
                       <span className={`history-result ${record.won ? "history-win" : "history-loss"}`} aria-hidden="true">{record.won ? "✦" : "·"}</span>
-                      <span className="history-round"><strong>{record.won ? "Cluster hit" : "No win"}</strong><small>Bet {formatCredits(record.bet)}</small></span>
+                      <span className="history-round"><strong>{record.won ? "Cluster hit" : ""}</strong><small>Bet {formatCredits(record.bet)}</small></span>
                       <strong className={`history-net ${net >= 0 ? "net-positive" : "net-negative"}`}>{net >= 0 ? `+${formatCredits(net)}` : "—"}</strong>
                     </li>
                   );

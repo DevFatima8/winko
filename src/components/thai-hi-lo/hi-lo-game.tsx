@@ -378,7 +378,7 @@ export default function HiLoGame() {
             <div className={`hilo-sum ${totalClass}`}>{triple ? "TRIPLE" : total}</div>
             <p className="hilo-stage__hint">
               {triple
-                ? "TRIPLE! — No win on High / Low"
+                ? "TRIPLE!"
                 : total >= 11
                   ? "HIGH 11–17"
                   : "LOW 4–10"}
@@ -389,12 +389,12 @@ export default function HiLoGame() {
                 className={`hilo-flash ${roundResult.won ? "hilo-flash--win" : "hilo-flash--lose"} hilo-pop`}
               >
                 <span className="hilo-flash__title">
-                  {pool.enabled ? "DAILY PAYOUT PENDING" : roundResult.won ? "🎉 YOU WIN!" : "No win"}
+                  {pool.enabled ? "DAILY PAYOUT PENDING" : roundResult.won ? "🎉 YOU WIN!" : ""}
                 </span>
                 <span className="hilo-flash__amount">
                   {pool.enabled ? `Provisional claim Rs. ${formatMoney(roundResult.claim)}` : roundResult.won
                     ? `+Rs. ${formatMoney(roundResult.profit)}`
-                    : "No win"}
+                    : ""}
                 </span>
               </div>
             )}
@@ -422,7 +422,7 @@ export default function HiLoGame() {
                   <span className="hilo-history__dice">{h.dice.join(" · ")}</span>
                   <span className="hilo-history__bet">{BET_META[h.bet].name}</span>
                   <span className="hilo-history__profit">
-                    {h.won ? `+${formatMoney(h.profit)}` : "No win"}
+                    {h.won ? `+${formatMoney(h.profit)}` : ""}
                   </span>
                 </div>
               ))}

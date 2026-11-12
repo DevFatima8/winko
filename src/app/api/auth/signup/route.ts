@@ -67,7 +67,7 @@ export async function POST(req: Request) {
         ]).catch(() => { });
         const sessionId = await createDeviceSession(String(u._id), req, registrationIp);
         await LoginEvent.create({ userId: String(u._id), ip: registrationIp, role: u.role });
-        return setAuthCookie(NextResponse.json({ id: String(u._id), role: "client", name: u.name }), String(u._id), sessionId);
+        return setAuthCookie(NextResponse.json({ id: String(u._id), role: "client", name: u.name }), String(u._id), sessionId, req);
     } catch (e) {
         console.error("[signup]", e);
         const msg = e instanceof Error ? e.message : String(e);

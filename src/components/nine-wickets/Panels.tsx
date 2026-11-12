@@ -178,7 +178,7 @@ function Legend() {
         <span className="h-2.5 w-2.5 rounded-full ring-2 ring-emerald-400" /> Won
       </span>
       <span className="flex items-center gap-1">
-        <span className="h-2.5 w-2.5 rounded-full ring-2 ring-red-500" /> No win
+        <span className="h-2.5 w-2.5 rounded-full ring-2 ring-red-500" />
       </span>
     </div>
   );
@@ -505,7 +505,7 @@ export function StatsHistory({ stats, history }: { stats: Stats; history: BetRec
                   </div>
                 </div>
                 <div className={`text-sm font-black tabular-nums ${h.win ? "text-emerald-400" : "text-red-400"}`}>
-                  {h.win ? `+${formatCoins(h.payout - h.stake)}` : "No win"}
+                  {h.win ? `+${formatCoins(h.payout - h.stake)}` : ""}
                 </div>
               </li>
             ))}

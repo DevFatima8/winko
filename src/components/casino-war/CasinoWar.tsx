@@ -234,7 +234,7 @@ export default function CasinoWar() {
       pool.announce();
       gameSfx.lose();
       setLastWin(0);
-      setMessage({ text: pool.enabled ? "DAILY PAYOUT PENDING — PROVISIONAL CLAIM 0" : "No win", tone: "lose" });
+      setMessage({ text: pool.enabled ? "DAILY PAYOUT PENDING — PROVISIONAL CLAIM 0" : "", tone: "lose" });
       setEndDismissed(false);
     setPhase("result");
     } else {
@@ -299,7 +299,7 @@ export default function CasinoWar() {
     } else {
       pool.announce();
       setLastWin(0);
-      setMessage({ text: pool.enabled ? "DAILY PAYOUT PENDING — PROVISIONAL CLAIM 0 (plus any tie claim)" : "No win", tone: "lose" });
+      setMessage({ text: pool.enabled ? "DAILY PAYOUT PENDING — PROVISIONAL CLAIM 0 (plus any tie claim)" : "", tone: "lose" });
     }
     setEndDismissed(false);
     setPhase("result");

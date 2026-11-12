@@ -488,7 +488,7 @@ export default function GameScreen() {
               fireConfetti(true);
             }, effectiveWin > 0 ? 900 : 100);
           } else {
-            setBanner(pool.enabled ? "FREE SPINS COMPLETE — DAILY PAYOUT PENDING" : "FREE SPINS COMPLETE — NO WIN");
+            setBanner(pool.enabled ? "FREE SPINS COMPLETE — DAILY PAYOUT PENDING" : "FREE SPINS COMPLETE");
           }
         } else {
           const nf: FreeState = {
@@ -545,7 +545,7 @@ export default function GameScreen() {
             : `WIN — ${formatMoney(effectiveWin)} · ${result.lineWins.length} LINE${result.lineWins.length === 1 ? "" : "S"}`,
         );
       } else {
-        setBanner(pool.enabled ? "DAILY PAYOUT PENDING — PROVISIONAL SPIN CLAIM 0" : wasFree ? "FREE SPIN — NO WIN" : "NO WIN — SPIN AGAIN!");
+        setBanner(pool.enabled ? "DAILY PAYOUT PENDING — PROVISIONAL SPIN CLAIM 0" : "");
       }
 
       // auto stop check
@@ -1443,7 +1443,7 @@ export default function GameScreen() {
                     <td className="py-1.5 text-right text-white/80">{formatMoney(h.bet)}</td>
                     <td className="py-1.5 text-right font-bold text-[#7dff9a]">{formatMoney(h.win)}</td>
                     <td className={cn("py-1.5 text-right font-bold", h.win - (h.free ? 0 : h.bet) >= 0 ? "text-[#7dff9a]" : "text-[#ff7b7b]")}>
-                      {h.win - (h.free ? 0 : h.bet) >= 0 ? "+" + formatMoney(h.win - (h.free ? 0 : h.bet)) : "No win"}
+                      {h.win - (h.free ? 0 : h.bet) >= 0 ? "+" + formatMoney(h.win - (h.free ? 0 : h.bet)) : ""}
                     </td>
                     <td className="py-1.5 text-right text-white/40">{h.time}</td>
                   </tr>

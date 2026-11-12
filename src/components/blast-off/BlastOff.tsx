@@ -233,7 +233,7 @@ export default function BlastOff() {
           {crashed && bet && closedRound !== e.round ? (
             <GameOverOverlay key={e.round} open
               winAmount={bet.cashed ? bet.payout - bet.amount : 0}
-              title={bet.poolPending ? "Round complete" : bet.cashed ? "Congratulations! You win" : "You lose"}
+              title={bet.poolPending ? "Round complete" : bet.cashed ? "Congratulations! You win" : ""}
               result={`${bet.poolPending ? `Claim ${fmtCredits(bet.poolClaim ?? 0)} · Daily payout pending` : bet.cashed ? `Won +${fmtCredits(bet.payout - bet.amount)} · ` : ""} Crashed at ${e.crashPoint.toFixed(2)}×`}
               onClose={() => setClosedRound(e.round)} />
           ) : null}

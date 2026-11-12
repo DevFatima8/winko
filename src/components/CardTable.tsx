@@ -233,7 +233,7 @@ export function CardTable({ table, backHref = "/player" }: { table: Table; backH
       if (st.poolPending) playGameSound("click");
       else if (win) { playGameSound("coin"); speakGameVoice("cardWin"); } else { playGameSound("crash"); }
       window.dispatchEvent(new CustomEvent("wx:game-result", { detail: { game: table === "dragon-tiger" ? "Dragon Tiger" : "Andar Bahar", bet: st.myTotal, win: st.myExpected, won: win, poolPending: st.poolPending, poolClaim: st.poolClaim } }));
-      setToast({ roundNo: round.roundNo, text: st.poolPending ? ` ${money(st.poolClaim ?? 0)} — daily payout` : win ? `Aap jeete ${money(st.myExpected)}` : "No win", win: !st.poolPending && win });
+      setToast({ roundNo: round.roundNo, text: st.poolPending ? ` ${money(st.poolClaim ?? 0)} — daily payout` : win ? `Aap jeete ${money(st.myExpected)}` : "", win: !st.poolPending && win });
     }
     const id = setTimeout(() => setToast(null), 5500);
     return () => clearTimeout(id);
@@ -337,7 +337,7 @@ export function CardTable({ table, backHref = "/player" }: { table: Table; backH
               </div>
             </div>
           )}
-          {toast && (
+          {toast?.text && (
             <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center px-3 z-20">
               <div className={`rounded-lg px-3 py-1 text-xs font-black shadow-xl ${toast.win ? "bg-[#eab308] text-slate-950" : "bg-[#0f172a] text-white border border-slate-700"}`}>{toast.text}</div>
             </div>

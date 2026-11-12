@@ -5,16 +5,16 @@ import { join } from "node:path";
 import { test } from "node:test";
 import ts from "typescript";
 
-function load(winRate) {
+function load(winRate, cryptoRandom = randomInt, exported = "spreadCrashLane") {
   const text = readFileSync(join("src", "lib", "crashLane.ts"), "utf8");
   const source = ts.transpileModule(text, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
   const loaded = { exports: {} };
   new Function("require", "module", "exports", source)((name) => {
-    if (name === "node:crypto") return { randomInt };
+    if (name === "node:crypto") return { randomInt: cryptoRandom };
     if (name === "./outcomes") return { isWinOutcome: () => Math.random() < winRate };
     throw new Error(`Unexpected import: ${name}`);
   }, loaded, loaded.exports);
-  return loaded.exports.spreadCrashLane;
+  return loaded.exports[exported];
 }
 
 const afterShare = (gross) => Math.floor(Math.max(0, gross) * 0.98 * 100) / 100;
@@ -49,6 +49,36 @@ const LEVELS = {
   "dash easy": dash(28, 1.01, 14.54), "dash normal": dash(24, 1.05, 43.15), "dash hard": dash(20, 1.21, 100),
 };
 const N = 30000;
+
+test("independent lane sampling honors survival boundaries and rejects invalid curves", () => {
+  let roll = 0;
+  const sample = load(0, () => roll, "sampleCrashLane");
+  const curve = [1, 0.75, 0.5, 0.25];
+  for (const [fraction, expected] of [[0, 4], [0.25, 3], [0.5, 2], [0.75, 1]]) {
+    roll = fraction * 2 ** 47;
+    assert.equal(sample(curve), expected);
+  }
+  for (const invalid of [[], [1], [0.9, 0.5], [1, NaN], [1, 0.2, 0.3], [1, -0.1]]) {
+    assert.throws(() => sample(invalid), /Invalid crash survival curve/);
+  }
+});
+
+for (const [name, { surv }] of Object.entries(LEVELS)) {
+  test(`${name}: independent crashes match the survival curve at early, middle and final lanes`, () => {
+    const sample = load(0, randomInt, "sampleCrashLane");
+    const targets = [...new Set([1, Math.floor((surv.length - 1) / 2), surv.length - 1])];
+    const survived = targets.map(() => 0);
+    for (let draw = 0; draw < N; draw++) {
+      const lane = sample(surv);
+      targets.forEach((target, index) => { if (lane > target) survived[index]++; });
+    }
+    targets.forEach((target, index) => {
+      const expected = surv[target] * N;
+      const tolerance = 7 * Math.sqrt(N * surv[target] * (1 - surv[target])) + 1;
+      assert.ok(Math.abs(survived[index] - expected) <= tolerance, `${name} target ${target}: ${survived[index]} vs ${expected}`);
+    });
+  });
+}
 
 for (const [name, { surv, profit }] of Object.entries(LEVELS)) {
   const lanes = surv.length - 1;

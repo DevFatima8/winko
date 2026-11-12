@@ -28,7 +28,7 @@ export type UserDoc = Base & {
 };
 export type LoginEventDoc = Base & { userId: string; ip: string | null; role: UserDoc["role"] };
 export const LoginEvent = new Model<LoginEventDoc>("LoginEvent", { collection: "loginevents", cap: 10000, defaults: () => ({ ip: null, role: "client" }) });
-export type DeviceSessionDoc = Base & { userId: string; sessionId: string; deviceName: string; userAgent: string; ip: string | null; lastSeenAt: Date; revokedAt: Date | null };
+export type DeviceSessionDoc = Base & { userId: string; sessionId: string; deviceId?: string; expiresAt?: Date; deviceName: string; userAgent: string; ip: string | null; lastSeenAt: Date; revokedAt: Date | null };
 export const DeviceSession = new Model<DeviceSessionDoc>("DeviceSession", { collection: "devicesessions", refs: { userId: "User" }, unique: [["sessionId"]], cap: 10000, defaults: () => ({ deviceName: "Unknown device", userAgent: "", ip: null, lastSeenAt: new Date(), revokedAt: null }) });
 export type PaymentAccountDoc = Base & {
   provider: DepositProvider;
@@ -82,7 +82,7 @@ export type SettingsDoc = Base & {
   wallet: { minDeposit: number; minWithdraw: number };
   fakeGateway: { enabled: boolean; testOtp: string; maxPerTxn: number; dailyLimit: number; label: string; autoWithdraw: boolean };
 };
-export type NotificationDoc = Base & { title: string; body: string; type: "info" | "promo" | "warning" | "success"; audience: "all" | "clients" | "agents" | "admins" | "user"; userId: string | null; href?: string | null; isActive: boolean; readBy: string[] };
+export type NotificationDoc = Base & { title: string; body: string; type: "info" | "promo" | "warning" | "success"; audience: "all" | "clients" | "agents" | "admins" | "owners" | "user"; userId: string | null; href?: string | null; isActive: boolean; readBy: string[] };
 export type SupportThreadDoc = Base & { userId: string | null; guestId: string | null; guestName: string | null; status: "open" | "closed"; lastMessageAt: Date; lastMessage: string; unreadForAdmin: number; unreadForUser: number; assignedTo: string | null; assignedName: string | null };
 export type SupportMessageDoc = Base & { threadId: string; from: "user" | "agent" | "system"; text: string; agentName: string | null; agentId: string | null };
 export type HelpArticleDoc = Base & { title: string; category: string; order: number; isActive: boolean; steps: { text?: string | null; image?: string | null }[] };

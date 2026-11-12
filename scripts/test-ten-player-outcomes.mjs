@@ -6,13 +6,64 @@ import { createLegacyScene } from "./multiplayer-legacy-harness.mjs";
 const players = Array.from({ length: 100 }, (_, i) => `player-${i}`);
 const cycle = (s, game) => s.data.multiplayerrooms.find(row => row._id === `${game}:ten-player-wins:v1`);
 
+for (const game of ["fishing-arcade", "derby-race"]) {
+  test(`${game}: repeat-player wagers consume exactly 30 opportunities per 100, replays do not redraw`, async () => {
+    const s = createLegacyScene(["alice"], { poolEnabled: false });
+    s.data.games.push({ _id: game, slug: game, isActive: true });
+    s.data.users[0].balance = 100000;
+    for (let block = 0; block < 2; block++) {
+      let wins = 0;
+      for (let bet = 0; bet < 100; bet++) {
+        const wagerId = randomUUID();
+        const acceptInput = { game, wagerId, operationId: randomUUID(), action: "accept", amount: 10 };
+        if (bet === 0 && block === 0) {
+          const before = structuredClone(s.data);
+          s.failNext("users");
+          await assert.rejects(s.store.transact(game, tx => s.browser.browserPoolLifecycle(tx, "alice", acceptInput, false)), /Injected/);
+          assert.deepEqual(s.data, before, "Acceptance failure must roll back the cycle and wallet");
+        }
+        const accepted = await s.store.transact(game, tx => s.browser.browserPoolLifecycle(tx, "alice", acceptInput, false));
+        let won;
+        if (game === "fishing-arcade") {
+          const replay = await s.store.transact(game, tx => s.browser.browserPoolLifecycle(tx, "alice", acceptInput, false));
+          assert.equal(replay.shotWin, accepted.shotWin);
+          won = accepted.shotWin;
+          if (!won) await assert.rejects(s.store.transact(game, tx => s.browser.browserPoolLifecycle(tx, "alice", {
+            game, wagerId, operationId: randomUUID(), action: "complete", amount: 15,
+          }, false)), /no winning opportunity/);
+          await s.store.transact(game, tx => s.browser.browserPoolLifecycle(tx, "alice", {
+            game, wagerId, operationId: randomUUID(), action: "complete", amount: won ? 15 : 0,
+          }, false));
+        } else {
+          const input = { game, wagerId, operationId: randomUUID(), selection: { horseId: bet % 6 + 1, round: bet + 1 } };
+          const reply = await s.store.transact(game, tx => s.browser.resolveServerBrowserWager(tx, "alice", input, false));
+          const replay = await s.store.transact(game, tx => s.browser.resolveServerBrowserWager(tx, "alice", input, false));
+          assert.deepEqual(replay.outcome, reply.outcome);
+          won = reply.outcome.playerWon;
+          assert.equal(won, reply.outcome.winnerId === input.selection.horseId);
+          assert.equal(reply.claim, won ? 27.5 : 0);
+          assert.equal(Math.max(...reply.outcome.finishingPaces), 1);
+        }
+        wins += Number(won);
+      }
+      assert.equal(wins, 30);
+      assert.equal(s.data.multiplayerrooms.find(row => row._id === `${game}:bet-wins-30-of-100:v1`).remaining.length, 100);
+    }
+  });
+}
+
 for (const pooled of [false, true]) {
   for (const slug of ["chicken-road-2", "chicken-dash"]) {
-    test(`${slug}, pooled=${pooled}: only ten of 100 different players can cash out`, async () => {
+    test(`${slug}, pooled=${pooled}: independent crash lanes allow unrestricted cashouts with no player quota`, async () => {
       const s = createLegacyScene(players, { poolEnabled: pooled });
+      let draw = 0;
+      s.crashLanes.sampleCrashLane = survival => 1 + draw++ % survival.length;
       const starts = await Promise.all(players.map(user => s.chicken.startPoolChicken(user, slug, 10, "easy")));
       assert.ok(starts.every(reply => reply.ok));
-      assert.deepEqual(cycle(s, slug).players, []);
+      assert.equal(cycle(s, slug), undefined);
+      const accepted = s.data[slug === "chicken-road-2" ? "chickengames" : "chickendashes"];
+      assert.ok(accepted.every(game => game.crashModel === "independent-lanes-v1" && !game.playerCycleVersion));
+      assert.ok(accepted.some(game => game.crashLane > game.lanes / 2 && game.crashLane <= game.lanes));
       let cashed = 0;
       for (const user of players) {
         const first = await s.chicken.actPoolChicken(user, slug, "step");
@@ -26,8 +77,9 @@ for (const pooled of [false, true]) {
         cashed++;
         assert.equal(await s.chicken.actPoolChicken(user, slug, "cashout"), null);
       }
-      assert.equal(cashed, 10);
-      assert.equal(s.data.gameresults.filter(row => row.outcome === "win").length, 10);
+      assert.equal(cashed, accepted.filter(game => game.crashLane > 1).length);
+      assert.ok(cashed > 30, "valid early cashouts are not denied to force a winner quota");
+      assert.equal(draw, 100, "actions never reroll the accepted crash lane");
       assert.equal(s.data.dailypoolentries.length, pooled ? 100 : 0);
     });
   }
@@ -58,7 +110,78 @@ for (const pooled of [false, true]) {
   });
 }
 
-test("Chicken cycle ignores repeat players and rejected bets; a failed transaction rolls back the slot", async () => {
+test("Chicken rounds crash at the saved early, middle and final lane without rerolling", async () => {
+  for (const slug of ["chicken-road-2", "chicken-dash"]) {
+    for (const point of [1, 2, 12, 24, 29]) {
+      const s = createLegacyScene(["alice"]);
+      let expected, draws = 0;
+      s.crashLanes.sampleCrashLane = survival => {
+        draws++;
+        expected = Math.min(point, survival.length);
+        return expected;
+      };
+      await s.chicken.startPoolChicken("alice", slug, 10, "easy");
+      let result;
+      for (let step = 0; step < 30; step++) {
+        result = await s.chicken.actPoolChicken("alice", slug, "step");
+        if (result.game.status !== "active") break;
+      }
+      assert.equal(draws, 1);
+      const saved = s.data[slug === "chicken-road-2" ? "chickengames" : "chickendashes"][0];
+      assert.equal(saved.crashLane, expected);
+      assert.equal(saved.position, Math.min(expected, saved.lanes));
+      assert.equal(saved.status, expected > saved.lanes ? "cashed" : "dead");
+    }
+  }
+});
+
+test("Legacy chicken cashouts roll back on failures and concurrent retries pay only once", async () => {
+  for (const slug of ["chicken-road-2", "chicken-dash"]) {
+    const s = createLegacyScene(["alice"]);
+    await s.chicken.startPoolChicken("alice", slug, 100, "easy");
+    const game = s.data[slug === "chicken-road-2" ? "chickengames" : "chickendashes"][0];
+    delete game.playerCycleVersion;
+    delete game.crashModel;
+    game.position = 1;
+    for (const table of ["users", "winholds", "gameresults", slug === "chicken-road-2" ? "chickengames" : "chickendashes"]) {
+      const before = structuredClone(s.data);
+      s.failNext(table);
+      await assert.rejects(s.chicken.actPoolChicken("alice", slug, "cashout"), /Injected/);
+      assert.deepEqual(s.data, before);
+    }
+    const [a, b] = await Promise.all([
+      s.chicken.actPoolChicken("alice", slug, "cashout"),
+      s.chicken.actPoolChicken("alice", slug, "cashout"),
+    ]);
+    assert.equal([a, b].filter(Boolean).length, 1);
+    const paid = a ?? b;
+    assert.equal(s.users.get("alice").balance, 900 + paid.win);
+    assert.equal(s.data.winholds.length, 1);
+    assert.equal(s.data.gameresults[0].outcome, slug === "chicken-dash" && paid.win <= 100 ? "lose" : "win");
+  }
+});
+
+test("Legacy chicken final step and cashout cannot both settle", async () => {
+  for (const slug of ["chicken-road-2", "chicken-dash"]) {
+    const s = createLegacyScene(["alice"]);
+    await s.chicken.startPoolChicken("alice", slug, 100, "easy");
+    const game = s.data[slug === "chicken-road-2" ? "chickengames" : "chickendashes"][0];
+    delete game.playerCycleVersion;
+    delete game.crashModel;
+    game.position = game.lanes - 1;
+    game.crashLane = game.lanes + 1;
+    const [step, cashout] = await Promise.all([
+      s.chicken.actPoolChicken("alice", slug, "step"),
+      s.chicken.actPoolChicken("alice", slug, "cashout"),
+    ]);
+    assert.equal(step.event, "finished");
+    assert.equal(cashout, null);
+    assert.equal(s.users.get("alice").balance, 900 + step.win);
+    assert.equal(s.data.winholds.length, 1);
+  }
+});
+
+test("Chicken rejects invalid bets, rolls back acceptance, and never forces repeat players to crash", async () => {
   const s = createLegacyScene(["alice", "bob"]);
   assert.ok((await s.chicken.startPoolChicken("alice", "chicken-dash", 5, "easy")).error);
   assert.equal(cycle(s, "chicken-dash"), undefined);
@@ -73,8 +196,9 @@ test("Chicken cycle ignores repeat players and rejected bets; a failed transacti
     if (reply.game.status !== "active") break;
   }
   await s.chicken.startPoolChicken("alice", "chicken-dash", 10, "easy");
-  assert.equal((await s.chicken.actPoolChicken("alice", "chicken-dash", "step")).event, "dead");
-  assert.equal(cycle(s, "chicken-dash").players.length, 1);
+  s.data.chickendashes.find(game => game.status === "active").crashLane = 5;
+  assert.notEqual((await s.chicken.actPoolChicken("alice", "chicken-dash", "step")).event, "dead");
+  assert.equal(cycle(s, "chicken-dash"), undefined);
 });
 
 for (const count of [5, 10, 50, 100]) {
@@ -160,7 +284,7 @@ test("Treasure Bowl retries consume one slot, repeat players do not draw again, 
   assert.deepEqual(cycle(s, "treasure-bowl").players, ["alice"]);
 });
 
-test("Malformed player cycles cannot accept a wager or debit a wallet", async () => {
+test("Chicken independent rounds ignore historical player quotas without rewriting them", async () => {
   for (const bad of [
     { players: [], remaining: Array(100).fill(true) },
     { players: ["alice", "alice"], remaining: Array(98).fill(false) },
@@ -169,9 +293,10 @@ test("Malformed player cycles cannot accept a wager or debit a wallet", async ()
   ]) {
     const s = createLegacyScene(["alice"]);
     s.data.multiplayerrooms.push({ _id: "chicken-dash:ten-player-wins:v1", ...bad });
-    const before = structuredClone(s.data);
-    await assert.rejects(s.chicken.startPoolChicken("alice", "chicken-dash", 10, "easy"), /cycle is invalid/);
-    assert.deepEqual(s.data, before);
+    const before = structuredClone(s.data.multiplayerrooms[0]);
+    assert.ok((await s.chicken.startPoolChicken("alice", "chicken-dash", 10, "easy")).ok);
+    assert.deepEqual(s.data.multiplayerrooms[0], before);
+    assert.equal(s.users.get("alice").balance, 990);
   }
 });
 

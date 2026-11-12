@@ -142,6 +142,9 @@ test("authenticated wallet loads release old winnings before returning the balan
     "./mongo": { dbConnect: async () => {} },
     "./auth": { toCurrentUser: user => ({ ...user, id: user._id }) },
     "./playerDisplayId": { getPlayerDisplayId: async () => "1234567" },
+    "./mysql": {},
+    "./multiplayer-store": {},
+    "./deviceSessions": {},
     "./winHold": { claimWinHolds: async id => {
       assert.equal(id, "player");
       if (fail) throw new Error("Release transaction failed");

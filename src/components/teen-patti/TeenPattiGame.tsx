@@ -455,7 +455,7 @@ export default function TeenPattiGame() {
               {history.slice(-8).map((h, i) => (
                 <span
                   key={`${h}-${i}`}
-                  title={h === "W" ? "Win" : "No win"}
+                  title={h === "W" ? "Win" : ""}
                   className={`h-2 w-2 rounded-full ${
                     h === "W" ? "bg-amber-400" : "bg-slate-600"
                   }`}

@@ -406,7 +406,7 @@ export function GameTable() {
               ? pool.enabled ? "PROVISIONAL CLAIM" : "YOU WIN"
               : Math.abs(outcome.net) < 0.01
                 ? "BETS RETURNED"
-                : "NO WIN THIS ROUND"
+                : ""
             : "ROUND COMPLETE";
 
   const progress = secondsLeft / BET_SECONDS;
@@ -526,7 +526,7 @@ export function GameTable() {
                           ? `${pool.enabled ? "Provisional claim" : "You won"} Rs. ${formatChips(pool.enabled ? outcome.totalReturned : outcome.net)}`
                           : Math.abs(outcome.net) < 0.01
                             ? "Bets returned"
-                            : "No win"
+                            : ""
                         : "No bets placed"
                     }`
                   : ""}

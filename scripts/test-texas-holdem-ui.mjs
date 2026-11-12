@@ -136,3 +136,15 @@ test("active hands retain fold, call/check and raise amounts", () => {
   for (const amount of [10, 20, 50, 100, 200]) assert.ok(buttons.includes(`+Rs. ${amount}`));
   assert.equal(f.api.computeTurn(hand), "player");
 });
+
+test("folded hand keeps accounting and the action reason without a loss-result label", () => {
+  const hand = { ...holdem.initialState(), playerChips: 490, dealerChips: 990, pot: 20, folded: "player" };
+  const settled = holdem.settleRound(hand);
+  assert.doesNotMatch(settled.log.join(" "), /No win|You lose|\bLose\b/i);
+  assert.equal(settled.result.winner, "dealer");
+  assert.equal(settled.result.reason, "You folded");
+  assert.equal(settled.result.amount, 20);
+  assert.equal(settled.grossReturn, 0);
+  assert.equal(settled.playerChips, 490);
+  assert.equal(settled.dealerChips, 1010);
+});

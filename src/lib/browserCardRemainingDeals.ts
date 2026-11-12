@@ -89,7 +89,7 @@ export async function serverRemainingDealCardOutcome(
   if (game === "teen-patti-faceoff") {
     const engine = await import("@/components/teen-patti-faceoff/lib/teenpatti");
     const bets = allocation(selection, engine.BET_SPOTS, stake) as import("@/components/teen-patti-faceoff/lib/teenpatti").Bets;
-    if (bets.A > 0 && bets.B > 0) throw new RemainingDealCardError("Both main hands cover every outcome. Undo one main bet before dealing the 10-in-100 card cycle.");
+    if (bets.A > 0 && bets.B > 0) throw new RemainingDealCardError("Both main hands cover every outcome. Undo one main bet before dealing the 30-in-100 card cycle.");
     type Card = import("@/components/teen-patti-faceoff/lib/teenpatti").Card;
     const card = (rank: number, suit: Card["suit"]): Card => ({ rank, suit, id: `${rank}${suit}` });
     const fixtures = [

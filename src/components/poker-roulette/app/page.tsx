@@ -383,7 +383,7 @@ export default function HomePage() {
                 </div>
               ) : (
                 <div className="lose-banner text-[10px] sm:text-xs">
-                  {pool.enabled ? "Daily payout pending — provisional claim Rs. 0" : "No win"}
+                  {pool.enabled ? "Daily payout pending — provisional claim Rs. 0" : ""}
                 </div>
               )
             )}

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { MultiplayerTransaction } from "./multiplayer-store";
 import { cents } from "./dailyPool";
-import { nextPlayerWin } from "./playerWinCycle";
+import { nextBetWin, nextPlayerWin } from "./playerWinCycle";
 import {
   InteractiveMoveError, isInteractiveBrowserCardGame,
   type CardActionInput, type CardActionReply, type EngineStep, type InteractiveCardEngine,
@@ -102,7 +102,7 @@ export async function actInteractiveCard(
     if (!saved) {
       if (move !== "deal") throw new InteractiveMoveError("Deal the accepted wager before any table action.");
       // The winning slot is assigned once, at the deal, and never redrawn by later moves.
-      win = await nextPlayerWin(tx, game, userId);
+      win = game === "rummy" ? await nextBetWin(tx, game, 30) : await nextPlayerWin(tx, game, userId);
       step = engine.start({ stake: loaded.browserTotalStake, selection: input.selection ?? null, win, balance: user.balance });
     } else {
       if (move === "deal") throw new InteractiveMoveError("This wager is already dealt.");

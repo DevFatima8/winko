@@ -77,7 +77,7 @@ export default function Game({ backHref }: { backHref?: string }) {
 
   const totalBet = Object.values(bets).reduce((a, b) => a + (b ?? 0), 0);
   const msg = !state ? "Connecting to live table…" : !round || phase !== "result" ? "NO MORE BETS" : totalBet > 0 ?
-    poolMessage ?? (payout > 0 ? `YOU WIN Rs. ${payout.toLocaleString()}` : "No win") : `${PLAYERS[round.winner].name} WINS`;
+    poolMessage ?? (payout > 0 ? `YOU WIN Rs. ${payout.toLocaleString()}` : "") : `${PLAYERS[round.winner].name} WINS`;
 
   useEffect(() => {
     if (!state || !personal.length) return;

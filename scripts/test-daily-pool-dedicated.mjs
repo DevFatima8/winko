@@ -20,6 +20,8 @@ function scene() {
     if (name === "./multiplayer-store") return { mysqlMultiplayerStore: store };
     if (name === "./dailyPool") return s.pool;
     if (name === "./dailyPoolRules") return { DAILY_POOL_VERSION: version, dailyPoolLock: slug => `daily-pool:${slug}` };
+    if (name === "./outcomes") return { payoutAfterHouseShare: gross => Math.floor(Math.max(0, gross) * 0.98 * 100) / 100 };
+    if (name === "./winHold") return { heldPortion: gross => Math.round(Math.max(0, gross) * 0.02 * 100) / 100 };
     throw new Error(`Unexpected dedicated import: ${name}`);
   };
   const code = ts.transpileModule(readFileSync("src\\lib\\dailyPoolDedicated.ts", "utf8"), {
@@ -32,6 +34,46 @@ const instant = (claim = 200) => ({ claim, data: "test result", response: { won:
 const publish = g => structuredClone(g);
 const multiplier = (_mines, safe) => 1 + safe;
 const settle = (s, slug) => s.dedicated.dedicatedTransaction(slug, async () => {});
+
+test("instant Mines accepts and settles atomically; concurrent cashouts cannot double-pay", async () => {
+  const s = scene();
+  for (const table of ["users", "gameresults", "minesgames"]) {
+    const before = structuredClone(s.data);
+    s.failNext(table);
+    await assert.rejects(s.dedicated.acceptPoolMines("alice", 100, 1, [24], publish, false), /Injected/);
+    assert.deepEqual(s.data, before);
+  }
+  await s.dedicated.acceptPoolMines("alice", 100, 1, [24], publish, false);
+  await s.dedicated.actPoolMines("alice", "reveal", 0, multiplier, publish);
+  for (const table of ["users", "winholds", "gameresults", "minesgames"]) {
+    const before = structuredClone(s.data);
+    s.failNext(table);
+    await assert.rejects(s.dedicated.actPoolMines("alice", "cashout", 0, multiplier, publish), /Injected/);
+    assert.deepEqual(s.data, before);
+  }
+  const replies = await Promise.all([
+    s.dedicated.actPoolMines("alice", "cashout", 0, multiplier, publish),
+    s.dedicated.actPoolMines("alice", "cashout", 0, multiplier, publish),
+  ]);
+  assert.equal(replies.filter(Boolean).length, 1);
+  assert.equal(s.users.get("alice").balance, 1096);
+  assert.equal(s.data.winholds.length, 1);
+  assert.equal(s.data.winholds[0].amount, 4);
+  assert.equal(s.data.gameresults[0].winAmount, 196);
+});
+
+test("instant Mines final safe reveal and cashout cannot both settle the wager", async () => {
+  const s = scene();
+  await s.dedicated.acceptPoolMines("alice", 100, 24, Array.from({ length: 24 }, (_, i) => i + 1), publish, false);
+  const [reveal, cashout] = await Promise.all([
+    s.dedicated.actPoolMines("alice", "reveal", 0, multiplier, publish),
+    s.dedicated.actPoolMines("alice", "cashout", 0, multiplier, publish),
+  ]);
+  assert.equal(reveal.event, "cleared");
+  assert.equal(cashout, null);
+  assert.equal(s.users.get("alice").balance, 1096);
+  assert.equal(s.data.winholds.length, 1);
+});
 
 test("dedicated instant games debit once, lock claims, and allocate exactly 35% without winholds", async () => {
   for (const slug of ["plinko", "limbo", "lucky-777"]) {
@@ -176,7 +218,7 @@ test("Mines terminal mine and automatic clear create pending zero-credit results
   }
 });
 
-test("Mines acceptance/action failures roll back and old active rounds remain exclusively legacy", async () => {
+test("Mines acceptance/action failures roll back and inconsistent pool versions cannot settle", async () => {
   const s = scene();
   const before = structuredClone(s.data);
   s.failNext("minesgames");
@@ -190,7 +232,7 @@ test("Mines acceptance/action failures roll back and old active rounds remain ex
   assert.deepEqual(s.data, active);
   s.data.minesgames[0].poolVersion = undefined;
   const old = structuredClone(s.data);
-  assert.equal(await s.dedicated.actPoolMines("alice", "cashout", 0, multiplier, publish), null);
+  await assert.rejects(s.dedicated.actPoolMines("alice", "cashout", 0, multiplier, publish), /inconsistent/);
   assert.deepEqual(s.data, old);
 });
 

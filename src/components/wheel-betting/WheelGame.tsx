@@ -320,7 +320,7 @@ export default function WheelGame() {
                 Lucky<span className="text-amber-300">Wheel</span>
               </h1>
               <p className="text-[0.55rem] font-semibold uppercase tracking-[0.2em] text-slate-500 hidden sm:block">
-                Casino · Provably fair
+                Casino
               </p>
             </div>
           </div>

@@ -318,7 +318,7 @@ export default function TowerGame() {
           <span>{playing ? `Next: ${nextMult.toFixed(2)}×` : "Fairness"}</span>
         </div>
       </main>
-      <GameOverOverlay open={!!result && !endDismissed} winAmount={result?.win ? result.amount : 0} result={pool.enabled ? `Provisional claim Rs. ${(result?.amount ?? 0).toFixed(2)}. Daily pool settlement pending.` : result?.win ? `You won Rs. ${result.amount.toFixed(2)}.` : "No win"} onPlayAgain={startGame} onClose={() => setEndDismissed(true)} />
+      <GameOverOverlay open={!!result && !endDismissed} winAmount={result?.win ? result.amount : 0} result={pool.enabled ? `Provisional claim Rs. ${(result?.amount ?? 0).toFixed(2)}. Daily pool settlement pending.` : result?.win ? `You won Rs. ${result.amount.toFixed(2)}.` : ""} onPlayAgain={startGame} onClose={() => setEndDismissed(true)} />
     </div>
   );
 }

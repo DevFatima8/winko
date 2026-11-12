@@ -14,8 +14,8 @@ export default function NotificationsPageClient({ params, searchParams }: { para
     const total = Number(data.total ?? 0), level = Number(data.level ?? 0);
     return (
       <div className="space-y-6">
-        <div><h1 className="text-2xl font-bold text-white">Notifications / Broadcast</h1><p className="text-sm text-[#b8a7e6]">{level < 2 ? `Apni team ke ${total} member(s) ko notification bhejein.` : `Yahan message likhein — sab platform users (${total}) ko app/website mein notification mil jayegi (bell icon + popup).`}</p></div>
-        <Card title="Send new notification"><NotificationForm level={level} /></Card>
+        <div><h1 className="text-2xl font-bold text-white">Notifications / Broadcast</h1><p className="text-sm text-[#b8a7e6]">{level >= 3 ? "Security alerts sirf Agent ko dikhte hain. Agent activity notifications band hain." : level < 2 ? `Apni team ke ${total} member(s) ko notification bhejein.` : `Yahan message likhein — sab platform users (${total}) ko app/website mein notification mil jayegi (bell icon + popup).`}</p></div>
+        {level < 3 ? <Card title="Send new notification"><NotificationForm level={level} /></Card> : <p className="text-sm text-[#b8a7e6]">Agent activity notifications are disabled. Security alerts appear in your notification bell.</p>}
         <Card title={`Sent (${list.length})`}>
           <ul className="divide-y divide-[#3a2470]/50">
             {list.map((n) => (

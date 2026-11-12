@@ -46,7 +46,7 @@ export default function ResultOverlay({
 
         <div style={{ position: "relative", display: "inline-block", padding: "0 24px 12px" }}>
           <div className="ribbon" />
-          <div className={`banner-3d ${won ? "win" : "lose"}`}>{poolEnabled ? "DAILY PAYOUT PENDING" : won ? "WIN" : "No win"}</div>
+          <div className={`banner-3d ${won ? "win" : "lose"}`}>{poolEnabled ? "DAILY PAYOUT PENDING" : won ? "WIN" : ""}</div>
         </div>
 
         <div className="result-card">
@@ -73,7 +73,7 @@ export default function ResultOverlay({
                   const val = s[row.key];
                   return (
                     <div key={id} className={`cell-val ${row.key === "total" ? "red" : ""}`}>
-                      {row.key === "entry" ? formatMoney(Math.abs(val)) : val < 0 ? "No win" : formatSigned(val)}
+                      {row.key === "entry" ? formatMoney(Math.abs(val)) : val < 0 ? "" : formatSigned(val)}
                     </div>
                   );
                 })}

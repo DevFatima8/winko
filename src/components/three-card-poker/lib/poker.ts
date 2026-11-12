@@ -359,16 +359,16 @@ export function settleRound(options: {
 
   const profit = returned - staked;
   let headline = "PUSH";
-  if (folded && ante > 0) headline = "No win";
+  if (folded && ante > 0) headline = "";
   else if (ante > 0 && !folded && !dealerQualifies(dealerHand)) {
     headline = "DEALER DOES NOT QUALIFY";
   } else if (profit > 0) headline = "PLAYER WINS";
-  else if (profit < 0) headline = "No win";
+  else if (profit < 0) headline = "";
 
   if (pairPlus > 0 && ante === 0 && PAIR_PLUS_PAY[playerHand.name] > 0) {
     headline = "PAIR PLUS WIN";
   } else if (pairPlus > 0 && ante === 0 && PAIR_PLUS_PAY[playerHand.name] === 0) {
-    headline = "No win";
+    headline = "";
   }
 
   return { returned, profit, lines, headline };

@@ -125,7 +125,9 @@ for (const win of [true, false]) {
     tree = s.render();
     assert.equal(s.roll(tree).props.disabled, true);
     assert.match(s.text(tree), win ? /24.25/ : /75.75/);
-    assert.match(s.text(tree), win ? /\+Rs. 9.80/ : /No win/);
+    if (win) assert.match(s.text(tree), /\+Rs. 9.80/);
+    else assert.doesNotMatch(s.text(tree), /No win|You lose|\bLose\b/i);
+    assert.match(s.text(tree), /STOP ON ZERO PAYOUT/);
     assert.deepEqual(s.notices, [["dice", "dice-fixture", win ? 19.8 : 0, false]]);
     s.advance(1799);
     tree = s.render();
@@ -183,7 +185,7 @@ test("compact controls retain all presets, directions and auto-play settings", (
   const tree = s.render();
   const buttons = s.nodes(tree).filter(node => node.type === "button");
   for (const amount of [10, 20, 50, 100, 200]) assert.ok(buttons.some(button => s.text(button) === String(amount)));
-  for (const label of ["ROLL UNDER", "ROLL OVER", "STOP ON WIN", "STOP ON NO WIN"]) {
+  for (const label of ["ROLL UNDER", "ROLL OVER", "STOP ON WIN", "STOP ON ZERO PAYOUT"]) {
     assert.ok(buttons.some(button => s.text(button) === label), label);
   }
   const panel = s.nodes(tree).find(node => node.type === "aside");

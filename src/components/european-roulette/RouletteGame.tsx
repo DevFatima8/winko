@@ -374,7 +374,7 @@ export default function RouletteGame({ backHref = "/player" }: { backHref?: stri
     }
     setHistory((h) => [number, ...h].slice(0, 20));
     setResult({ number, payout, total: stake });
-    setMessage(stake === 0 ? "Live result · place bets for next round" : pool.enabled ? `Provisional claim ${money(payout)} — daily settlement pending` : payout > stake ? `You win ${money(payout - stake)}!` : payout > 0 ? `Returned ${money(payout)}` : "No win this round");
+    setMessage(stake === 0 ? "Live result · place bets for next round" : pool.enabled ? `Provisional claim ${money(payout)} — daily settlement pending` : payout > stake ? `You win ${money(payout - stake)}!` : payout > 0 ? `Returned ${money(payout)}` : "");
     setSpinning(false);
     roundLock.current = false;
   };

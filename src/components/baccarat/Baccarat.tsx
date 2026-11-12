@@ -51,7 +51,7 @@ export default function Baccarat({ backHref = "/player" }: { backHref?: string }
   const poolMessage = poolRoundMessage(personal);
   const messageType = phase === "result" && totalBet > 0 && !poolMessage ? lastNet > 0 ? "win" : lastNet < 0 ? "lose" : "neutral" : "neutral";
   const message = !state ? "Connecting to live table…" : phase === "betting" ? "Place your bets" : !round || phase !== "result" ? "No more bets" :
-    phase === "result" && poolMessage ? poolMessage : `${BET_LABEL[round.winner]} WINS${totalBet > 0 ? lastNet > 0 ? `! You won ${money(lastNet)}` : lastNet < 0 ? " · No win" : " · Push" : ""}`;
+    phase === "result" && poolMessage ? poolMessage : `${BET_LABEL[round.winner]} WINS${totalBet > 0 ? lastNet > 0 ? `! You won ${money(lastNet)}` : lastNet < 0 ? "" : " · Push" : ""}`;
   const history = (state?.history ?? []).slice(0, 24).reverse().map(({ result }) => ({ winner: result.winner === "player" ? "P" : result.winner === "banker" ? "B" : "T" }));
   const stats = { p: history.filter((h) => h.winner === "P").length, b: history.filter((h) => h.winner === "B").length, t: history.filter((h) => h.winner === "T").length };
 

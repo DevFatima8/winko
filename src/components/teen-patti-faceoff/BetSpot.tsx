@@ -116,7 +116,7 @@ export function BetSpot({
       ) : null}
       {lost ? (
         <span className="tp-pop absolute right-1 top-1 z-30 rounded-md bg-rose-600/90 px-1.5 py-[1px] text-[9px] font-black text-white sm:text-[10px]">
-          No win
+          {""}
         </span>
       ) : null}
     </button>

@@ -205,7 +205,7 @@ export default function RockPaperScissorsGame({ backHref }: { backHref?: string 
               )}
               {!rolling && result === "lose" && (
                 <div className="w-full rounded-lg border border-rose-400/40 bg-rose-400/15 py-2 text-center text-sm sm:text-base font-black tracking-wider text-rose-300 shadow-md">
-                  {poolPending ? "DAILY PAYOUT PENDING — PROVISIONAL CLAIM Rs. 0" : "No win"}
+                  {poolPending ? "DAILY PAYOUT PENDING — PROVISIONAL CLAIM Rs. 0" : ""}
                 </div>
               )}
               {!rolling && settling && (
@@ -362,7 +362,7 @@ export default function RockPaperScissorsGame({ backHref }: { backHref?: string 
                       className={`font-mono font-bold ${h.result === "win" ? "text-emerald-300" : "text-rose-300"
                         }`}
                     >
-                      {h.delta < 0 ? "No win" : `${poolPending ? "Indicative game net (not paid): " : ""}+Rs. ${fmt(h.delta)}`}
+                      {h.delta < 0 ? "" : `${poolPending ? "Indicative game net (not paid): " : ""}+Rs. ${fmt(h.delta)}`}
                     </span>
                   </li>
                 ))}
@@ -371,7 +371,7 @@ export default function RockPaperScissorsGame({ backHref }: { backHref?: string 
           </div>
         </aside>
       </main>
-      <GameOverOverlay open={!!result && !endDismissed} winAmount={result === "win" ? delta : 0} result={poolPending ? "Daily payout pending. The game outcome is not a final wallet payment." : result === "win" ? "You won this hand." : "No win"} onPlayAgain={() => { if (player) void play(player); }} onClose={() => setEndDismissed(true)} />
+      <GameOverOverlay open={!!result && !endDismissed} winAmount={result === "win" ? delta : 0} result={poolPending ? "Daily payout pending. The game outcome is not a final wallet payment." : result === "win" ? "You won this hand." : ""} onPlayAgain={() => { if (player) void play(player); }} onClose={() => setEndDismissed(true)} />
     </div>
   );
 }

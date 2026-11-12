@@ -139,7 +139,7 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
     const id = Date.now() + Math.random();
     setFloats((f) => [
       ...f.slice(-3),
-      { id, txt: win ? `+Rs. ${fmt(amt)}` : "No win", win },
+      { id, txt: win ? `+Rs. ${fmt(amt)}` : "", win },
     ]);
     window.setTimeout(
       () => setFloats((f) => f.filter((x) => x.id !== id)),
@@ -251,7 +251,7 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
           why = "stopped on a win";
         } else if (!win && a.stopLoss) {
           stop = true;
-          why = "stopped on no win";
+          why = "stopped on zero payout";
         } else if (rem <= 0) {
           stop = true;
           why = "finished the set rounds";
@@ -502,7 +502,7 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
                       last.win ? "text-win" : "text-loss"
                     }`}
                   >
-                    {poolPending ? `Claim Rs. ${fmt(last.win ? round2(last.bet * last.payout) : 0)}` : last.win ? `+Rs. ${fmt(last.profit)}` : "No win"}
+                    {poolPending ? `Claim Rs. ${fmt(last.win ? round2(last.bet * last.payout) : 0)}` : last.win ? `+Rs. ${fmt(last.profit)}` : ""}
                   </div>
                 </>
               ) : (
@@ -519,12 +519,12 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
               <span className={winOnLeft ? "text-win" : "text-loss"}>
                 {winOnLeft
                   ? `WIN · UNDER ${target.toFixed(2)}`
-                  : `No win · ${target.toFixed(2)}`}
+                  : `${target.toFixed(2)}`}
               </span>
               <span className={!winOnLeft ? "text-win" : "text-loss"}>
                 {!winOnLeft
                   ? `WIN · OVER ${target.toFixed(2)}`
-                  : `No win · ${target.toFixed(2)}`}
+                  : `${target.toFixed(2)}`}
               </span>
             </div>
 
@@ -757,7 +757,7 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
                   active={auto.stopLoss}
                   onClick={() => setAuto((a) => ({ ...a, stopLoss: !a.stopLoss }))}
                 >
-                  STOP ON NO WIN
+                  STOP ON ZERO PAYOUT
                 </Pill>
               </div>
               {auto.on && (

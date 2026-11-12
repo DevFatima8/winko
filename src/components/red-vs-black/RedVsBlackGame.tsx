@@ -161,7 +161,7 @@ export default function RedVsBlackGame() {
           setWinMessage(pool.enabled ? `Provisional claim Rs. ${data.payout}; daily settlement pending` : `You won Rs. ${data.payout}!`);
           if (mountedRef.current) spawnParticles(data.winningColor);
         } else {
-          setWinMessage(pool.enabled ? "Daily payout pending — provisional claim Rs. 0" : "No win");
+          setWinMessage(pool.enabled ? "Daily payout pending — provisional claim Rs. 0" : "");
         }
 
         setHistory((prev) => [

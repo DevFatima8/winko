@@ -5,7 +5,7 @@ import { dailyPoolConsent } from "./dailyPoolConsent";
 import type { DailyPoolGame } from "./dailyPoolRules";
 import { notifyGameResult } from "./gameResultNotice";
 import { isCardGame } from "./cardGameRules";
-import { isRouletteGame, isBrowserRouletteGame } from "./rouletteGameRules";
+import { isRouletteGame, isBrowserRouletteGame, isWheelGame } from "./rouletteGameRules";
 import { isAutoResolveBrowserCardGame, isInteractiveBrowserCardGame } from "./browserCardGames";
 import { isSlotGame } from "./slotGameRules";
 
@@ -164,7 +164,7 @@ export async function concurrentBrowserWager(
       localStorage.removeItem(`wx:projectile:${game}:${wagerId}`);
     }
     broadcastBalanceUpdate(reply.balance, game);
-    return reply as { balance: number; poolPending: boolean };
+    return reply as { balance: number; poolPending: boolean; shotWin?: boolean };
   } catch (error) {
     walletError(error instanceof Error ? error.message : "Wager confirmation failed.");
     return null;
@@ -180,7 +180,9 @@ export async function acceptBrowserProjectile(game: DailyPoolGame, wagerId: stri
     if (existing) assertWagerOwner(existing, ownerId);
     saveBrowserEngine(game, snapshot);
     if (!existing) localStorage.setItem(key, JSON.stringify({ ownerId, wagerId, stake, claim: null, outcome }));
-    return await concurrentBrowserWager(game, "accept", wagerId, stake) ? wagerId : null;
+    const reply = await concurrentBrowserWager(game, "accept", wagerId, stake);
+    if (!reply) return null;
+    return game === "fishing-arcade" && typeof reply.shotWin === "boolean" ? { wagerId, win: reply.shotWin } : wagerId;
   } catch (error) {
     walletError(error instanceof Error ? error.message : "Projectile acceptance failed.");
     return null;
@@ -545,7 +547,7 @@ export function usePoolLifecycle(game: DailyPoolGame, slot = "main") {
   const pendingSettlement = useRef(false);
   const resolvedWager = useRef<string | null>(null);
   const heldBalance = useRef<number | null>(null);
-  const [enabled, setEnabled] = useState(!isCardGame(game) && !isRouletteGame(game) && !isSlotGame(game) && game !== "thai-hi-lo" && poolMode === true);
+  const [enabled, setEnabled] = useState(!isCardGame(game) && !isRouletteGame(game) && !isWheelGame(game) && !isSlotGame(game) && game !== "thai-hi-lo" && poolMode === true);
   const recovering = useRef(false);
   const mountedRecovery = useRef(typeof window !== "undefined" &&
     Boolean(localStorage.getItem(`${key}:request`) || localStorage.getItem(key)));
@@ -559,7 +561,7 @@ export function usePoolLifecycle(game: DailyPoolGame, slot = "main") {
     try {
       const ownerId = await requireWalletOwner();
       if (poolMode === null) throw new Error("Wallet configuration is unavailable. Retry before betting.");
-      setEnabled(!isCardGame(game) && !isRouletteGame(game) && !isSlotGame(game) && game !== "thai-hi-lo" && poolMode);
+      setEnabled(!isCardGame(game) && !isRouletteGame(game) && !isWheelGame(game) && !isSlotGame(game) && game !== "thai-hi-lo" && poolMode);
       const pendingKey = `${key}:request`;
       const pending = localStorage.getItem(pendingKey);
       const savedOwner = localStorage.getItem(`${key}:owner`);
@@ -578,7 +580,7 @@ export function usePoolLifecycle(game: DailyPoolGame, slot = "main") {
         game, action, ownerId, amount: Math.round(amount * 100) / 100,
         wagerId: active.current ?? planned?.wagerId ?? continuation?.wagerId ?? crypto.randomUUID(),
         operationId: nextStep && action !== "accept" ? nextStep.operationId : crypto.randomUUID(),
-        poolVersion: (isCardGame(game) || isRouletteGame(game) || isSlotGame(game) || game === "thai-hi-lo") && action === "accept" ? undefined : dailyPoolConsent(game),
+        poolVersion: (isCardGame(game) || isRouletteGame(game) || isWheelGame(game) || isSlotGame(game) || game === "thai-hi-lo") && action === "accept" ? undefined : dailyPoolConsent(game),
         selection,
       };
       assertWagerOwner(body, ownerId);
@@ -659,7 +661,7 @@ export function usePoolLifecycle(game: DailyPoolGame, slot = "main") {
     try {
       const ownerId = await requireWalletOwner();
       if (isDisposed()) return false;
-      setEnabled(!isCardGame(game) && !isRouletteGame(game) && !isSlotGame(game) && game !== "thai-hi-lo" && poolMode === true);
+      setEnabled(!isCardGame(game) && !isRouletteGame(game) && !isWheelGame(game) && !isSlotGame(game) && game !== "thai-hi-lo" && poolMode === true);
       const notifyRecoveredSlot = (wagerId: string) => {
         const resolved = outcome.current;
         if (!resolved || typeof resolved !== "object" || !("payout" in resolved) ||
@@ -726,7 +728,7 @@ export function usePoolLifecycle(game: DailyPoolGame, slot = "main") {
   }, [game]);
 
   return {
-    get enabled() { return enabled || !isCardGame(game) && !isRouletteGame(game) && !isSlotGame(game) && game !== "thai-hi-lo" && poolMode === true; },
+    get enabled() { return enabled || !isCardGame(game) && !isRouletteGame(game) && !isWheelGame(game) && !isSlotGame(game) && game !== "thai-hi-lo" && poolMode === true; },
     get busy() { return busy.current || recovering.current; },
     announce: () => {
       const resolved = outcome.current;

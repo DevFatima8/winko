@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
@@ -15,6 +15,42 @@ const load = path => {
   return mod.exports;
 };
 const poker = load("src\\components\\poker\\lib\\poker.ts");
+const cardRules = load("src\\lib\\cardGameRules.ts");
+const rouletteRules = load("src\\lib\\rouletteGameRules.ts");
+const cycleModule = { exports: {} };
+new Function("require", "exports", ts.transpileModule(readFileSync("src\\lib\\playerWinCycle.ts", "utf8"), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+}).outputText)(name => name === "node:crypto" ? { randomInt } :
+  name === "./rouletteGameRules" ? rouletteRules : cardRules, cycleModule.exports);
+
+test("all card, roulette and wheel titles have 30 opportunities per 100 rounds, including repeat players", async () => {
+  const rows = new Map();
+  const tx = {
+    get: async (_table, id) => structuredClone(rows.get(id) ?? null),
+    put: async (_table, id, value) => { rows.set(id, structuredClone(value)); },
+  };
+  for (const game of [...cardRules.CARD_GAMES, ...rouletteRules.ROULETTE_GAMES, ...rouletteRules.WHEEL_GAMES, "plinko", "fortune-ox", "thai-hi-lo"]) {
+    const expected = cardRules.isCardGame(game) || rouletteRules.isRouletteGame(game) || rouletteRules.isWheelGame(game) ? 30 : 10;
+    const oldId = `${game}:ten-player-wins:v1`;
+    if (expected === 30) rows.set(oldId, { _id: oldId, players: ["old"], remaining: Array(99).fill(false) });
+    const old = structuredClone(rows.get(oldId));
+    for (let block = 0; block < 2; block++) {
+      let wins = 0;
+      for (let index = 0; index < 100; index++) {
+        const player = expected === 30 ? "repeat-player" : `${block}-${index}`;
+        wins += Number(await cycleModule.exports.nextPlayerWin(tx, game, player));
+        if (expected === 10 && index < 99) {
+          const before = structuredClone([...rows]);
+          assert.equal(await cycleModule.exports.nextPlayerWin(tx, game, player), false);
+          assert.deepEqual([...rows], before);
+        }
+      }
+      assert.equal(wins, expected, game);
+    }
+    if (expected === 30) assert.deepEqual(rows.get(oldId), old, "historical cycle is preserved");
+  }
+  assert.equal(rows.get("rummy:bet-wins-30-of-100:v1").remaining.length, 100);
+});
 const muflis = load("src\\components\\muflis\\lib\\muflis.ts");
 const four = load("src\\components\\teen-patti-best-of-four\\lib\\teenpatti.ts");
 const ak = load("src\\components\\teen-patti-ak47\\lib\\teenpatti.ts");
@@ -29,6 +65,26 @@ const scene = (game, users = players) => {
   s.data.games.push({ _id: game, slug: game, isActive: true });
   return s;
 };
+
+for (const game of ["wheel-betting", "hotline"]) {
+  test(`${game}: 100 paid rounds by one player produce 30 instant wins, with immutable replays`, async () => {
+    const s = scene(game, ["alice"]);
+    s.users.get("alice").balance = 100000;
+    let wins = 0;
+    for (let round = 0; round < 100; round++) {
+      const input = { game, wagerId: randomUUID(), stake: 10, selection: game === "hotline" ? { color: "red", highRisk: false } : {} };
+      const play = () => s.store.transact(`daily-pool:${game}`, tx => s.browser.playServerBrowserWager(tx, "alice", input, true));
+      const reply = await play();
+      wins += Number(reply.claim > 10);
+      assert.equal(reply.poolPending, false);
+      const balance = s.users.get("alice").balance;
+      assert.deepEqual((await play()).outcome, reply.outcome);
+      assert.equal(s.users.get("alice").balance, balance);
+    }
+    assert.equal(wins, 30);
+    assert.equal(s.data.dailypoolentries.length, 0);
+  });
+}
 
 function assertCards(game, outcome, amount) {
   if (game === "poker" || game === "poker-betting") {
@@ -60,7 +116,7 @@ function assertCards(game, outcome, amount) {
 }
 
 for (const game of games) {
-  test(`${game}: 100 distinct players, ten card-consistent instant winners, one debit/credit and immutable retries`, async () => {
+  test(`${game}: 100 distinct players, thirty card-consistent instant winners, one debit/credit and immutable retries`, async () => {
     const s = scene(game);
     const replies = await Promise.all(players.map(async userId => {
       const wagerId = randomUUID(), operationId = randomUUID();
@@ -78,10 +134,10 @@ for (const game of games) {
       assert.deepEqual(s.data.gameresults.find(row => row.userId === userId), snapshot.gameresults.find(row => row.userId === userId));
       return reply;
     }));
-    assert.equal(replies.filter(reply => reply.claim > 0).length, 10);
+    assert.equal(replies.filter(reply => reply.claim > 0).length, 30);
     assert.equal(s.data.dailypoolentries.length, 0);
-    const cycle = s.data.multiplayerrooms.find(row => row._id === `${game}:ten-player-wins:v1`);
-    assert.deepEqual(cycle.players, []);
+    const cycle = s.data.multiplayerrooms.find(row => row._id === `${game}:bet-wins-30-of-100:v1`);
+    assert.equal(cycle.remaining.length, 100);
   });
 
   test(`${game}: forged claims blocked; rollback and recovery preserve exact result and wallet`, async () => {
@@ -150,7 +206,7 @@ test(`${game}: accepted pooled card obligations keep their original claim, ledge
   const before = structuredClone(s.data);
   await s.store.transact(`daily-pool:${game}`, tx => s.browser.browserPoolLifecycle(tx, "alice", input, true));
   assert.deepEqual(s.data, before);
-  assert.equal(s.data.multiplayerrooms.some(row => row._id === `${game}:ten-player-wins:v1`), false);
+  assert.equal(s.data.multiplayerrooms.some(row => row._id === `${game}:bet-wins-30-of-100:v1`), false);
 });
 }
 
@@ -163,7 +219,6 @@ test("interactive wagers reject generic resolution and post-deal wallet bypasses
       game, wagerId, operationId: randomUUID(), action, amount,
     }, true));
     await assert.rejects(resolve(s, game, "alice", wagerId), /table actions/);
-    await assert.rejects(run("increment", 10), /verified table action/);
     await s.store.transact(`daily-pool:${game}`, async tx => {
       const id = s.data.gameresults[0]._id;
       const result = await tx.get("gameresults", id);

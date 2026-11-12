@@ -17,7 +17,7 @@ const types = load("src\\lib\\multiplayer-types.ts");
 const catalog = load("src\\lib\\gameCatalog.ts");
 const rules = load("src\\lib\\dailyPoolRules.ts", { "./gameCatalog": catalog, "./multiplayer-types": types });
 const next = { NextResponse: { json: (body, init) => Response.json(body, init) } };
-function route({ enabled = true, user = { id: "alice", role: "client" } } = {}) {
+function route({ enabled = true, user = { id: "alice", role: "client" }, noActiveChicken = false } = {}) {
   const calls = [];
   const record = name => async (...args) => { calls.push({ name, args }); return { ok: true }; };
   const imports = Object.fromEntries(["plinko", "limbo", "mines", "slot777", "cards", "gateway", "notifications", "feedback"].map(name => [`@/lib/${name}`, {}]));
@@ -33,7 +33,7 @@ function route({ enabled = true, user = { id: "alice", role: "client" } } = {}) 
       "@/lib/gameAvailability": { LOCAL_GAMES_CONNECTED: true },
       "@/lib/dailyPoolRules": rules,
       "@/lib/dailyPoolConfig": { dailyPoolEnabled: () => enabled },
-      "@/lib/dailyPoolChicken": { startPoolChicken: record("pool-chicken"), actPoolChicken: record("pool-action") },
+      "@/lib/dailyPoolChicken": { startPoolChicken: record("pool-chicken"), actPoolChicken: noActiveChicken ? async (...args) => { calls.push({ name: "pool-action", args }); return null; } : record("pool-action") },
     }),
     calls,
   };
@@ -116,6 +116,15 @@ test("cashout/completion is not blocked by new-bet acknowledgement; chicken star
   const fixture = route({ enabled: false });
   assert.equal((await fixture.POST(post("/api/chicken/start", { difficulty: "easy", amount: 100 }))).status, 200);
   assert.equal(fixture.calls[0].name, "pool-chicken");
+});
+
+test("no active chicken wager does not fall back to a non-transactional action", async () => {
+  for (const path of ["/api/chicken/step", "/api/chicken/cashout", "/api/chickendash/step", "/api/chickendash/cashout"]) {
+    const fixture = route({ noActiveChicken: true });
+    const response = await fixture.POST(post(path));
+    assert.ok((await response.json()).error);
+    assert.deepEqual(fixture.calls.map(call => call.name), ["pool-action"]);
+  }
 });
 
 test("client acknowledges each game separately and never changes legacy action payloads", async () => {

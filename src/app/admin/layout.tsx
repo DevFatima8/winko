@@ -25,6 +25,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     { href: "/admin", label: t("dashboard"), icon: "📊" },
     { href: "/admin/support", label: t("liveSupportAdmin"), icon: "💬" },
     { href: "/admin/users", label: t("usersAdmin"), icon: "👥" },
+    ...(user.level >= 3 ? [{ href: "/admin/devices", label: "Login devices", icon: "🛡️" }] : []),
     { href: "/admin/deposits", label: t("depositsAdmin"), icon: "💳", badge: <PendingPaymentBadge label={t("depositsAdmin")} count={payments.counts?.deposits} error={payments.error} /> },
     { href: "/admin/withdrawals", label: t("withdrawalsAdmin"), icon: "💳", badge: <PendingPaymentBadge label={t("withdrawalsAdmin")} count={payments.counts?.withdrawals} error={payments.error} /> },
     { href: "/admin/feedback", label: t("feedbackAdmin"), icon: "📢" },
