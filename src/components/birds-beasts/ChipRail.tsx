@@ -52,7 +52,7 @@ export default function ChipRail({
               onClick={() => onSelect(value)}
               aria-pressed={active}
               className={`chip ${active ? "chip-selected" : ""}`}
-              style={{ ["--c" as string]: CHIP_COLORS[value] }}
+              style={{ ["--c" as string]: CHIP_COLORS[value] ?? "#94a3b8" }}
             >
               <span className="chip-label">{formatShort(value)}</span>
             </button>

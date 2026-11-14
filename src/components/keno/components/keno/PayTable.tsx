@@ -32,8 +32,8 @@ export default function PayTable({ risk, picks, lastHits, lastWin }: Props) {
   const count = Math.max(picks, 1);
 
   return (
-    <div className="flex w-full shrink-0 flex-col rounded-lg bg-[#0f212e] p-3 xl:w-[254px]">
-      <div className="mb-2 flex items-center justify-between gap-2">
+    <div className="flex w-full min-w-0 shrink-0 flex-col rounded-lg bg-[#0f212e] p-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#b1c2cf]">
             Paytable

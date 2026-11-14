@@ -112,6 +112,71 @@ test("fishing statistics reset preserves engine balance and the free reload entr
   assert.doesNotMatch(source("fishing-arcade/FishingGame.tsx"), /\.reload\s*\(/);
 });
 
+test("fishing fits the game container and updates the portrait instruction on rotation", () => {
+  const file = "fishing-arcade/FishingGame.tsx", text = source(file), ast = parse(file, text);
+  let hook;
+  visit(ast, node => {
+    if (ts.isCallExpression(node) && node.expression.getText(ast) === "useLayoutEffect") hook = node.arguments[0].getText(ast);
+  });
+  assert.ok(hook);
+  const viewport = { clientWidth: 960, clientHeight: 420 };
+  const portrait = {
+    matches: true,
+    addEventListener(event, callback) { assert.equal(event, "change"); this.change = callback; },
+    removeEventListener(event, callback) { assert.equal(event, "change"); assert.equal(callback, this.change); this.change = null; },
+  };
+  let resize, disconnected = false, scale, ready, needsLandscape;
+  const cleanup = new Function("viewportRef", "window", "ResizeObserver", "W", "H", "setScale", "setReady", "setNeedsLandscape", `return (${hook})();`)(
+    { current: viewport }, { matchMedia: () => portrait },
+    class {
+      constructor(callback) { resize = callback; }
+      observe(element) { assert.equal(element, viewport); }
+      disconnect() { disconnected = true; }
+    },
+    1280, 720, value => { scale = value; }, value => { ready = value; }, value => { needsLandscape = value; },
+  );
+  assert.equal(ready, true);
+  assert.equal(needsLandscape, true);
+  assert.equal(scale, 420 / 720);
+  portrait.matches = false;
+  portrait.change();
+  assert.equal(needsLandscape, false);
+  viewport.clientWidth = 640;
+  viewport.clientHeight = 280;
+  resize();
+  assert.equal(scale, 280 / 720, "Short landscape games must not be forced to a 320px minimum height");
+  viewport.clientWidth = 480;
+  viewport.clientHeight = 800;
+  resize();
+  assert.equal(scale, 480 / 1280, "Container resizing must not depend on a window resize");
+  portrait.matches = true;
+  portrait.change();
+  assert.equal(needsLandscape, true);
+  cleanup();
+  assert.equal(disconnected, true);
+  assert.equal(portrait.change, null);
+});
+
+test("fishing blocks new paid shots in portrait without replacing the active engine", () => {
+  const file = "fishing-arcade/FishingGame.tsx", text = source(file), ast = parse(file, text);
+  let hook;
+  visit(ast, node => {
+    if (ts.isCallExpression(node) && node.expression.getText(ast) === "useEffect" &&
+        node.arguments[0].getText(ast).includes(".setInputEnabled(")) hook = node.arguments[0].getText(ast);
+  });
+  assert.ok(hook);
+  const enabled = [];
+  const engineRef = { current: { setInputEnabled: value => enabled.push(value) } };
+  const update = new Function("engineRef", "started", "showPay", "noFunds", "needsLandscape", `(${hook})();`);
+  update(engineRef, true, false, false, true);
+  update(engineRef, true, false, false, false);
+  update(engineRef, true, false, false, true);
+  update(engineRef, false, false, false, false);
+  update(engineRef, true, true, false, false);
+  update(engineRef, true, false, true, false);
+  assert.deepEqual(enabled, [false, true, false, false, false, false]);
+});
+
 test("deposits, withdrawals, real betting and confirmed payouts remain wired", () => {
   assert.match(source("nine-wickets/Game.tsx"), /onAddCoins=.*\/player\/deposit/);
   assert.match(source("speed-baccarat/SpeedBaccaratGame.tsx"), /window\.location\.assign\("\/player\/deposit"\)/);

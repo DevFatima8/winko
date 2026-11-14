@@ -9,6 +9,7 @@ export function scene({ win = true, reject = false } = {}) {
   const timers = new Map();
   const wagers = [];
   const notices = [];
+  const reveals = [];
   let cursor = 0;
   let now = 0;
   let timerId = 0;
@@ -54,14 +55,17 @@ export function scene({ win = true, reject = false } = {}) {
   const play = async (...args) => {
     wagers.push(args);
     if (reject) throw new Error("Fixture rejection");
-    return { balance: 990, poolPending: false, claim: win ? 19.8 : 0, wagerId: "dice-fixture" };
+    return { balance: 990, poolPending: false, claim: win ? 19.8 : 0, wagerId: "dice-fixture",
+      outcome: { value: win ? 24.25 : 75.75, win } };
   };
   const imports = {
     "./dice.css": {},
     react,
     "react/jsx-runtime": { jsx, jsxs: jsx },
     "next/link": { __esModule: true, default: "a" },
-    "@/lib/walletSync": { useBrowserWager: () => ({ balance: 1000, play, pending: false, error: null }) },
+    "@/lib/walletSync": { useBrowserWager: () => ({
+      balance: 1000, playServer: play, reveal: () => reveals.push(now), pending: false, error: null,
+    }) },
     "@/lib/betPresets": { BET_PRESETS: [10, 20, 50, 100, 200] },
     "@/lib/gameResultNotice": { notifyGameResult: (...args) => notices.push(args) },
     "./dice": { ...engine.exports, rollDice: () => ({ value: win ? 24.25 : 75.75, win }) },
@@ -106,7 +110,7 @@ export function scene({ win = true, reject = false } = {}) {
     now = until;
   };
   const unmount = () => slots.forEach(slot => slot?.cleanup?.());
-  return { render, nodes, text, roll, advance, wagers, notices, unmount, timers };
+  return { render, nodes, text, roll, advance, wagers, notices, reveals, unmount, timers };
 }
 
 for (const win of [true, false]) {
@@ -114,11 +118,12 @@ for (const win of [true, false]) {
     const s = scene({ win });
     s.roll(s.render()).props.onClick();
     await Promise.resolve();
-    assert.deepEqual(s.wagers, [[10, win ? 19.8 : 0]]);
+    assert.deepEqual(s.wagers, [[10, { target: 50, dir: "under" }]]);
     s.advance(1499);
     let tree = s.render();
     assert.match(s.text(s.roll(tree)), /ROLLING/);
     assert.equal(s.notices.length, 0);
+    assert.equal(s.reveals.length, 0);
     s.roll(tree).props.onClick();
     assert.equal(s.wagers.length, 1);
     s.advance(1);
@@ -129,6 +134,7 @@ for (const win of [true, false]) {
     else assert.doesNotMatch(s.text(tree), /No win|You lose|\bLose\b/i);
     assert.match(s.text(tree), /STOP ON ZERO PAYOUT/);
     assert.deepEqual(s.notices, [["dice", "dice-fixture", win ? 19.8 : 0, false]]);
+    assert.deepEqual(s.reveals, [1500], "balance releases only when the final dice value appears");
     s.advance(1799);
     tree = s.render();
     s.roll(tree).props.onClick();

@@ -64,25 +64,20 @@ test("Diao Chan engine parses as a Next.js module with top-level server preparat
 });
 
 for (const game of server.SERVER_BROWSER_SLOT_GAMES) {
-  test(`${game}: ten natural winners per 100 distinct players; repeats lose without consuming a slot`, async () => {
+  test(`${game}: 30 reel-supported profitable wins per 100 rounds, including repeat players`, async () => {
     const store = tx();
     const stake = 100000;
     let winners = 0;
     for (let player = 0; player < 100; player++) {
-      const result = await server.serverSlotOutcome(store, `player-${player}`, game, stake, selection(game, stake));
+      const result = await server.serverSlotOutcome(store, "alice", game, stake, selection(game, stake));
       assert.equal(result.claim, result.outcome.payout);
       assert.ok(readBrowserSlotOutcome(game, result.outcome, stake));
       assert.ok(result.claim >= 0 && result.claim <= stake * 2);
-      winners += result.claim > 0 ? 1 : 0;
-      if (player < 99) {
-        const cycle = structuredClone(store.rows.get(`multiplayerrooms:${game}:ten-player-wins:v1`));
-        const repeat = await server.serverSlotOutcome(store, `player-${player}`, game, stake, selection(game, stake));
-        assert.equal(repeat.claim, 0);
-        assert.deepEqual(store.rows.get(`multiplayerrooms:${game}:ten-player-wins:v1`), cycle);
-      }
+      assert.ok(result.claim === 0 || result.claim > stake);
+      winners += result.claim > stake ? 1 : 0;
     }
-    assert.equal(winners, 10);
-    assert.equal(store.rows.get(`multiplayerrooms:${game}:ten-player-wins:v1`).players.length, 0);
+    assert.equal(winners, 30);
+    assert.equal(store.rows.get(`multiplayerrooms:${game}:bet-wins-30-of-100:v1`).remaining.length, 100);
   });
 
   test(`${game}: invalid selection cannot consume a player slot; forged visible result is rejected`, async () => {
@@ -102,6 +97,19 @@ for (const game of server.SERVER_BROWSER_SLOT_GAMES) {
     assert.equal(readBrowserSlotOutcome(game, result.outcome, 10), null);
   });
 }
+
+test("Fortune Gems Extra Bet counts the full paid stake when guaranteeing 30 profitable wins", async () => {
+  const store = tx();
+  const baseBet = 10.01, stake = money(baseBet * 1.5);
+  let profitable = 0;
+  for (let round = 0; round < 100; round++) {
+    const result = await server.serverSlotOutcome(store, "alice", "fortune-gems", stake, { extra: true, baseBet });
+    assert.ok(readBrowserSlotOutcome("fortune-gems", result.outcome, stake));
+    assert.ok(result.claim === 0 || result.claim > stake);
+    if (result.claim > stake) profitable++;
+  }
+  assert.equal(profitable, 30);
+});
 
 test("pure engines: both outcomes remain reel-supported at cent stakes and at 100000", () => {
   for (const stake of [10, 10.01, 30.15, 100000]) {

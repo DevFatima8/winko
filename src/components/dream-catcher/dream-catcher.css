@@ -5,10 +5,102 @@
   color: transparent;
 }
 
-.studio-stage .panel {
+.studio-stage {
+  container: dream-wheel / inline-size;
+}
+
+.studio-stage .panel,
+.studio-stage .dw-panel {
   background: rgba(18, 14, 38, 0.85);
   border: 1px solid rgba(139, 92, 246, 0.25);
   backdrop-filter: blur(12px);
+}
+
+.studio-stage .dw-panel {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 18px 40px -22px rgba(0, 0, 0, 0.9);
+}
+
+.studio-stage .dw-wheel-space {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  place-items: center;
+}
+
+.studio-stage .dw-banner {
+  min-width: 0;
+}
+
+.studio-stage .dw-banner-card {
+  min-width: 0;
+  padding: 8px 12px;
+  overflow-wrap: normal;
+  word-break: normal;
+  animation: dw-banner-enter 420ms ease-out both;
+}
+
+.studio-stage .dw-banner-title {
+  font-size: clamp(14px, 1.5cqw, 20px);
+  line-height: 1.3;
+  letter-spacing: 0.06em;
+  overflow-wrap: normal;
+  word-break: normal;
+  text-wrap: balance;
+}
+
+@keyframes dw-banner-enter {
+  from { opacity: 0; transform: translateY(12px) scale(0.95); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (min-width: 640px) {
+  .studio-stage .dw-wheel-panel {
+    min-height: 300px;
+  }
+
+  .studio-stage .dw-wheel-space {
+    flex: 1;
+    min-height: 0;
+    container-type: size;
+  }
+
+  .studio-stage .dw-wheel {
+    width: min(100cqw, 100cqh, 260px);
+    max-width: none;
+  }
+}
+
+@container dream-wheel (min-width: 900px) {
+  .studio-stage .dw-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: "bets wheel";
+    min-height: 460px;
+    gap: 10px;
+  }
+
+  .studio-stage .dw-betting-column {
+    grid-area: bets;
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .studio-stage .dw-betting-board,
+  .studio-stage .dw-controls {
+    min-width: 0;
+  }
+
+  .studio-stage .dw-wheel-panel {
+    grid-area: wheel;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .studio-stage .dw-wheel {
+    width: min(100cqw, 100cqh, 720px);
+  }
 }
 
 .studio-stage .panel-flat {

@@ -41,7 +41,7 @@ function CoinSvg() {
 
 export default function LudoApp() {
   const [balance] = useGameBalance("ludo", STARTING_BALANCE);
-  const { playServer } = useBrowserWager("ludo", STARTING_BALANCE);
+  const { playServer, reveal } = useBrowserWager("ludo", STARTING_BALANCE);
   const [ready, setReady] = useState(false);
   const [bet, setBet] = useState<BetAmount>(1000);
   const [screen, setScreen] = useState<"lobby" | "table">("lobby");
@@ -144,6 +144,7 @@ export default function LudoApp() {
   function applySettlement(currentDeal: Deal) {
     if (settled.current === currentDeal.txId) return;
     settled.current = currentDeal.txId;
+    reveal();
     const notice = resultNotice.current;
     if (notice) notifyGameResult("ludo", notice.wagerId, notice.claim, notice.poolPending);
   }
@@ -173,7 +174,7 @@ export default function LudoApp() {
         </button>
         <div className="jili-lockup">
           <small>Powered by</small>
-          <div className="jili-badge">JILI</div>
+          <div className="jili-badge">Winko</div>
         </div>
         <button type="button" className="icon-btn" onClick={() => setRulesOpen(true)} aria-label="Info">
           <InfoIcon />

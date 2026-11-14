@@ -211,9 +211,10 @@ export function isSafeSteps(player: number, steps: number) {
   return STAR_INDICES.includes(global) || START_INDEX.includes(global);
 }
 
-export function createDeal(bet: number, seed: number): Deal {
+export function createDeal(bet: number, seed: number, winningOpportunity?: boolean): Deal {
   const rng = mulberry32(seed);
-  const playerWins = rng() < PLAYER_WIN_RATE;
+  const sampledWin = rng() < PLAYER_WIN_RATE;
+  const playerWins = winningOpportunity ?? sampledWin;
   const winner = playerWins ? 0 : 1 + Math.floor(rng() * 3);
 
   const usedAvatars = new Set<string>();

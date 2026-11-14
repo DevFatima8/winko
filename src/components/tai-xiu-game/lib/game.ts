@@ -24,7 +24,7 @@ export interface Session {
   breakUntil: number;
 }
 
-export type DialogName = "rules" | "fairness" | "wallet" | "leaderboard" | "lobby" | "favorites" | "support" | "profile" | "notifications" | "responsible" | "round" | null;
+export type DialogName = "rules" | "fairness" | "wallet" | "leaderboard" | "lobby" | "favorites" | "support" | "notifications" | "responsible" | "round" | null;
 
 export const STARTING_BALANCE = 12500;
 export const STORAGE_KEY = "taixiu-practice-v1";

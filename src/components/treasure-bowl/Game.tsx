@@ -166,6 +166,7 @@ export default function HomePage() {
       const { isWin, isHuge, payout, finalReels } = outcome;
       const nextResult: ResultKind = isHuge ? "huge" : isWin ? "win" : "loss";
 
+      pool.announce();
       setReels(finalReels);
       setIsSpinning(false);
       setResultKind(nextResult);
@@ -217,7 +218,7 @@ export default function HomePage() {
             </div>
           </div>
           <div className="topbar-actions">
-            <div className="demo-badge"><span /> DEMO MODE</div>
+            <div className="demo-badge"><span />MODE</div>
             <button className="icon-button" onClick={() => setMuted((value) => !value)} aria-label={muted ? "Unmute game" : "Mute game"}><SpeakerIcon muted={muted} /></button>
             <button className="icon-button" aria-label="Game information"><InfoIcon /></button>
             <button className="avatar-button" aria-label="Player profile">P</button>
@@ -227,7 +228,7 @@ export default function HomePage() {
         <div className="game-layout">
           <div className="play-column">
             <div className="session-strip">
-              <div className="session-strip__item"><span className="live-dot" /> LIVE DEMO SESSION</div>
+              <div className="session-strip__item"><span className="live-dot" /> LIVE SESSION</div>
               <div className="session-strip__item session-strip__item--muted">SPIN <strong>#{String(spinCount).padStart(4, "0")}</strong></div>
               <div className="session-strip__item session-strip__item--muted">MAX WIN <strong>25,000</strong></div>
             </div>
@@ -283,7 +284,6 @@ export default function HomePage() {
               <div className="control-deck__bottom">
                 <div className="balance-readout"><span>DEMO BALANCE</span><strong>{formatCredits(credits)}</strong><small>virtual balance</small></div>
                 <div className="progress-track"><span style={{ width: `${Math.min(100, (credits / 10000) * 100)}%` }} /></div>
-                <button className="reset-button" onClick={resetDemo}>RESET DEMO</button>
               </div>
             </section>
           </div>
@@ -293,7 +293,6 @@ export default function HomePage() {
             <div className="session-card">
               <div className="session-card__label">CURRENT BALANCE</div>
               <div className="session-card__amount"><span>◈</span> {formatCredits(credits)}</div>
-              <div className="session-card__note"><span className="positive-dot" /> demo credits only</div>
             </div>
             <div className="panel-divider"><span>RECENT SPINS</span></div>
             <div className="history-row" aria-label="Recent spin results">
@@ -307,7 +306,7 @@ export default function HomePage() {
             <div className="feature-card"><div className="feature-card__icon"><BowlIcon small /></div><div><strong>X-HUGE FEATURE</strong><p>Three treasure bowls unlock the royal reel.</p></div><span className="feature-card__multiplier">25x</span></div>
           </aside>
         </div>
-        <footer className="game-footer"><span>© 2026 TREASURE BOWL</span><span className="footer-pips"><i /><i /><i /></span><span>ENTERTAINMENT DEMO · PLAY RESPONSIBLY</span></footer>
+        <footer className="game-footer"><span>© 2026 TREASURE BOWL</span><span className="footer-pips"><i /><i /><i /></span></footer>
       </section>
     </main>
   );

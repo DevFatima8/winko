@@ -134,5 +134,5 @@ export function useLiveTable<T extends { [K in keyof T]: number }>({
     locked.current = false;
     setActive(0);
   };
-  return { begin, release, controls };
+  return { begin, release, controls, countdown };
 }

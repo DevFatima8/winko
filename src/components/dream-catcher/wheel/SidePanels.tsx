@@ -96,9 +96,8 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: "go
     <div className="panel-flat rounded-lg px-2 py-2">
       <div className="text-[9px] font-black tracking-[0.18em] text-violet-200/50 uppercase">{label}</div>
       <div
-        className={`mt-0.5 text-sm font-black tabular-nums ${
-          tone === "good" ? "text-emerald-300" : tone === "bad" ? "text-rose-300" : "text-white"
-        }`}
+        className={`mt-0.5 text-sm font-black tabular-nums ${tone === "good" ? "text-emerald-300" : tone === "bad" ? "text-rose-300" : "text-white"
+          }`}
       >
         {value}
       </div>
@@ -147,11 +146,6 @@ export function RulesModal({ open, onClose }: { open: boolean; onClose: () => vo
             a chip back off, or use UNDO / CLEAR.
           </Rule>
         </ul>
-
-        <p className="mt-5 rounded-lg bg-black/40 p-3 text-[11px] leading-relaxed text-violet-200/55">
-          Play-money simulator for entertainment and UI study. No real currency, no deposits, no withdrawals.
-          Balance and history are stored only in your browser.
-        </p>
       </div>
     </div>
   );

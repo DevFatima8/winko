@@ -72,10 +72,10 @@ export async function ensureAdmin() {
 
 const GAMES = [
   { slug: "aviator", name: "Aviator", icon: "✈️", category: "original", description: "Plane udne se pehle cash out karein aur multiplier jeetein!" },
-  { slug: "aviator-x", name: "Aviator X", icon: "🚀", category: "original", description: "Aviator ka X edition — 3 bets, neon sky, crash below 100x." },
+  { slug: "aviator-x", name: "Aviator X", icon: "🚀", category: "original", description: "Aviator ka X edition — 2 bets, neon sky, crash below 100x." },
   { slug: "chicken-road-2", name: "Chicken Road 2", icon: "🐔", category: "original", description: "Chicken ko road cross karwayein — har lane par multiplier barhta hai!" },
   { slug: "chicken-dash", name: "Chicken Dash", icon: "🐤", category: "original", description: "Busy highway cross karein — Dash boost aur Bonus Bag ke saath 100x tak!" },
-  { slug: "plinko", name: "Plinko", icon: "🔴", category: "original", description: "Plinko: 25x scale marker (0% chance); payable buckets 0x, 0.2x, 0.9x and 1.3x." },
+  { slug: "plinko", name: "Plinko", icon: "🔴", category: "original", description: "Plinko: 12 rows, 13 symmetric buckets, one center 0x and payable multipliers from 0.7x to 1.8x." },
   { slug: "limbo", name: "Limbo", icon: "🎯", category: "original", description: "Target multiplier set karein — 100x tak instant result!" },
   { slug: "mines", name: "Mines", icon: "💎", category: "original", description: "5×5 grid, mines choose karein, gems kholen aur cash out — 10,000x tak!" },
   { slug: "lucky-777", name: "Lucky 777", icon: "🎰", category: "original", description: "Classic 3-reel slot — 7 7 7 par jackpot!" },

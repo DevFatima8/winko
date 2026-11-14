@@ -6,26 +6,23 @@ import { payoutAfterHouseShare, MAX_MULTIPLIER } from "./outcomes";
 import { holdWinShare } from "./winHold";
 import { dailyPoolEnabled } from "./dailyPoolConfig";
 import { acceptDedicatedInstant } from "./dailyPoolDedicated";
-import { nextPlayerPrize } from "./playerWinCycle";
+import { nextPlayerWin } from "./playerWinCycle";
 
 
 export const MIN_BET = 10;
 export const MAX_BET = Number.MAX_SAFE_INTEGER;
 export const MAX_WIN = Number.MAX_SAFE_INTEGER;
-export const ROWS = [8, 9, 10, 11, 12, 13, 14, 15, 16] as const;
+export const ROWS = [12] as const;
 export type Risk = "low" | "medium" | "high";
 export const isRisk = (r: string): r is Risk => r === "low" || r === "medium" || r === "high";
 
-// The 25x edges are scale markers only; payable buckets match PLINKO_PRIZES.
-const plinkoRow = (rows: number) => {
-  const side = Math.floor((rows + 1) / 2);
-  const outer = [25, 1.3, 0.9, 0.2, ...Array<number>(Math.max(0, side - 4)).fill(0)].slice(0, side);
-  return [...outer, ...((rows + 1) % 2 ? [0] : []), ...[...outer].reverse()];
+const PLINKO_TABLE: Record<number, number[]> = {
+  12: [1.8, 1.5, 1.3, 1.1, 1, 0.7, 0, 0.7, 1, 1.1, 1.3, 1.5, 1.8],
 };
-const PLINKO_TABLE = Object.fromEntries(ROWS.map(rows => [rows, plinkoRow(rows)])) as Record<number, number[]>;
 export const TABLES: Record<Risk, Record<number, number[]>> = { low: PLINKO_TABLE, medium: PLINKO_TABLE, high: PLINKO_TABLE };
-export const PLINKO_PRIZES = ["0.2", "0.2", "1.3", "1.3", "1.3", "1.3", "1.3", "0.9", "0.9", "0.9"] as const;
-const PLINKO_PRIZE_CYCLE = "plinko:prizes-v2";
+export const PLINKO_PRIZES = [...new Set(PLINKO_TABLE[12])].filter(multiplier => multiplier > 0).map(String);
+// Preserve in-progress eligibility and repeat-player protection across paytable updates.
+const PLINKO_WIN_CYCLE = "plinko:prizes-v2";
 
 export function plinkoBucket(table: number[], prize: string | null) {
   const target = prize === null ? 0 : Number(prize);
@@ -61,7 +58,7 @@ async function gameId(): Promise<ObjectId> {
   if (cachedGameId) return cachedGameId;
   const g = await Game.findOneAndUpdate(
     { slug: "plinko" },
-    { $setOnInsert: { name: "Plinko", slug: "plinko", icon: "🔴", category: "original", description: "Plinko: 25x scale marker (0% chance); payable buckets 0x, 0.2x, 0.9x and 1.3x.", isActive: true } },
+    { $setOnInsert: { name: "Plinko", slug: "plinko", icon: "🔴", category: "original", description: "Plinko: 12 rows, 13 symmetric buckets, one center 0x and payable multipliers from 0.7x to 1.8x.", isActive: true } },
     { upsert: true, returnDocument: "after" },
   ).lean();
   cachedGameId = g!._id;
@@ -93,17 +90,19 @@ const poolFields = (record: object) => {
 export async function drop(userId: string, amount: number, risk: string, rows: number, requestId = "") {
   await dbConnect();
   if (!isRisk(risk)) return { error: "Risk select karein." };
-  if (!ROWS.includes(rows as (typeof ROWS)[number])) return { error: "Rows 8 se 16 ke darmiyan hon." };
   if (!Number.isFinite(amount) || amount < MIN_BET) return { error: `Minimum bet Rs. ${MIN_BET} hai.` };
   amount = Math.floor(amount);
   const denied = await checkGameAccess(userId, "plinko");
   if (denied) return { error: denied };
   const uid = oid(userId);
 
-  const table = multipliersFor(risk, rows);
+  const table = rows === 12 ? multipliersFor(risk, rows) : null;
+  const rowsError = { error: "Plinko ke naye board mein 12 rows hain." };
+  const chooseBucket = (multipliers: number[], won: boolean) => plinkoBucket(multipliers, won ? PLINKO_PRIZES[randomInt(PLINKO_PRIZES.length)] : null);
 
   if (dailyPoolEnabled()) return acceptDedicatedInstant("plinko", userId, amount, requestId, JSON.stringify([amount, risk, rows]), async tx => {
-    const bucket = plinkoBucket(table, await nextPlayerPrize(tx, PLINKO_PRIZE_CYCLE, userId, PLINKO_PRIZES));
+    if (!table) return rowsError;
+    const bucket = chooseBucket(table, await nextPlayerWin(tx, PLINKO_WIN_CYCLE, userId));
     const path = plinkoPath(rows, bucket);
     const multiplier = table[bucket];
     return {
@@ -113,7 +112,8 @@ export async function drop(userId: string, amount: number, risk: string, rows: n
       plinko: { risk, rows, path, bucket, multiplier },
     };
   });
-  const bucket = plinkoBucket(table, randomInt(10) === 0 ? PLINKO_PRIZES[randomInt(10)] : null);
+  if (!table) return rowsError;
+  const bucket = chooseBucket(table, randomInt(10) === 0);
   const path = plinkoPath(rows, bucket);
   const multiplier = table[bucket];
   const payout = payoutAfterHouseShare(amount * Math.min(MAX_MULTIPLIER, multiplier));

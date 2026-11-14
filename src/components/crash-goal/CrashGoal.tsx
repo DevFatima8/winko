@@ -19,6 +19,7 @@ import {
   multiplierAt,
 } from "./lib/crash";
 import { assignTargets, createRoster, randomRoundId, type BotPlayer } from "./lib/players";
+import { BALL_SIZE, flightFrame, type FlightGeometry } from "./lib/flight";
 
 /* ------------------------------------------------------------------ */
 /* constants                                                            */
@@ -26,12 +27,9 @@ import { assignTargets, createRoster, randomRoundId, type BotPlayer } from "./li
 
 const BETTING_MS = 10000;
 const CRASHED_MS = 2800;
-const BALL_SIZE = 54;
 const START_BALANCE = 2000;
 const BALANCE_KEY = "crash-goal:balance";
 const INITIAL_HISTORY = [2.69, 1.26, 6.42, 8.19, 1.41, 1.23, 1.64];
-
-const PAD = { left: 96, right: 66, top: 76, bottom: 156 };
 
 type Phase = "betting" | "flying" | "crashed";
 
@@ -53,49 +51,23 @@ interface FloatBadge {
 
 const initialSlots = (): Slot[] => [
   { amount: 50, autoTarget: 3, autoEnabled: true, placed: false, cashedOutAt: null, outcome: null },
-  { amount: 50, autoTarget: 3, autoEnabled: true, placed: false, cashedOutAt: null, outcome: null },
 ];
-
-/* ------------------------------------------------------------------ */
-/* geometry helpers                                                     */
-/* ------------------------------------------------------------------ */
-
-interface Geom {
-  w: number;
-  h: number;
-}
-
-function pointFor(multiplier: number, crashPoint: number, g: Geom) {
-  const xFrac = Math.log(Math.max(1, multiplier)) / Math.log(crashPoint);
-  const yCap = Math.max(3, crashPoint * 1.2);
-  const yFrac = Math.min(1, Math.log(Math.max(1, multiplier)) / Math.log(yCap));
-  const x = PAD.left + xFrac * Math.max(1, g.w - PAD.left - PAD.right);
-  const y = g.h - PAD.bottom - Math.pow(yFrac, 0.85) * Math.max(1, g.h - PAD.bottom - PAD.top);
-  return { x, y };
-}
-
-function trailPath(current: number, crashPoint: number, g: Geom): string {
-  const steps = 42;
-  const parts: string[] = [];
-  for (let i = 0; i <= steps; i += 1) {
-    const m = 1 + (current - 1) * (i / steps);
-    const p = pointFor(m, crashPoint, g);
-    parts.push(`${p.x.toFixed(1)} ${p.y.toFixed(1)}`);
-  }
-  return `M${parts.join(" L")}`;
-}
 
 /* ------------------------------------------------------------------ */
 /* component                                                            */
 /* ------------------------------------------------------------------ */
 
 export function CrashGoal() {
-  type SavedRound = { phase: Phase; started: number; crash: number; slots: Slot[] };
+  type SavedRound = { phase: Phase; started: number; crash: number; slots: Slot[]; visualSeed?: number };
   const [savedOne] = usePoolRoundState<SavedRound | null>("crash-goal", "machine", null, "panel-1");
   const [savedTwo] = usePoolRoundState<SavedRound | null>("crash-goal", "machine", null, "panel-2");
   const recovered = savedOne ?? savedTwo;
+  const recoveredSlots = recovered?.slots.filter((slot, index) => index === 0 || slot.placed) ?? initialSlots();
   const stageRef = useRef<HTMLDivElement>(null);
-  const geomRef = useRef<Geom>({ w: 1200, h: 700 });
+  const controlsRef = useRef<HTMLDivElement>(null);
+  const sceneryRef = useRef<SVGPatternElement>(null);
+  const geomRef = useRef<FlightGeometry>({ w: 1200, h: 700, controlsHeight: 120 });
+  const visualSeedRef = useRef(recovered?.visualSeed ?? recovered?.started ?? 0);
   const ballRef = useRef<HTMLDivElement>(null);
   const trailRef = useRef<SVGPathElement>(null);
   const coreRef = useRef<SVGPathElement>(null);
@@ -108,7 +80,7 @@ export function CrashGoal() {
   const phaseRef = useRef<Phase>(recovered?.phase ?? "betting");
   const phaseStartRef = useRef<number>(recovered ? performance.now() - (Date.now() - recovered.started) : 0);
   const crashPointRef = useRef<number>(recovered?.crash ?? 2);
-  const slotsRef = useRef<Slot[]>(recovered?.slots ?? initialSlots());
+  const slotsRef = useRef<Slot[]>(recoveredSlots);
   const botsRef = useRef<BotPlayer[]>([]);
   const floatKeyRef = useRef(0);
   const lastAmountRef = useRef(50);
@@ -120,6 +92,7 @@ export function CrashGoal() {
   const [history, setHistory] = useState<number[]>(INITIAL_HISTORY);
   const [balance] = useGameBalance("crash-goal", START_BALANCE);
   const poolOne = usePoolLifecycle("crash-goal", "panel-1");
+  // Previously accepted second bets still need their original settlement channel.
   const poolTwo = usePoolLifecycle("crash-goal", "panel-2");
   const pools = [poolOne, poolTwo];
   const balanceRef = useRef(balance);
@@ -128,7 +101,7 @@ export function CrashGoal() {
     balanceRef.current = balance;
   }, [balance]);
 
-  const [slots, setSlots] = useState<Slot[]>(recovered?.slots ?? initialSlots());
+  const [slots, setSlots] = useState<Slot[]>(recoveredSlots);
   const [bots, setBots] = useState<BotPlayer[]>([]);
   const [crashValue, setCrashValue] = useState(1);
   const [roundTimer, setRoundTimer] = useState<number | null>(BETTING_MS / 1000);
@@ -177,11 +150,12 @@ export function CrashGoal() {
     if (!stage) return;
     const measure = () => {
       const r = stage.getBoundingClientRect();
-      geomRef.current = { w: r.width, h: r.height };
+      geomRef.current = { w: r.width, h: r.height, controlsHeight: controlsRef.current?.offsetHeight ?? 120 };
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(stage);
+    if (controlsRef.current) ro.observe(controlsRef.current);
     return () => ro.disconnect();
   }, []);
 
@@ -189,7 +163,7 @@ export function CrashGoal() {
   const saveMachine = (list = slotsRef.current) => {
     const machine: SavedRound = {
       phase: phaseRef.current, started: Date.now() - (performance.now() - phaseStartRef.current),
-      crash: crashPointRef.current, slots: list,
+      crash: crashPointRef.current, slots: list, visualSeed: visualSeedRef.current,
     };
     pools.forEach(pool => pool.checkpoint({ machine }));
   };
@@ -228,31 +202,55 @@ export function CrashGoal() {
   }, []);
 
   const paint = useCallback(
-    (multiplier: number, crashPoint: number) => {
+    (multiplier: number) => {
       const g = geomRef.current;
-      const p = pointFor(multiplier, crashPoint, g);
+      const frame = flightFrame(multiplier, g, visualSeedRef.current);
+      const p = frame.ball;
+      const crashed = phaseRef.current === "crashed";
+      const scale = Math.max(g.w / 1200, g.h / 700, 0.001);
+      sceneryRef.current?.setAttribute(
+        "patternTransform",
+        `translate(${-frame.camera.x * 0.32 / scale} ${frame.camera.y * 0.32 / scale})`,
+      );
       const ball = ballRef.current;
       if (ball) {
-        ball.style.opacity = "1";
+        ball.style.opacity = crashed ? "0" : "1";
         ball.style.transform = `translate3d(${(p.x - BALL_SIZE / 2).toFixed(1)}px, ${(
           p.y -
           BALL_SIZE / 2
         ).toFixed(1)}px, 0)`;
       }
-      const d = trailPath(multiplier, crashPoint, g);
+      const d = phaseRef.current === "betting" ? "" : frame.path;
       if (trailRef.current) trailRef.current.setAttribute("d", d);
       if (coreRef.current) coreRef.current.setAttribute("d", d);
       if (glowRef.current) glowRef.current.setAttribute("d", d);
 
       const box = multBoxRef.current;
       if (box) {
-        box.style.opacity = "1";
+        box.style.opacity = phaseRef.current === "flying" ? "1" : "0";
         const tx = Math.max(14, Math.min(g.w - 200, p.x - 205));
         const ty = Math.max(8, Math.min(g.h - 92, p.y - 122));
         box.style.transform = `translate3d(${tx.toFixed(1)}px, ${ty.toFixed(1)}px, 0)`;
       }
       const num = multNumRef.current;
       if (num) num.textContent = formatMultiplier(multiplier);
+      if (crashed) {
+        if (crashRef.current) {
+          crashRef.current.style.opacity = "1";
+          const tx = Math.max(14, Math.min(g.w - 220, p.x - 215));
+          const ty = Math.max(8, Math.min(g.h - 92, p.y - 122));
+          crashRef.current.style.transform = `translate3d(${tx.toFixed(1)}px, ${ty.toFixed(1)}px, 0)`;
+        }
+        const burst = burstRef.current;
+        if (burst) {
+          burst.style.opacity = "1";
+          burst.style.transform = `translate3d(${(p.x - 120).toFixed(1)}px, ${(p.y - 120).toFixed(1)}px, 0)`;
+          if (!burst.classList.contains("cg-burst-go")) {
+            void burst.offsetWidth;
+            burst.classList.add("cg-burst-go");
+          }
+        }
+      }
     },
     [],
   );
@@ -285,6 +283,7 @@ export function CrashGoal() {
     if (closingRound.current || pools.some(pool => pool.busy)) return;
     phaseRef.current = "betting";
     phaseStartRef.current = performance.now();
+    visualSeedRef.current = Date.now();
     setPhase("betting");
     setCrashValue(1);
     setRoundTimer(BETTING_MS / 1000);
@@ -293,12 +292,13 @@ export function CrashGoal() {
     setBots(botsRef.current.map((b) => ({ ...b })));
     setRoundId(randomRoundId());
     syncSlots((list) =>
-      list.map((s) => ({ ...s, placed: false, cashedOutAt: null, outcome: null })),
+      [{ ...list[0], placed: false, cashedOutAt: null, outcome: null }],
     );
     const queued = queue.consume();
     if (queued) {
       const { index, slot } = queued;
-      if (Number.isFinite(slot.amount) && slot.amount > 0 && slot.amount <= balanceRef.current) {
+      if (index !== 0) queue.setStatus("Queued bet rejected — only one bet per round is available.");
+      else if (Number.isFinite(slot.amount) && slot.amount > 0 && slot.amount <= balanceRef.current) {
         saveMachine(slotsRef.current.map((s, i) => i === index ? { ...slot, placed: true, cashedOutAt: null, outcome: null } : s));
         if (!await pools[index].start(slot.amount)) return;
         syncSlots((list) => list.map((s, i) => i === index ? { ...slot, placed: true, cashedOutAt: null, outcome: null } : s));
@@ -308,17 +308,8 @@ export function CrashGoal() {
     timerShownRef.current = null;
     resetVisuals();
 
-    // park the ball on the pitch while players place their bets
-    const g = geomRef.current;
-    const p = pointFor(1, 2, g);
-    if (ballRef.current) {
-      ballRef.current.style.opacity = "1";
-      ballRef.current.style.transform = `translate3d(${(p.x - BALL_SIZE / 2).toFixed(1)}px, ${(
-        p.y -
-        BALL_SIZE / 2
-      ).toFixed(1)}px, 0)`;
-    }
-  }, [queue.consume, queue.setStatus, resetVisuals, syncSlots]);
+    paint(1);
+  }, [queue.consume, queue.setStatus, resetVisuals, syncSlots, paint]);
 
   const enterFlying = useCallback(() => {
     if (pools.some(pool => pool.busy)) return;
@@ -347,6 +338,7 @@ export function CrashGoal() {
     setCrashValue(cp);
     setHistory((prev) => [cp, ...prev].slice(0, 14));
     saveMachine();
+    paint(cp);
     while (activeRef.current && pools.some(pool => pool.busy)) await new Promise(resolve => setTimeout(resolve, 50));
     if (!activeRef.current) return;
     for (let index = 0; index < slotsRef.current.length; index++) {
@@ -388,28 +380,7 @@ export function CrashGoal() {
       }));
     }
 
-    if (crashRef.current) {
-      crashRef.current.style.opacity = "1";
-      const g = geomRef.current;
-      const p = pointFor(cp, cp, g);
-      const tx = Math.max(14, Math.min(g.w - 220, p.x - 215));
-      const ty = Math.max(8, Math.min(g.h - 92, p.y - 122));
-      crashRef.current.style.transform = `translate3d(${tx.toFixed(1)}px, ${ty.toFixed(1)}px, 0)`;
-    }
-    // explode the ball into a visible burst
-    const geo = geomRef.current;
-    const bp = pointFor(cp, cp, geo);
-    if (burstRef.current) {
-      burstRef.current.style.opacity = "1";
-      burstRef.current.style.transform = `translate3d(${(bp.x - 120).toFixed(1)}px, ${(
-        bp.y - 120
-      ).toFixed(1)}px, 0)`;
-      // force reflow so the animation restarts on every round
-      void burstRef.current.offsetWidth;
-      burstRef.current.classList.add("cg-burst-go");
-    }
-    if (ballRef.current) ballRef.current.style.opacity = "0";
-  }, [recordMyBet]);
+  }, [recordMyBet, paint]);
 
   /* ---------------- main loop ---------------- */
   useEffect(() => {
@@ -467,21 +438,22 @@ export function CrashGoal() {
         const cashed = botsRef.current.filter((b) => b.cashedOut).length + placed.filter((s) => s.cashedOutAt !== null).length;
         if (m < cp && cashoutLimitReached(cashed, botsRef.current.length + placed.length)) {
           crashPointRef.current = m;
-          paint(m, m);
+          paint(m);
           enterCrashed();
           return;
         }
 
         if (m >= cp) {
-          paint(cp, cp);
+          paint(cp);
           enterCrashed();
           return;
         }
-        paint(m, cp);
+        paint(m);
         return;
       }
 
       // crashed
+      paint(crashPointRef.current);
       if (closingRound.current && !pools.some(pool => pool.busy) && now >= closeRetryAt.current) {
         void enterCrashed();
         return;
@@ -496,9 +468,13 @@ export function CrashGoal() {
   useEffect(() => {
     botsRef.current = createRoster(14);
     setBots(botsRef.current.map((b) => ({ ...b })));
-    if (!recovered) phaseStartRef.current = performance.now();
+    if (!recovered) {
+      phaseStartRef.current = performance.now();
+      visualSeedRef.current = Date.now();
+    }
     setRoundId(randomRoundId());
     if (recovered?.phase === "crashed") void enterCrashed();
+    if (phaseRef.current === "betting") paint(1);
   }, []);
 
   /* ---------------- player actions ---------------- */
@@ -506,6 +482,12 @@ export function CrashGoal() {
     async (index: number) => {
       const slot = slotsRef.current[index];
       const currentPhase = phaseRef.current;
+      const legacyAction = index > 0 && slot?.placed && slot.cashedOutAt === null &&
+        (currentPhase === "betting" || currentPhase === "flying");
+      if (!slot || (index > 0 && !legacyAction)) {
+        queue.setStatus("Only one bet per round is available.");
+        return;
+      }
 
       if (currentPhase === "flying" && slot.placed && slot.cashedOutAt === null) {
         const m = multiplierAt((performance.now() - phaseStartRef.current) / 1000);
@@ -631,13 +613,12 @@ export function CrashGoal() {
           ladderValue={slots[0].amount}
           onLadderPick={(v) => {
             setSlotAmount(0, v);
-            setSlotAmount(1, v);
           }}
         />
 
         {/* ---------------- stage ---------------- */}
         <main ref={stageRef} className="relative min-w-0 flex-1 overflow-hidden">
-          <Stadium />
+          <Stadium sceneryRef={sceneryRef} />
 
           {/* MAX badge */}
           <div className="absolute left-3 top-2.5 z-10 rounded bg-black/35 px-2 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/70 backdrop-blur-sm">
@@ -812,29 +793,39 @@ export function CrashGoal() {
           </div>
 
           {/* bottom controls */}
-          <div className="absolute inset-x-0 bottom-0 z-30 flex items-end justify-center gap-2 px-2 pb-3 sm:gap-5 sm:px-3 sm:pb-4">
-            <div className="hidden sm:block">
-              <EdgeButton side="left" onClick={repeatLast} />
-            </div>
-            {slots.map((slot, i) => (
-              <BetPanel
-                key={i}
-                index={i}
-                amount={slot.amount}
-                autoTarget={slot.autoTarget}
-                autoEnabled={slot.autoEnabled}
-                placed={slot.placed}
-                cashedOutAt={slot.cashedOutAt}
-                phase={phase}
-                balance={balance}
-                onAmountChange={(v) => setSlotAmount(i, v)}
-                onTargetChange={(v) => setSlotTarget(i, v)}
-                onToggleAuto={() => toggleSlotAuto(i)}
-                onPrimaryAction={() => primaryAction(i)}
-              />
-            ))}
-            <div className="hidden sm:block">
-              <EdgeButton side="right" onClick={repeatLast} />
+          <div ref={controlsRef} className="absolute inset-x-0 bottom-0 z-30 px-2 pb-3 sm:px-3 sm:pb-4">
+            {slots[1]?.placed && slots[1].cashedOutAt === null && slots[1].outcome === null && phase !== "crashed" && (
+              <div className="mb-2 flex flex-wrap items-center justify-center gap-2 rounded bg-black/50 p-2 text-xs">
+                <span>Previous second bet: {formatMoney(slots[1].amount)}</span>
+                <button className="rounded bg-emerald-700 px-3 py-2" onClick={() => primaryAction(1)}>
+                  {phase === "betting" ? "Cancel" : "Cash Out"}
+                </button>
+              </div>
+            )}
+            <div className="flex items-end justify-center gap-2 sm:gap-5">
+              <div className="hidden sm:block">
+                <EdgeButton side="left" onClick={repeatLast} />
+              </div>
+              {slots.slice(0, 1).map((slot, i) => (
+                <BetPanel
+                  key={i}
+                  index={i}
+                  amount={slot.amount}
+                  autoTarget={slot.autoTarget}
+                  autoEnabled={slot.autoEnabled}
+                  placed={slot.placed}
+                  cashedOutAt={slot.cashedOutAt}
+                  phase={phase}
+                  balance={balance}
+                  onAmountChange={(v) => setSlotAmount(i, v)}
+                  onTargetChange={(v) => setSlotTarget(i, v)}
+                  onToggleAuto={() => toggleSlotAuto(i)}
+                  onPrimaryAction={() => primaryAction(i)}
+                />
+              ))}
+              <div className="hidden sm:block">
+                <EdgeButton side="right" onClick={repeatLast} />
+              </div>
             </div>
           </div>
         </main>

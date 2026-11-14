@@ -196,7 +196,7 @@ export function RulesModal({ open, onClose }: { open: boolean; onClose: () => vo
           <li>Wild three-of-a-kind pays the highest line prize.</li>
           <li>Watch for the random Fortune Toucan sticky-respin feature.</li>
           <li>Fill the whole grid in a win for the x10 banner multiplier.</li>
-          <li>Server-prepared reels select 10 winning players per 100 distinct players. The total return, including sticky respins and multipliers, is at most 2× the paid stake.</li>
+          <li>The total return, including sticky respins and multipliers, is at most 2× the paid stake.</li>
         </ol>
         <p className="ft-modal-note">Amounts are in Rs.</p>
       </div>

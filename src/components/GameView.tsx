@@ -79,18 +79,19 @@ import { DailyPoolNotice } from "@/components/DailyPoolNotice";
 import { isDailyPoolGame } from "@/lib/dailyPoolRules";
 import { SharedGameResults } from "@/components/GameOverOverlay";
 import { GameResultPopup } from "@/components/GameResultPopup";
+import { GameHistory } from "@/components/GameHistory";
 
 const HOWTO: Record<string, string> = {
-  "aviator-x": "Aviator X — 3 bet panels, tez multiplier growth, crash below 100x; cash-out maximum 99.98x. Round shuru hone se pehle bet lagayein, crash se pehle Cash Out karein. Server Auto Cash Out available.",
-  limbo: "Target multiplier set karein (1.01x – 1,000,000x) aur Bet dabayein. Agar result aapke target se barabar ya zyada aaye to aap target × bet jeet-te hain.   Win chance = 99 ÷ target.",
-    mines: "Bet aur mines (1–24) select karein. 5×5 grid par tiles kholen — gem milne par multiplier barhta hai, mine par sab khatam. Kabhi bhi Cashout karein.",
+  "aviator-x": "Aviator X — 2 bet panels, tez multiplier growth, crash below 100x; cash-out maximum 99.98x. Round shuru hone se pehle bet lagayein, crash se pehle Cash Out karein. Server Auto Cash Out available.",
+  limbo: "Target multiplier set karein (1.01x - 100x) aur Bet dabayein.",
+  mines: "Bet aur mines (1–24) select karein. 5×5 grid par tiles kholen — gem milne par multiplier barhta hai, mine par sab khatam. Kabhi bhi Cashout karein.",
   "lucky-777": "Bet select karke SPIN dabayein. Center payline par teen same symbols = jeet (paytable dekhein). 7 7 7 = 777× jackpot! Any cherry bhi paisa deta hai.",
   aviator: "Round shuru hone se pehle bet lagayein. Plane udta hai aur multiplier barhta hai — plane ke crash hone se pehle CASH OUT dabayein. Jitna zyada multiplier, utni zyada jeet.",
   "chicken-road-2": "Bet aur difficulty select karke PLAY dabayein. Har GO par chicken agli lane cross karti hai aur multiplier barhta hai. Kisi bhi lane par gaari aa sakti hai — us se pehle CASH OUT karein.",
   "chicken-dash": "Bet aur level (Easy 28 · Normal 24 · Hard 20 tiles) select karke START dabayein. Har GO par multiplier barhta hai — kabhi bhi CASH OUT karein. Dash boost 2–3 safe tiles sprint karta hai, Bonus Bag utha kar cash out karein to extra bonus.",
-  plinko: "Bet, Risk (Low/Medium/High) aur Rows (8–16) select karke Bet dabayein.",
-  "dragon-tiger":   "Har round 10 second betting. Chip select karke Dragon, Tie ya Tiger par tap karein. Bara card jeet-ta hai (A lowest, K highest). Dragon/Tiger/Tie 1:1; sirf winning option pays, baqi zero. Total gross return max 2x round stake, house share se pehle.",
-  "andar-bahar":   "Har round 10 second betting. Andar ya Bahar par tap karein. Joker khulta hai, phir cards Andar → Bahar dealt hote hain; jis side pehla same-rank card aaye wo jeet-ta hai. Andar 0.9:1, Bahar 1:1.",
+  plinko: "Bet aur Risk select karke Bet dabayein. Fixed 12 rows, 13 buckets: center 0x, paas 0.7x, edges 1.8x. 1x se kam partial return hai.",
+  "dragon-tiger": "Har round 10 second betting. Chip select karke Dragon, Tie ya Tiger par tap karein. Bara card jeet-ta hai (A lowest, K highest). Dragon/Tiger/Tie 1:1; sirf winning option pays, baqi zero.",
+  "andar-bahar": "Har round 10 second betting. Andar ya Bahar par tap karein. Joker khulta hai, phir cards Andar → Bahar dealt hote hain; jis side pehla same-rank card aaye wo jeet-ta hai. Andar 0.9:1, Bahar 1:1.",
   "dice": "Dice Betting — Coming Soon! Apni kismat aazmayein.",
   "dream-catcher": "Dream Catcher — Coming Soon! Big wheel spins.",
   "european-roulette": "European Roulette — Coming Soon! Classic casino roulette.",
@@ -100,7 +101,7 @@ const HOWTO: Record<string, string> = {
   "fortune-gems": "Fortune Gems — 3x3 slot with 5 fixed paylines and a 4th multiplier reel up to 15x! Match precious gems to win.",
   "fortune-ox": "Fortune Ox — Year of the Ox 3-reel slot with 10 paylines! Golden Sycee, Wild Ox, and 10x full-screen multipliers.",
   "fortune-toucan": "Fortune Toucan — Rainforest adventure 3x3 slot with 5 paylines! Golden Toucan Wilds and 10x full-screen respin bonus.",
-  "gates-of-olympus": "Gates of Olympus — 6×5 Zeus slot where 8+ matching symbols pay anywhere! Storm Orbs boost multipliers up to 10x with free spins.",
+  "gates-of-olympus": "Gates of Olympus — 6×5 Zeus slot where 8+ matching symbols pay anywhere! Storm Orbs boost multipliers up to 10x.",
   "head-tail": "Head & Tail — Choose Head or Tail and flip the lucky golden coin for an instant 2x payout!",
   "muflis": "Muflis Lowball — Reverse Teen Patti! The lowest, weakest 3-card hand wins the round. High-intensity card action.",
   "poker": "Poker — Casino 5-card poker against the dealer! Stronger hand wins with payouts up to 100x for Royal Flush.",
@@ -136,7 +137,7 @@ const HOWTO: Record<string, string> = {
   "sic-bo": "Sic Bo — Predict the outcome of the three dice! Bet on Big, Small, Triples, or specific totals.",
   "speed-baccarat": "Speed Baccarat — Fast-paced baccarat! Bet on Player, Banker or Tie in ultra-quick rounds.",
   "super-fruits": "Super Fruits — Classic retro fruit machine with juicy payouts and scatter bonuses.",
-  "sweet-bonanza": "Sweet Bonanza — Tumbling sweet symbols with huge multipliers and free spins!",
+  "sweet-bonanza": "Sweet Bonanza — Tumbling sweet symbols with huge multipliers.",
   "tai-xiu": "Tai Xiu — Traditional Asian dice game. Bet on Over or Under total dice points.",
   "teen-patti": "Teen Patti — The ultimate 3-card poker game! Chaal, blind, and show to win the pot.",
   "teen-patti-999": "Teen Patti 999 — Get as close to 999 as possible with your three cards to win.",
@@ -154,16 +155,16 @@ const HOWTO: Record<string, string> = {
 };
 
 const HOWTO_UR: Record<string, string> = {
-  "aviator-x": "ایوی ایٹر X — 3 بیٹ پینلز، تیز ملٹی پلائر، کریش 100x سے کم، کیش آؤٹ زیادہ سے زیادہ 99.98x۔ راؤنڈ شروع ہونے سے پہلے بیٹ لگائیں، کریش سے پہلے کیش آؤٹ کریں۔",
+  "aviator-x": "ایوی ایٹر X — 2 بیٹ پینلز، تیز ملٹی پلائر، کریش 100x سے کم، کیش آؤٹ زیادہ سے زیادہ 99.98x۔ راؤنڈ شروع ہونے سے پہلے بیٹ لگائیں، کریش سے پہلے کیش آؤٹ کریں۔",
   limbo: "ٹارگٹ ملٹی پلائر سیٹ کریں (1.01x – 1,000,000x) اور Bet دبائیں۔ اگر نتیجہ آپ کے ٹارگٹ کے برابر یا زیادہ آئے تو آپ ٹارگٹ × بیٹ   جیتتے ہیں۔",
-    mines: "بیٹ اور مائنز (1–24) منتخب کریں۔ 5×5 گرڈ پر ٹائلز کھولیں — جیم ملنے پر ملٹی پلائر بڑھتا ہے، مائن پر سب ختم۔ کبھی بھی کیش آؤٹ کریں۔",
+  mines: "بیٹ اور مائنز (1–24) منتخب کریں۔ 5×5 گرڈ پر ٹائلز کھولیں — جیم ملنے پر ملٹی پلائر بڑھتا ہے، مائن پر سب ختم۔ کبھی بھی کیش آؤٹ کریں۔",
   "lucky-777": "بیٹ منتخب کر کے SPIN دبائیں۔ درمیانی پے لائن پر تین ایک جیسے سمبلز = جیت۔ 7 7 7 = 777× جیک پاٹ!",
   aviator: "راؤنڈ شروع ہونے سے پہلے بیٹ لگائیں۔ جہاز اُڑتا ہے اور ملٹی پلائر بڑھتا ہے — جہاز کے کریش ہونے سے پہلے کیش آؤٹ دبائیں۔ جتنا زیادہ ملٹی پلائر، اتنی زیادہ جیت۔",
   "chicken-road-2": "بیٹ اور ڈفیکلٹی منتخب کر کے PLAY دبائیں۔ ہر GO پر مرغی اگلی لین پار کرتی ہے اور ملٹی پلائر بڑھتا ہے۔ کسی بھی لین پر گاڑی آ سکتی ہے — اس سے پہلے کیش آؤٹ کریں۔",
   "chicken-dash": "بیٹ اور لیول (Easy 28 · Normal 24 · Hard 20 ٹائلز) منتخب کر کے START دبائیں۔ ہر GO پر ملٹی پلائر بڑھتا ہے — کبھی بھی کیش آؤٹ کریں۔ ڈیش بوسٹ 2–3 محفوظ ٹائلز اسپرنٹ کرتا ہے، بونس بیگ اٹھا کر کیش آؤٹ کریں تو اضافی بونس۔",
-  plinko: "بیٹ، رسک (Low/Medium/High) اور رَوز (8–16) منتخب کر کے Bet دبائیں۔ ہر 100 الگ کھلاڑیوں کے سائیکل میں 2 کو 0.2x، 5 کو 1.3x، 3 کو 0.9x اور 90 کو 0x کلیم ملتا ہے۔ 1x سے کم جزوی واپسی ہے، منافع نہیں۔ 25x صرف اسکیل کا نشان ہے، ادائیگی کا امکان 0% ہے۔",
-  "dragon-tiger":   "ہر راؤنڈ 10 سیکنڈ بیٹنگ۔ چپ منتخب کر کے Dragon، Tie یا Tiger پر ٹیپ کریں۔ بڑا کارڈ جیتتا ہے (A سب سے چھوٹا، K سب سے بڑا)۔ Dragon/Tiger/Tie 1:1؛ صرف جیتنے والے آپشن کی ادائیگی، باقی صفر۔ ہاؤس شیئر سے پہلے کل واپسی زیادہ سے زیادہ راؤنڈ بیٹ کا 2x۔",
-  "andar-bahar":   "ہر راؤنڈ 10 سیکنڈ بیٹنگ۔ اندر یا باہر پر ٹیپ کریں۔ جوکر کھلتا ہے، پھر کارڈز اندر ← باہر ڈیل ہوتے ہیں؛ جس طرف پہلا same-rank کارڈ آئے وہ جیتتا ہے۔ اندر 0.9:1، باہر 1:1۔",
+  plinko: "بیٹ اور رسک منتخب کر کے Bet دبائیں۔ 12 قطاریں اور 13 خانے ہیں: درمیان 0x، دونوں طرف 0.7x، کناروں پر 1.8x۔ 1x سے کم جزوی واپسی ہے، منافع نہیں۔",
+  "dragon-tiger": "ہر راؤنڈ 10 سیکنڈ بیٹنگ۔ چپ منتخب کر کے Dragon، Tie یا Tiger پر ٹیپ کریں۔ بڑا کارڈ جیتتا ہے (A سب سے چھوٹا، K سب سے بڑا)۔ Dragon/Tiger/Tie 1:1؛ صرف جیتنے والے آپشن کی ادائیگی، باقی صفر۔ ہاؤس شیئر سے پہلے کل واپسی زیادہ سے زیادہ راؤنڈ بیٹ کا 2x۔",
+  "andar-bahar": "ہر راؤنڈ 10 سیکنڈ بیٹنگ۔ اندر یا باہر پر ٹیپ کریں۔ جوکر کھلتا ہے، پھر کارڈز اندر ← باہر ڈیل ہوتے ہیں؛ جس طرف پہلا same-rank کارڈ آئے وہ جیتتا ہے۔ اندر 0.9:1، باہر 1:1۔",
   "dice": "ڈائس بیٹنگ — جلد آ رہا ہے!",
   "dream-catcher": "ڈریم کیچر — جلد آ رہا ہے!",
   "european-roulette": "یورپی رولیٹی — جلد آ رہا ہے!",
@@ -362,10 +363,16 @@ export function GameView({ slug, backHref = "/", isScreenFit = false }: { slug: 
             <Link href={backHref} className="text-sm text-slate-400 hover:text-white">{t("allGames")}</Link>
           </div>
         )}
-        <div className={framed ? "game-surface wx-game h-full min-h-0 w-full shrink-0 overflow-y-auto overflow-x-hidden" : "game-surface"}>{isDailyPoolGame(slug) ? <DailyPoolNotice key={slug} game={slug}>{body}</DailyPoolNotice> : body}</div>
-        <div className="mx-auto max-w-4xl rounded-2xl border border-slate-800 bg-slate-900 p-4 text-sm text-slate-400">
-          <b className="text-white">{t("howToPlay")}</b> {locale === "ur" ? (HOWTO_UR[slug] ?? HOWTO[slug]) : HOWTO[slug]}
+        <div className="relative z-40 flex shrink-0 items-center justify-between gap-2 border-b border-slate-800 bg-slate-950 px-2 py-0.5">
+          <details className="text-xs text-slate-300">
+            <summary className="cursor-pointer px-2 py-1">{t("howToPlay")}</summary>
+            <p className="absolute left-2 right-2 top-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm shadow-xl">
+              {locale === "ur" ? (HOWTO_UR[slug] ?? HOWTO[slug]) : HOWTO[slug]}
+            </p>
+          </details>
+          <GameHistory key={`history:${slug}`} game={slug} />
         </div>
+        <div className={framed ? "game-surface wx-game min-h-0 w-full flex-1 overflow-y-auto overflow-x-hidden" : "game-surface"}>{isDailyPoolGame(slug) ? <DailyPoolNotice key={slug} game={slug}>{body}</DailyPoolNotice> : body}</div>
       </div>
     </SharedGameResults>
   );

@@ -7,7 +7,7 @@ const STEPS = [
   {
     n: "02",
     t: "Arm your target",
-    d: "Type the multiplier you want to be paid at and arm auto cash-out. The rocket is calibrated so that your target is cleared on 35 of every 100 launches and buried on the other 65.",
+    d: "Type the multiplier you want to be paid at and arm auto cash-out.",
   },
   {
     n: "03",

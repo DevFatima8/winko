@@ -61,7 +61,7 @@ test("Pending payment counts deny non-staff and surface database failures, not f
 
 test("Payment badges hide zero, show exact counts, and distinguish loading/stale errors", () => {
   const jsx = (type, props) => ({ type, props });
-  const { PendingPaymentBadge } = load(join("src", "components", "admin", "PendingPaymentBadge.tsx"), {
+  const { AdminCountBadge: PendingPaymentBadge } = load(join("src", "components", "admin", "AdminCountBadge.tsx"), {
     "react/jsx-runtime": { jsx, jsxs: jsx },
   });
   assert.equal(PendingPaymentBadge({ count: 0, error: null, label: "Deposits" }), null);
@@ -69,7 +69,7 @@ test("Payment badges hide zero, show exact counts, and distinguish loading/stale
   assert.equal(badge.props.children, 701);
   assert.equal(badge.props["aria-label"], "Deposits: 701 pending requests");
   assert.equal(PendingPaymentBadge({ error: null, label: "Deposits" }).props.children, "...");
-  assert.match(PendingPaymentBadge({ count: 4, error: "Retrying", label: "Deposits" }).props["aria-label"], /Last known pending count: 4/);
+  assert.match(PendingPaymentBadge({ count: 4, error: "Retrying", label: "Deposits" }).props["aria-label"], /Last known count: 4/);
 });
 
 test("Pending payment subscription polls without reload, handles actions/focus and cleans up", async () => {
@@ -87,12 +87,13 @@ test("Pending payment subscription polls without reload, handles actions/focus a
   globalThis.fetch = async () => { requests++; return Response.json({ deposits: requests, withdrawals: 2 }); };
   const settle = () => new Promise((resolve) => setImmediate(resolve));
   try {
-    const loaded = load(join("src", "components", "admin", "usePendingPayments.ts"), {
+    const polling = load(join("src", "components", "admin", "useAdminCounts.ts"), {
       react: {
         useState: () => [state, (next) => { state = typeof next === "function" ? next(state) : next; }],
         useEffect: (effect) => effects.push(effect),
       },
     });
+    const loaded = load(join("src", "components", "admin", "usePendingPayments.ts"), { "./useAdminCounts": polling });
     loaded.usePendingPayments("staff");
     const cleanup = effects[0]();
     await settle();

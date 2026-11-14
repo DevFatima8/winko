@@ -206,3 +206,7 @@ export const GAME_ORDER = [
 ] as const;
 
 export const GAME_SLUGS: readonly string[] = GAME_ORDER;
+
+export const GAME_THUMBNAILS: Record<string, string> = Object.fromEntries(
+  GAME_ORDER.map(slug => [GAME_IMAGES[slug], `/games/thumbnails/${slug}.webp`]),
+);

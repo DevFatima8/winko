@@ -91,7 +91,7 @@ export const RaceTrackStudio: React.FC<RaceTrackStudioProps> = ({
   const countdownPercent = Math.max(0, Math.min(100, (countdown / maxCountdown) * 100));
 
   return (
-    <div className="relative w-full rounded-2xl overflow-hidden bg-gradient-to-b from-[#091b15] via-[#0d2a20] to-[#081510] border-2 border-emerald-800/60 shadow-2xl p-3 md:p-5 text-white">
+    <div className="race20-track relative w-full rounded-2xl overflow-hidden bg-gradient-to-b from-[#091b15] via-[#0d2a20] to-[#081510] border-2 border-emerald-800/60 shadow-2xl p-1.5 text-white">
       {/* Casino Felt Pattern overlay */}
       <div
         className="absolute inset-0 pointer-events-none opacity-5 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px]"
@@ -99,7 +99,7 @@ export const RaceTrackStudio: React.FC<RaceTrackStudioProps> = ({
       />
 
       {/* Top Header of the Studio */}
-      <div className="relative z-10 flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-emerald-700/30">
+      <div className="race20-table-heading relative z-10 flex flex-wrap items-center justify-between gap-1 pb-1 border-b border-emerald-700/30">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 bg-emerald-950/90 border border-emerald-600/50 px-3 py-1 rounded-full shadow-inner">
             <span className="relative flex h-2.5 w-2.5">
@@ -138,7 +138,7 @@ export const RaceTrackStudio: React.FC<RaceTrackStudioProps> = ({
       </div>
 
       {/* Main Status & Countdown Bar */}
-      <div className="relative z-10 my-3">
+      <div className="race20-status relative z-10 my-1">
         {phase === 'BETTING' && (
           <div className="bg-gradient-to-r from-amber-950/70 via-amber-900/40 to-amber-950/70 border border-amber-500/40 rounded-xl p-2.5 text-center shadow-lg relative overflow-hidden">
             <div
@@ -208,7 +208,7 @@ export const RaceTrackStudio: React.FC<RaceTrackStudioProps> = ({
       </div>
 
       {/* The 4 Race Tracks (Spades, Hearts, Clubs, Diamonds) */}
-      <div className="relative z-10 space-y-2.5 my-3">
+      <div className="race20-lanes relative z-10 space-y-1 my-1">
         {SUIT_CONFIG.map((conf) => {
           const cards = suitCards[conf.suit] || [];
           const count = cards.length;
@@ -217,7 +217,7 @@ export const RaceTrackStudio: React.FC<RaceTrackStudioProps> = ({
           return (
             <div
               key={conf.suit}
-              className={`relative rounded-xl p-2 md:p-3 transition-all duration-300 bg-gradient-to-r ${conf.accentBg} border ${
+              className={`relative rounded-lg p-1 transition-all duration-300 bg-gradient-to-r ${conf.accentBg} border ${
                 isWinner
                   ? 'border-yellow-400 ring-2 ring-yellow-400/80 shadow-lg shadow-yellow-500/30'
                   : conf.borderClass
@@ -229,12 +229,12 @@ export const RaceTrackStudio: React.FC<RaceTrackStudioProps> = ({
                 </div>
               )}
 
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+              <div className="race20-lane flex items-center justify-between gap-1">
                 {/* King Card Avatar & Suit Name */}
-                <div className="flex items-center gap-3 min-w-[150px]">
+                <div className="race20-suit flex items-center gap-1 min-w-0">
                   {/* Miniature King Badge */}
                   <div
-                    className={`w-11 h-14 rounded-lg bg-gradient-to-br from-slate-100 to-slate-300 shadow-md border-2 ${
+                    className={`hidden xl:flex w-8 h-10 rounded-lg bg-gradient-to-br from-slate-100 to-slate-300 shadow-md border-2 ${
                       isWinner ? 'border-yellow-400 ring-1 ring-yellow-400' : 'border-slate-400'
                     } flex flex-col items-center justify-center relative p-0.5 select-none`}
                   >
@@ -262,7 +262,7 @@ export const RaceTrackStudio: React.FC<RaceTrackStudioProps> = ({
                 </div>
 
                 {/* 5 Card Slots for Race to 5 */}
-                <div className="flex-1 flex items-center justify-start md:justify-center gap-1.5 sm:gap-2.5 overflow-x-auto py-1">
+                <div className="race20-card-slots flex items-center justify-center gap-1 py-0.5">
                   {[0, 1, 2, 3, 4].map((slotIndex) => {
                     const card = cards[slotIndex];
                     const isLastRevealed = currentDrawnCard?.id === card?.id;
@@ -319,7 +319,8 @@ export const RaceTrackStudio: React.FC<RaceTrackStudioProps> = ({
       </div>
 
       {/* Drawn Cards History Strip during round */}
-      <div className="relative z-10 mt-3 pt-3 border-t border-emerald-700/30">
+      <details className="relative z-10 mt-1 pt-1 border-t border-emerald-700/30">
+        <summary className="cursor-pointer text-[10px] text-emerald-200">Dealt cards ({currentDrawnCards.length}) / points {totalPoints}</summary>
         <div className="flex items-center justify-between text-xs text-slate-300 mb-1.5">
           <div className="flex items-center gap-1.5 font-bold">
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
@@ -354,7 +355,7 @@ export const RaceTrackStudio: React.FC<RaceTrackStudioProps> = ({
             })
           )}
         </div>
-      </div>
+      </details>
     </div>
   );
 };

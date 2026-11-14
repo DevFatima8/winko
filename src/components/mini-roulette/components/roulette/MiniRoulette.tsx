@@ -70,7 +70,7 @@ export default function MiniRoulette() {
   const pendingRound = useRef<BetMap | null>(null);
   const acceptedRound = useRef(false);
   const mounted = useRef(false);
-  const spinRef = useRef<() => Promise<void>>(async () => {});
+  const spinRef = useRef<() => Promise<void>>(async () => { });
   const balanceRef = useRef(balance);
   const queueRef = useRef(bets);
 
@@ -126,10 +126,10 @@ export default function MiniRoulette() {
         if (!roundLock.current) void spinRef.current();
       }, 6000);
       return () => {
-      mounted.current = false;
-      clearInterval(timer);
-      if (toastTimer.current) clearTimeout(toastTimer.current);
-      if (resultTimer.current) clearTimeout(resultTimer.current);
+        mounted.current = false;
+        clearInterval(timer);
+        if (toastTimer.current) clearTimeout(toastTimer.current);
+        if (resultTimer.current) clearTimeout(resultTimer.current);
       };
     },
     [],
@@ -235,7 +235,7 @@ export default function MiniRoulette() {
         roundLock.current = false; setPhase("idle"); return;
       }
       pendingRound.current = snapshot;
-      if (!acceptedRound.current && !await pool.start(stake, () => {}, selection)) { roundLock.current = false; setPhase("idle"); return; }
+      if (!acceptedRound.current && !await pool.start(stake, () => { }, selection)) { roundLock.current = false; setPhase("idle"); return; }
       acceptedRound.current = true;
       const resolved = await pool.resolveServer(selection) as BrowserRouletteNumberOutcome | null;
       if (!resolved) { showToast("Result pending — retrying the same wager."); roundLock.current = false; setPhase("idle"); return; }
@@ -291,10 +291,10 @@ export default function MiniRoulette() {
   const phaseLabel = phase === "idle" ? "Place your bets · live round soon" : "Betting reopens after this round";
 
   return (
-    <div className="flex h-full w-full flex-col justify-between overflow-hidden text-white px-1 sm:px-2.5 py-1 select-none">
+    <div className="mini-roulette-game flex min-h-full w-full min-w-0 flex-col overflow-x-hidden text-white px-1 sm:px-2.5 py-1 select-none">
       {/* ---------- Header ---------- */}
       <header className="shrink-0 border-b border-white/10 bg-[#1b1c1d]/95 backdrop-blur rounded-t-xl">
-        <div className="mx-auto flex h-11 sm:h-12 w-full max-w-[1200px] items-center justify-between gap-2 px-3">
+        <div className="mx-auto flex min-h-11 sm:min-h-12 w-full max-w-[1200px] flex-wrap items-center justify-between gap-2 px-3 py-1">
           <div className="flex items-center gap-2">
             <IconWheel className="h-7 w-7 sm:h-8 sm:w-8" />
             <div className="leading-none">
@@ -342,26 +342,25 @@ export default function MiniRoulette() {
       </header>
 
       {/* ---------- Main ---------- */}
-      <main className="mx-auto w-full max-w-[1200px] flex-1 min-h-0 flex flex-col overflow-hidden px-1 sm:px-2 py-1">
+      <main className="mx-auto flex w-full min-w-0 max-w-[1200px] flex-none flex-col px-1 sm:px-2 py-1">
         {outOfFunds && (
           <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-[#e50539]/40 bg-[#e50539]/10 px-3 py-1.5 text-xs shrink-0">
             <span>Insufficient balance.</span>
           </div>
         )}
 
-        <div className="grid gap-2 lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start auto-rows-min flex-1 min-h-0 overflow-y-auto overflow-x-hidden lg:overflow-hidden">
+        <div className="grid min-w-0 auto-rows-min gap-2 lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start">
           {/* Wheel panel */}
-          <section className="panel p-2 sm:p-3 shrink-0 flex flex-col justify-between">
+          <section className="panel min-w-0 p-2 sm:p-3 shrink-0 flex flex-col justify-between">
             <div className="mb-1.5 flex items-center justify-between text-xs text-white/60">
               <span className="font-semibold">Round #{round}</span>
               <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                  phase === "idle"
-                    ? "bg-[#28a909]/15 text-[#3ad21a]"
-                    : phase === "spinning"
-                      ? "bg-[#e50539]/15 text-[#ff4d6d]"
-                      : "bg-[#f6dd8a]/15 text-[#f6dd8a]"
-                }`}
+                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${phase === "idle"
+                  ? "bg-[#28a909]/15 text-[#3ad21a]"
+                  : phase === "spinning"
+                    ? "bg-[#e50539]/15 text-[#ff4d6d]"
+                    : "bg-[#f6dd8a]/15 text-[#f6dd8a]"
+                  }`}
               >
                 {phaseLabel}
               </span>
@@ -393,9 +392,8 @@ export default function MiniRoulette() {
                   {history.slice(0, 20).map((n, i) => (
                     <span
                       key={`${i}-${n}`}
-                      className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold ${
-                        colorOf(n) === "red" ? "bg-[#d7263d]" : "border border-white/20 bg-[#1c1d21]"
-                      } ${i === 0 ? "ring-2 ring-[#28a909]" : "opacity-90"}`}
+                      className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold ${colorOf(n) === "red" ? "bg-[#d7263d]" : "border border-white/20 bg-[#1c1d21]"
+                        } ${i === 0 ? "ring-2 ring-[#28a909]" : "opacity-90"}`}
                     >
                       {n}
                     </span>
@@ -414,7 +412,7 @@ export default function MiniRoulette() {
           </section>
 
           {/* Table + controls */}
-          <section className="flex flex-col gap-3">
+          <section className="flex min-w-0 flex-col gap-3">
             <div className="panel p-2 sm:p-3">
               <BettingTable
                 bets={bets}
@@ -452,11 +450,10 @@ export default function MiniRoulette() {
                         setChip(v);
                         sfx(playClick);
                       }}
-                      className={`relative shrink-0 rounded-full transition-all duration-150 ${
-                        selected
-                          ? "-translate-y-1.5 scale-110 ring-2 ring-[#28a909] ring-offset-2 ring-offset-[#1b1c1d]"
-                          : "opacity-75 hover:-translate-y-0.5 hover:opacity-100"
-                      }`}
+                      className={`relative shrink-0 rounded-full transition-all duration-150 ${selected
+                        ? "-translate-y-1.5 scale-110 ring-2 ring-[#28a909] ring-offset-2 ring-offset-[#1b1c1d]"
+                        : "opacity-75 hover:-translate-y-0.5 hover:opacity-100"
+                        }`}
                     >
                       <svg viewBox="-26 -26 52 52" width={50} height={50} className="block">
                         <ChipSvg r={24} value={v} />
@@ -494,11 +491,10 @@ export default function MiniRoulette() {
                   type="button"
                   onClick={spin}
                   disabled={!canSpin}
-                  className={`flex h-12 sm:h-14 w-full flex-col items-center justify-center rounded-xl text-black font-black transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 sm:w-[170px] ${
-                    canSpin
-                      ? "bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-500 shadow-lg shadow-emerald-500/40 hover:brightness-110"
-                      : "bg-white/10 text-white/40"
-                  }`}
+                  className={`flex h-12 sm:h-14 w-full flex-col items-center justify-center rounded-xl text-black font-black transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 sm:w-[170px] ${canSpin
+                    ? "bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-500 shadow-lg shadow-emerald-500/40 hover:brightness-110"
+                    : "bg-white/10 text-white/40"
+                    }`}
                 >
                   <span className="text-lg font-black tracking-[0.16em]">
                     {phase === "spinning" ? "SPINNING" : "SPIN"}
@@ -526,8 +522,7 @@ export default function MiniRoulette() {
         </div>
       </main>
 
-      <footer className="border-t border-white/5 px-3 py-3 text-center text-[11px] text-white/35">
-        <p>Server results · 10 winning slots per 100 distinct players · total gross return capped at 2x stake, stake included.</p>
+      <footer className="shrink-0 border-t border-white/5 px-3 py-3 text-center text-[11px] text-white/35">
         Straight 11.64x · Split 5.82x · Street 3.88x · Corner / Column 2.91x · Red / Black / Odd / Even / 1-6 / 7-12 1.94x
       </footer>
 
@@ -583,7 +578,7 @@ export default function MiniRoulette() {
                 Server rules & limits
               </MenuItem>
             </nav>
-            <div className="mt-auto px-4 py-3 text-[11px] text-white/35">Mini Roulette · Demo mode · 18+ Play responsibly</div>
+            <div className="mt-auto px-4 py-3 text-[11px] text-white/35">Mini Roulette</div>
           </aside>
         </div>
       )}
@@ -600,7 +595,6 @@ export default function MiniRoulette() {
             <li>
               Press <b>SPIN</b>. The ball lands on one of the 12 numbers.
             </li>
-            <li>Standard returns below are added for covered winning bets, then the total gross return is capped at 2x the round stake (stake included). Server results use 10 winning slots per 100 distinct players. Allocations covering every number are rejected before a slot is consumed.</li>
           </ol>
 
           <h3 className="mb-2 mt-5 text-xs font-bold uppercase tracking-wider text-white/50">Paytable</h3>
@@ -651,9 +645,6 @@ export default function MiniRoulette() {
           <div className="space-y-3">
             <div className="flex items-start gap-3 rounded-xl border border-[#28a909]/30 bg-[#28a909]/10 p-3">
               <IconShield className="mt-0.5 shrink-0 text-[#28a909]" />
-              <p>
-                Accepted wagers are resolved on the server: 10 winning slots per 100 distinct players, with a maximum total gross return of 2x your stake. Repeated players cannot claim another winning slot in the same cycle. Leave at least one losing number uncovered.
-              </p>
             </div>
             <dl className="grid grid-cols-2 gap-y-2 text-sm">
               <dt className="text-white/50">Current round</dt>
@@ -707,9 +698,8 @@ function CtrlButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`flex h-11 sm:h-13 flex-col items-center justify-center gap-0.5 rounded-xl border text-[10px] font-bold uppercase tracking-wider transition active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-35 ${
-        variant ? variantStyles[variant] : "border-white/10 bg-[#2c2d30] text-white/85 hover:bg-[#35363a]"
-      }`}
+      className={`flex h-11 sm:h-13 flex-col items-center justify-center gap-0.5 rounded-xl border text-[10px] font-bold uppercase tracking-wider transition active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-35 ${variant ? variantStyles[variant] : "border-white/10 bg-[#2c2d30] text-white/85 hover:bg-[#35363a]"
+        }`}
     >
       {children}
       <span>{label}</span>

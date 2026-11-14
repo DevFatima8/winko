@@ -131,18 +131,16 @@ test("paid round replay cannot advance the cycle twice or credit a second payout
 });
 
 test("idle round API retries reuse one scheduled result and cannot settle paid bets", async () => {
-  const tx = store();
+  let open = false;
+  const sharedResult = { slot: config.WHEEL.indexOf("owl"), animal: "owl", outcome: "idle" };
   const route = load("src\\app\\api\\spin\\route.ts", {
-    "node:crypto": crypto,
     "next/server": { NextResponse: { json: (body, options) => ({ body, status: options?.status ?? 200 }) } },
     "@/lib/gameAvailability": { LOCAL_GAMES_CONNECTED: true },
     "@/lib/serverAuth": { getServerSessionUser: async () => ({ id: "alice" }) },
-    "@/lib/multiplayer-store": { mysqlMultiplayerStore: { transact: async (lock, run) => {
-      assert.equal(lock, "daily-pool:birds-beasts");
-      return run(tx);
+    "@/lib/multiplayer": { multiplayer: { read: async game => {
+      assert.equal(game, "birds-beasts");
+      return { round: { roundNo: 20, result: open ? null : sharedResult } };
     } } },
-    "@/lib/dailyPoolRules": { dailyPoolLock: game => `daily-pool:${game}` },
-    "@/lib/birdsBeastsRounds": { resolveBirdsBeastsRound: play },
   });
   const request = body => ({ json: async () => body });
   const roundId = crypto.randomUUID();
@@ -150,12 +148,19 @@ test("idle round API retries reuse one scheduled result and cannot settle paid b
   const replay = await route.POST(request({ roundId }));
   assert.equal(first.status, 200);
   assert.deepEqual(replay, first);
-  assert.equal((await tx.get("multiplayerrooms", ID)).remaining.length, 99);
+  assert.equal(first.body.roundNo, 20);
+  assert.deepEqual((await route.POST(request({ roundId: crypto.randomUUID() }))).body, first.body);
   assert.equal((await route.POST(request({ roundId, bets: { eagle: 50 } }))).status, 400);
+  open = true;
+  assert.equal((await route.POST(request({ roundId }))).status, 409);
 });
 
-test("the balance is still held until the wheel reveals the confirmed result", () => {
-  const source = readFileSync("src\\components\\birds-beasts\\BirdsBeasts.tsx", "utf8");
-  assert.match(source, /resolveServer\(\{ bets: snapshot \}, \{ holdBalance: true \}\)/);
-  assert.ok(source.indexOf("pool.releaseBalance()", source.indexOf('phase === "result"')) > 0);
+test("animal multipliers include stake exactly once, including multiple winning selections", () => {
+  const owl = config.WHEEL.indexOf("owl");
+  assert.equal(config.evaluateBets({ owl: 100 }, owl).payout, 800);
+  assert.equal(config.evaluateBets({ owl: 100 }, owl).net, 700);
+  assert.equal(config.evaluateBets({ owl: 100, rabbit: 100 }, owl).payout, 800);
+  assert.equal(config.evaluateBets({ owl: 100, birds: 100 }, owl).payout, 995);
+  const shark = config.WHEEL.indexOf("goldenShark");
+  assert.equal(config.evaluateBets({ goldenShark: 100, birds: 100 }, shark).payout, 5000);
 });

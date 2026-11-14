@@ -45,7 +45,7 @@ export const ChipsAndControls: React.FC<ChipsAndControlsProps> = ({
     <div className="w-full bg-slate-950/95 border-t border-slate-800 p-3 shadow-2xl rounded-2xl">
       <div className="flex flex-col lg:flex-row items-center justify-between gap-3">
         {/* Chips Bar */}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 py-1 px-1 w-full lg:w-auto justify-center">
+        <div className="race20-chip-options flex flex-wrap items-center gap-2 sm:gap-3 py-1 px-1 w-full lg:w-auto justify-center">
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider hidden sm:inline mr-1">
             CHIPS:
           </span>
@@ -81,7 +81,7 @@ export const ChipsAndControls: React.FC<ChipsAndControlsProps> = ({
         </div>
 
         {/* Quick Action Buttons & Current Bet Summary */}
-        <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2 sm:gap-3 w-full lg:w-auto">
+        <div className="race20-quick-actions flex flex-wrap items-center justify-between sm:justify-end gap-2 sm:gap-3 w-full lg:w-auto">
           {/* Action buttons */}
           <div className="flex items-center gap-1.5">
             <button

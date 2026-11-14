@@ -108,6 +108,7 @@ export function createLegacyScene(userIds = ["alice", "bob"], { poolEnabled = fa
         Game: { findOneAndUpdate: ({ slug }) => ({ lean: async () => ({ _id: slug }) }) },
       };
       if (specifier === "node:crypto") return { randomUUID, createHash, createHmac, randomBytes, randomInt };
+      if (specifier.startsWith("@/lib/")) return load(specifier.slice("@/lib/".length));
       if (specifier.startsWith("@/components/")) {
         return loadComponent(`src\\${specifier.slice(2).replaceAll("/", "\\")}.ts`);
       }

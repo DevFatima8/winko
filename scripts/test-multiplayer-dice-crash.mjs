@@ -154,6 +154,32 @@ async function place(h, c) {
   else await h.captured.placeBet(c.option, 100);
 }
 
+test("tai-xiu: name editing is unavailable and sound toggles without notification messages", () => {
+  const c = cases.find(c => c.slug === "tai-xiu");
+  const h = harness(c);
+  h.render();
+  const button = label => nodes(h.tree).find(n => n?.type === "button" && n.props["aria-label"] === label);
+  assert.equal(button("Edit player profile"), undefined);
+  assert.equal(h.captured.session.sound, false);
+
+  button("Enable table sounds").props.onClick();
+  h.render();
+  assert.equal(h.captured.session.sound, true);
+  assert.equal(button("Mute table sounds").props["aria-pressed"], true);
+  assert.ok(!nodes(h.tree).some(n => n?.props?.role === "status"));
+
+  button("Mute table sounds").props.onClick();
+  h.render();
+  assert.equal(h.captured.session.sound, false);
+  assert.equal(button("Enable table sounds").props["aria-pressed"], false);
+  assert.ok(!nodes(h.tree).some(n => n?.props?.role === "status"));
+
+  button("Add Tai Xiu to favorites").props.onClick();
+  h.render();
+  assert.ok(nodes(h.tree).some(n => n?.props?.role === "status" && /added to your favorites/.test(text(n))));
+  h.unmount();
+});
+
 for (const c of cases) {
   test(`${c.slug}: actual source consumes shared clock/result and never manufactures spectator records`, () => {
     const h = harness(c); let a = h.render();

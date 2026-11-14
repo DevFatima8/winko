@@ -5,7 +5,8 @@ import { playGameSound, speakGameVoice } from "@/lib/gameAudio";
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { broadcastBalanceUpdate, getStoredWalletBalance } from "@/lib/walletSync";
+import { broadcastBalanceUpdate, confirmWalletReturn, fetchServerBalance, getStoredWalletBalance, holdWalletReveal, revealWalletReturn } from "@/lib/walletSync";
+import { presentedWalletBalance, walletRevealRevision } from "@/lib/walletReveal";
 import { BET_PRESETS } from "@/lib/betPresets";
 
 type Risk = "low" | "medium" | "high";
@@ -47,7 +48,7 @@ export function PlinkoGame({ backHref = "/player" }: { backHref?: string }) {
   const [amount, setAmount] = useState(100);
   const [customAmount, setCustomAmount] = useState(100);
   const [risk, setRisk] = useState<Risk>("medium");
-  const [rows, setRows] = useState(16);
+  const [rows, setRows] = useState(12);
   const [msg, setMsg] = useState<string | null>(null);
   const [results, setResults] = useState<({ id: number; m: number; payout: number } & PoolResult)[]>([]);
   const [auto, setAuto] = useState(false);
@@ -67,19 +68,34 @@ export function PlinkoGame({ backHref = "/player" }: { backHref?: string }) {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const visRef = useRef<Vis>({ rows: 16, table: [], balls: [], hitPegs: new Map(), bucketBounce: new Map() });
+  const visRef = useRef<Vis>({ rows: 12, table: [], balls: [], hitPegs: new Map(), bucketBounce: new Map() });
   const scaleRef = useRef({ dpr: 1, scale: 1 });
   const idRef = useRef(1);
   const autoRef = useRef({ on: false, left: 0 });
   const inflightRef = useRef(0);
   const retryRef = useRef<{ requestId: string; amount: number; risk: Risk; rows: number }[]>([]);
+  const pendingReveals = useRef(new Set<string>());
+  const landingTimers = useRef(new Set<ReturnType<typeof setTimeout>>());
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      landingTimers.current.forEach(clearTimeout);
+      for (const key of pendingReveals.current) revealWalletReturn(key);
+      pendingReveals.current.clear();
+    };
+  }, []);
 
   const refresh = useCallback(async () => {
+    const revision = walletRevealRevision();
     const r = await localApi("/api/plinko/state", { cache: "no-store" });
     if (!r.ok) return;
     const s: State = await r.json();
-    setSt(s); setBalance(s.balance);
+    if (!mounted.current || revision !== walletRevealRevision()) return;
     broadcastBalanceUpdate(s.balance, "Plinko");
+    const balance = presentedWalletBalance(s.balance);
+    setSt({ ...s, balance }); setBalance(balance);
   }, []);
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -125,7 +141,9 @@ export function PlinkoGame({ backHref = "/player" }: { backHref?: string }) {
     setMsg(null);
     playGameSound("ballDrop"); speakGameVoice("ballDrop");
     const request = retryRef.current.shift() ?? { requestId: crypto.randomUUID(), amount, risk, rows };
-    setBalance((b) => b - request.amount);
+    const key = `plinko:${request.requestId}`;
+    pendingReveals.current.add(key);
+    holdWalletReveal(key);
     let r: Response;
     try { r = await localApi("/api/plinko/drop", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) }); }
     catch {
@@ -135,22 +153,37 @@ export function PlinkoGame({ backHref = "/player" }: { backHref?: string }) {
     const j = await r.json();
     if (r.status >= 500) retryRef.current.push(request);
     if (j.error) {
+      if (r.status < 500) {
+        revealWalletReturn(key);
+        pendingReveals.current.delete(key);
+      }
       setMsg(j.error); refresh();
       inflightRef.current--; setInflight(inflightRef.current);
       autoRef.current.on = false; setAuto(false); setAutoLeft(0);
       return;
     }
+    // Concurrent POST receipts can arrive out of order. Read one fresh wallet
+    // instead of publishing an older ball's balance snapshot.
+    confirmWalletReturn(key, null, j.poolPending ? 0 : j.payout);
+    void fetchServerBalance();
+    if (!mounted.current) {
+      revealWalletReturn(key);
+      pendingReveals.current.delete(key);
+      return;
+    }
     const id = idRef.current++;
     visRef.current.balls.push({ path: j.path, rows: request.rows, start: performance.now(), col: j.bucket, id, flashed: new Set() });
-    setTimeout(() => {
+    const timer = setTimeout(() => {
+      landingTimers.current.delete(timer);
+      revealWalletReturn(key);
+      pendingReveals.current.delete(key);
       setResults((rs) => [{ id, m: j.multiplier, payout: j.payout, poolPending: j.poolPending, poolClaim: j.poolClaim }, ...rs].slice(0, 6));
       window.dispatchEvent(new CustomEvent("wx:game-result", { detail: { game: "Plinko", bet: request.amount, win: j.payout, won: !j.poolPending && j.payout > 0, poolPending: j.poolPending, poolClaim: j.poolClaim } }));
       if (!j.poolPending && j.multiplier >= 1.5) { playGameSound("coin"); speakGameVoice("cardWin"); }
-      setBalance(j.balance);
-      broadcastBalanceUpdate(j.balance, "Plinko");
       inflightRef.current--; setInflight(inflightRef.current);
       if (inflightRef.current === 0) refresh();
-    }, (request.rows + 1) * STEP + 200);
+    }, (request.rows + 1) * STEP);
+    landingTimers.current.add(timer);
   }, [st, amount, risk, rows, refresh]);
 
   useEffect(() => {
@@ -219,8 +252,8 @@ export function PlinkoGame({ backHref = "/player" }: { backHref?: string }) {
             </label>
             <label className="block">
               <span className="mb-0.5 block text-[10px] font-semibold text-slate-300">Rows</span>
-              <select value={rows} disabled={locked} onChange={(e) => setRows(Number(e.target.value))} className="w-full rounded-md border border-[#2f4553] bg-[#0f212e] px-2 py-1.5 text-xs font-bold text-white outline-none focus:border-[#557086] disabled:opacity-60">
-                {[8, 9, 10, 11, 12, 13, 14, 15, 16].map((n) => <option key={n} value={n}>{n}</option>)}
+              <select value={rows} disabled={locked || !st || st.rows.length === 1} onChange={(e) => setRows(Number(e.target.value))} className="w-full rounded-md border border-[#2f4553] bg-[#0f212e] px-2 py-1.5 text-xs font-bold text-white outline-none focus:border-[#557086] disabled:opacity-60">
+                {(st?.rows ?? [12]).map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
             </label>
           </div>
@@ -247,9 +280,9 @@ export function PlinkoGame({ backHref = "/player" }: { backHref?: string }) {
           {msg && <p className="rounded-md bg-red-500/15 px-2 py-1 text-[11px] text-red-300">{msg}</p>}
 
           <div className="rounded-md bg-[#0f212e] p-2 text-[10px] text-slate-400">
-            <div className="flex justify-between"><span>{st?.dailyPoolEnabled ? "Max claim weight" : "Max payout"}</span><b className="text-white">{table.length ? fmtMult(Math.max(...table.filter(multiplier => multiplier < 25))) : "-"}</b></div>
+            <div className="flex justify-between"><span>{st?.dailyPoolEnabled ? "Max claim weight" : "Max payout"}</span><b className="text-white">{table.length ? fmtMult(Math.max(...table)) : "-"}</b></div>
+            <p className="mt-2 text-[10px] text-slate-400">13 buckets with one center 0x and 0.7x on either side. Below 1x returns less than your stake. Maximum multiplier: 1.8x. The configured win cycle is unchanged.</p>
             {st?.dailyPoolEnabled && <p className="mt-1 text-[10px] text-amber-200">daily pool · Multipliers are provisional claims, not immediate payouts.</p>}
-            {!st?.dailyPoolEnabled && <div className="flex justify-between"><span>Positive returns</span><b className="text-white">10% per drop</b></div>}
           </div>
         </aside>
 
@@ -324,7 +357,7 @@ function drawScene(ctx: CanvasRenderingContext2D, v: Vis, now: number) {
     const x = cx - g.bw / 2, y = g.bucketY + dy;
     ctx.fillStyle = c.side; rr(ctx, x, y + 4, g.bw, g.bh, 5); ctx.fill();
     ctx.fillStyle = c.top; rr(ctx, x, y, g.bw, g.bh, 5); ctx.fill();
-    const label = fmtMult(table[k] ?? 0) + (table[k] === 25 ? "*" : "");
+    const label = fmtMult(table[k] ?? 0);
     ctx.fillStyle = "#1a1a1a";
     ctx.font = `900 ${Math.max(8, g.bw * (label.length > 4 ? 0.24 : 0.3))}px system-ui, sans-serif`;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";

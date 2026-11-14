@@ -271,6 +271,7 @@ export default function BlackjackGame({ backHref = "/player" }: { backHref?: str
       if (!await pause(CARD_REVIEW_MS)) return;
     }
 
+    pool.announce();
     if (selectedOutcome === "win") gameSfx.win(); else gameSfx.lose();
     setPlayerCards(finalPlayer);
     setDealerCards(finalDealer);
@@ -325,7 +326,7 @@ export default function BlackjackGame({ backHref = "/player" }: { backHref?: str
       gameSfx.deal();
       if (bet < MIN_BET) {
         idleRound.release();
-        setNotice("Minimum bet is Rs. 50. Players must place at least Rs. 50.");
+        setNotice(`Minimum bet is Rs. ${MIN_BET}. Players must place at least Rs. ${MIN_BET}.`);
         return;
       }
       if (bet > credits) {

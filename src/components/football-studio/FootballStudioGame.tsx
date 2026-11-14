@@ -140,9 +140,10 @@ function Confetti() {
 }
 
 /* ================= Main page ================= */
+const resultRevealDelay = () => 500;
 
 export default function FootballStudioGame({ backHref = "/player" }: { backHref?: string }) {
-  const live = useMultiplayerGame<FootballOutcome>("football-studio");
+  const live = useMultiplayerGame<FootballOutcome>("football-studio", undefined, resultRevealDelay);
   const [chip, setChip] = useState(100);
   const [selectedOutcome, setSelectedOutcome] = useState<Outcome>("HOME");
   const [lastBets, setLastBets] = useState<Bets>({ ...EMPTY_BETS });
@@ -167,20 +168,20 @@ export default function FootballStudioGame({ backHref = "/player" }: { backHref?
     setLastBets(bets);
   }
   const poolMessage = poolRoundMessage(personal);
-  const roundNet = phase === "result" && personal.length && !poolMessage ? personal.reduce((sum, bet) => sum + bet.payout - bet.amount, 0) : null;
+  const roundNet = awayFlipped && personal.length && !poolMessage ? personal.reduce((sum, bet) => sum + bet.payout - bet.amount, 0) : null;
   const showConfetti = roundNet !== null && roundNet > 0 && !!state && live.now < state.round.resultAt + 2600;
   const canBet = !!state && !live.busy;
   const canPlaceBet = canBet && chip >= 10 && chip <= balance;
 
   useEffect(() => {
     if (!state || !personal.length) return;
-    if (state.round.phase !== "result" || notified.current === state.round.roundNo) return;
+    if (!awayFlipped || notified.current === state.round.roundNo) return;
     notified.current = state.round.roundNo;
     if (poolMessage) return;
     if (roundNet !== null && roundNet > 0) gameSfx.win();
     else if (roundNet !== null && roundNet < 0) gameSfx.lose();
     setStats((s) => ({ rounds: s.rounds + 1, wins: s.wins + (roundNet !== null && roundNet > 0 ? 1 : 0), losses: s.losses + (roundNet !== null && roundNet < 0 ? 1 : 0) }));
-  }, [state, personal.length, bets, roundNet, poolMessage]);
+  }, [state, personal.length, bets, roundNet, poolMessage, awayFlipped]);
 
   const placeBet = async (o: Outcome) => {
     setSelectedOutcome(o);

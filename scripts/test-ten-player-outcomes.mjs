@@ -84,7 +84,7 @@ for (const pooled of [false, true]) {
     });
   }
 
-  test(`Treasure Bowl, pooled=${pooled}: ten server wins per 100 players, with replay and client-forgery protection`, async () => {
+  test(`Treasure Bowl, pooled=${pooled}: thirty server opportunities per 100 player-rounds, with replay and client-forgery protection`, async () => {
     const s = createLegacyScene(players, { poolEnabled: pooled });
     s.data.games.push({ _id: "treasure-bowl", slug: "treasure-bowl", isActive: true });
     const replies = await Promise.all(players.map(async user => {
@@ -102,8 +102,8 @@ for (const pooled of [false, true]) {
       assert.equal(reply.outcome.isWin, reply.claim > 0);
       return reply;
     }));
-    assert.equal(replies.filter(reply => reply.outcome.isWin).length, 10);
-    assert.deepEqual(cycle(s, "treasure-bowl").players, []);
+    assert.equal(replies.filter(reply => reply.outcome.isWin).length, 30);
+    assert.equal(s.data.multiplayerrooms.find(row => row._id === "treasure-bowl:bet-wins-30-of-100:v1").remaining.length, 100);
     await assert.rejects(s.store.transact("treasure-bowl", tx => s.browser.browserPoolLifecycle(tx, players[0], {
       game: "treasure-bowl", wagerId: randomUUID(), operationId: randomUUID(), action: "complete", amount: 1000000,
     }, pooled)), /verification/);
@@ -264,7 +264,7 @@ test("Aviator catches an already exceeded cashout threshold on the next live sta
   assert.equal(state.bets.filter(bet => bet.outcome === "pending").length, 0);
 });
 
-test("Treasure Bowl retries consume one slot, repeat players do not draw again, and failures roll back", async () => {
+test("Treasure Bowl retries consume one slot, repeat players draw a new slot, and failures roll back", async () => {
   const s = createLegacyScene(["alice", "bob"]);
   s.data.games.push({ _id: "treasure-bowl", slug: "treasure-bowl", isActive: true });
   const input = { game: "treasure-bowl", wagerId: randomUUID(), stake: 10, selection: {} };
@@ -278,10 +278,8 @@ test("Treasure Bowl retries consume one slot, repeat players do not draw again, 
   const replay = await play(input);
   assert.deepEqual(first.outcome, replay.outcome);
   assert.deepEqual(s.data, after);
-  const repeat = await play({ ...input, wagerId: randomUUID() });
-  assert.equal(repeat.outcome.isWin, false);
-  assert.equal(repeat.claim, 0);
-  assert.deepEqual(cycle(s, "treasure-bowl").players, ["alice"]);
+  await play({ ...input, wagerId: randomUUID() });
+  assert.equal(s.data.multiplayerrooms.find(row => row._id === "treasure-bowl:bet-wins-30-of-100:v1").remaining.length, 98);
 });
 
 test("Chicken independent rounds ignore historical player quotas without rewriting them", async () => {
@@ -314,4 +312,5 @@ test("Treasure Bowl blocks forged completion on new wagers but preserves already
   await s.store.transact("treasure-bowl", tx => s.browser.browserPoolLifecycle(tx, "alice", complete, false));
   assert.equal(s.users.get("alice").balance, 1010);
   assert.equal(cycle(s, "treasure-bowl"), undefined);
+  assert.equal(s.data.multiplayerrooms.find(row => row._id === "treasure-bowl:bet-wins-30-of-100:v1"), undefined);
 });

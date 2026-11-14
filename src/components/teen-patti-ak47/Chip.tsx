@@ -1,10 +1,10 @@
 const THEMES: Record<number, string> = {
-  10: "chip-gray",
-  200: "chip-gray",
-  50: "chip-red",
-  100: "chip-blue",
-  500: "chip-green",
-  1000: "chip-gold",
+  10: "ak47-chip-gray",
+  200: "ak47-chip-gray",
+  50: "ak47-chip-red",
+  100: "ak47-chip-blue",
+  500: "ak47-chip-green",
+  1000: "ak47-chip-gold",
 };
 
 interface ChipProps {
@@ -17,12 +17,13 @@ export default function Chip({ value, onClick, disabled = false }: ChipProps) {
   return (
     <button
       type="button"
-      className={`chip ${THEMES[value] ?? "chip-gray"}`}
+      className={`ak47-chip ${THEMES[value] ?? "ak47-chip-gray"}`}
       onClick={onClick}
       disabled={disabled}
       aria-label={`Add Rs. ${value} bet`}
     >
-      <span className="chip-value">Rs. {value}</span>
+      <span className="ak47-chip-currency">Rs.</span>
+      <span className={`ak47-chip-value${String(value).length > 6 ? " ak47-chip-value-long" : ""}`}>{value}</span>
     </button>
   );
 }

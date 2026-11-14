@@ -341,7 +341,7 @@ export function BetPanel({
   );
 }
 
-/** Round edge buttons flanking the two bet panels. */
+/** Round edge buttons flanking the bet panel. */
 export function EdgeButton({ onClick }: { side?: "left" | "right"; onClick: () => void }) {
   return (
     <button

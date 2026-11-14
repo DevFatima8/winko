@@ -310,6 +310,7 @@ export default function MonsterHiloGame() {
     moveBusy.current = false;
     if (!reply) return;
     const payout = reply.payout;
+    pool.announce();
     addHistory(payout, "Win", multiplier);
     setPhase("cashed");
     setShowOver(true);

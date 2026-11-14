@@ -349,7 +349,89 @@ test("Thai Hi-Lo keeps an exact custom amount, debits once and accepts another b
   game.unmount();
 });
 
-for (const [file, exported] of games.filter(([file]) => !browserCards.some(card => card.file === file))) {
+const headTail = () => harness("head-tail\\HeadTailGame.tsx", "default", 10000,
+  ["handleFlip", "livePhase", "nextBet"]);
+
+test("Head & Tail: top strip never embeds the shared next-round queue toolbar", async () => {
+  const game = headTail();
+  await game.advance(0);
+  const shared = game.load(path.join(root, "src", "components", "teen-patti", "useLiveTable.tsx"));
+  const useLiveTable = shared.useLiveTable;
+  shared.useLiveTable = options => useLiveTable({ ...options, queueNextRound: true });
+  game.setFunds(9000);
+  assert.match(game.text(), /Next round in 10s/);
+  assert.doesNotMatch(game.text(), /Live ·|Active Rs\.|Next Rs\.|Queue next round|Cancel queued/);
+  assert.ok(!game.nodes().some(node => ["Next round target", "Next round amount"].includes(node.props?.["aria-label"])));
+  game.input("Bet amount", "125.50");
+  game.invoke(v => v.handleFlip());
+  assert.match(game.text(), /Cancel bet/);
+  game.click("Cancel bet");
+  assert.deepEqual(game.changes, []);
+  game.unmount();
+});
+
+test("Head & Tail: countdown is the only top control until a bet can be cancelled", async () => {
+  const game = headTail();
+  await game.advance(0);
+  assert.match(game.text(), /Next round in 10s/);
+  assert.doesNotMatch(game.text(), /Live ·|Active Rs\.|Next Rs\.|Queue next round|Cancel queued|Next-round bet activated|Cancel bet/);
+  assert.ok(!game.nodes().some(node => ["Next round target", "Next round amount"].includes(node.props?.["aria-label"])));
+  game.input("Bet amount", "125.50");
+  game.invoke(v => v.handleFlip());
+  assert.match(game.text(), /Cancel bet/);
+  assert.equal(game.captured.nextBet.head, 125.5);
+  assert.deepEqual(game.changes, [], "countdown bet is not charged");
+  await game.advance(5000);
+  assert.match(game.text(), /Next round in 5s/);
+  game.click("Cancel bet");
+  assert.equal(game.captured.nextBet.head, 0);
+  assert.doesNotMatch(game.text(), /Cancel bet/);
+  await game.advance(25000);
+  assert.deepEqual(game.changes, [], "cancelled bet never debits or settles");
+  game.unmount();
+});
+
+test("Head & Tail: countdown accepts the chosen bet once and hides cancellation during the flip", async () => {
+  const game = headTail();
+  await game.advance(0);
+  game.input("Bet amount", "125.50");
+  game.invoke(v => { v.handleFlip(); v.handleFlip(); });
+  await game.advance(9900);
+  assert.deepEqual(game.changes, []);
+  await game.advance(100);
+  const debits = game.changes.filter(change => change.after < change.before);
+  assert.equal(debits.length, 1);
+  assert.equal(debits[0].before - debits[0].after, 125.5);
+  assert.equal(debits[0].at, 10000);
+  assert.doesNotMatch(game.text(), /Cancel bet|Next round in/);
+  game.invoke(v => v.handleFlip());
+  await game.advance(35000);
+  assert.equal(game.changes.filter(change => change.after < change.before).length, 1, "no implicit next-round rebet");
+  game.unmount();
+});
+
+test("Head & Tail: countdown revalidates funds before charging a pending bet", async () => {
+  const game = headTail();
+  await game.advance(0);
+  game.input("Bet amount", "100");
+  game.invoke(v => v.handleFlip());
+  game.setFunds(10);
+  await game.advance(10000);
+  assert.deepEqual(game.changes, []);
+  assert.match(game.text(), /Bet cancelled: insufficient balance/);
+  game.unmount();
+});
+
+test("Head & Tail: unmounting during countdown cannot charge a pending bet", async () => {
+  const game = headTail();
+  await game.advance(0);
+  game.invoke(v => v.handleFlip());
+  game.unmount();
+  await game.advance(20000);
+  assert.deepEqual(game.changes, []);
+});
+
+for (const [file, exported] of games.filter(([file]) => file !== "head-tail\\HeadTailGame.tsx" && !browserCards.some(card => card.file === file))) {
   const closedAt = 10200;
   test(`${file}: spectator rounds never touch wallet or personal game-over`, async () => {
     const game = harness(file, exported);

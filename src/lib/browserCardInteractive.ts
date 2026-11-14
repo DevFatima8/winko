@@ -31,6 +31,7 @@ function derived(operationId: string, part: string) {
 
 async function engineFor(game: string): Promise<InteractiveCardEngine<unknown>> {
   switch (game) {
+    case "tower-betting": return (await import("./interactiveTower")).towerEngine as InteractiveCardEngine<unknown>;
     case "blackjack": return (await import("./interactiveBlackjack")).blackjackEngine as InteractiveCardEngine<unknown>;
     case "monster-hilo": return (await import("./interactiveMonsterHilo")).monsterHiloEngine as InteractiveCardEngine<unknown>;
     case "rummy": return (await import("./interactiveRummy")).rummyEngine as InteractiveCardEngine<unknown>;
@@ -58,7 +59,7 @@ function reply(result: CardResult, balance: number, wagerId: string, replay: boo
   return {
     ok: true, wagerId, balance, status: closed ? "closed" : "active", poolPending: result.poolPending === true, replay,
     outcome: {
-      phase: state?.phase ?? "accepted", view: state?.view ?? null, stake: result.browserTotalStake,
+      phase: state?.phase ?? (result.browserGame === "tower-betting" && !result.browserServerRequired ? "legacy" : "accepted"), view: state?.view ?? null, stake: result.browserTotalStake,
       payout: closed ? claim : state?.credited ?? 0,
     },
     ...(closed ? { claim } : {}),
@@ -75,7 +76,7 @@ export async function actInteractiveCard(
   tx: MultiplayerTransaction, userId: string, input: CardActionInput, enabled: boolean,
 ): Promise<CardActionReply> {
   const { game, wagerId, operationId, move } = input;
-  if (!isInteractiveBrowserCardGame(game)) throw new InteractiveMoveError("Unsupported interactive card table.");
+  if (!isInteractiveBrowserCardGame(game) && game !== "tower-betting") throw new InteractiveMoveError("Unsupported interactive table.");
   if (typeof wagerId !== "string" || typeof operationId !== "string" || !ID.test(wagerId) || !ID.test(operationId)) {
     throw new InteractiveMoveError("Valid wager and operation identities are required.");
   }

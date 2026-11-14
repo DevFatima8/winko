@@ -5,12 +5,14 @@ import { AdminLiveSync } from "@/components/AdminLiveSync";
 import { PageLoadingSkeleton, useSession } from "@/lib/useDb";
 import { useI18n } from "@/lib/i18n/client";
 import { usePendingPayments } from "@/components/admin/usePendingPayments";
-import { PendingPaymentBadge } from "@/components/admin/PendingPaymentBadge";
+import { AdminCountBadge } from "@/components/admin/AdminCountBadge";
+import { useSupportUnread } from "@/components/admin/useSupportUnread";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const { user, loading, error } = useSession();
   const { t } = useI18n();
   const payments = usePendingPayments(user?.role === "admin" ? user.id : undefined);
+  const support = useSupportUnread(user?.role === "admin" ? user.id : undefined);
   useEffect(() => { if (!loading && (!user || user.role !== "admin")) window.location.replace("/login"); }, [user, loading]);
   if (loading || !user || user.role !== "admin") return (
     <div className="wx-bg min-h-screen p-4 sm:p-6">
@@ -23,11 +25,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const superNav = user.level >= 2;
   const nav = [
     { href: "/admin", label: t("dashboard"), icon: "📊" },
-    { href: "/admin/support", label: t("liveSupportAdmin"), icon: "💬" },
+    { href: "/admin/support", label: t("liveSupportAdmin"), icon: "💬", badge: <AdminCountBadge label={t("liveSupportAdmin")} description="unread messages" count={support.counts?.unread} error={support.error} /> },
     { href: "/admin/users", label: t("usersAdmin"), icon: "👥" },
     ...(user.level >= 3 ? [{ href: "/admin/devices", label: "Login devices", icon: "🛡️" }] : []),
-    { href: "/admin/deposits", label: t("depositsAdmin"), icon: "💳", badge: <PendingPaymentBadge label={t("depositsAdmin")} count={payments.counts?.deposits} error={payments.error} /> },
-    { href: "/admin/withdrawals", label: t("withdrawalsAdmin"), icon: "💳", badge: <PendingPaymentBadge label={t("withdrawalsAdmin")} count={payments.counts?.withdrawals} error={payments.error} /> },
+    { href: "/admin/deposits", label: t("depositsAdmin"), icon: "💳", badge: <AdminCountBadge label={t("depositsAdmin")} count={payments.counts?.deposits} error={payments.error} /> },
+    { href: "/admin/withdrawals", label: t("withdrawalsAdmin"), icon: "💳", badge: <AdminCountBadge label={t("withdrawalsAdmin")} count={payments.counts?.withdrawals} error={payments.error} /> },
     { href: "/admin/feedback", label: t("feedbackAdmin"), icon: "📢" },
     { href: "/admin/games", label: superNav ? t("gamesOnOff") : t("gamesAdmin"), icon: "🎮" },
     { href: "/admin/results", label: t("gameResultsAdmin"), icon: "🎯" },

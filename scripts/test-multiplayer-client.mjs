@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 
-function scene(game = "baccarat") {
+function scene(game = "baccarat", resultRevealDelay) {
   let cursor = 0, dirty = true, view, now = 10000, uuid = 0;
   const slots = [], effects = [], calls = [], broadcasts = [], logs = [], notices = [], timers = new Map();
   const same = (a, b) => a && b && a.length === b.length && a.every((item, index) => Object.is(item, b[index]));
@@ -32,6 +32,12 @@ function scene(game = "baccarat") {
     },
   };
   const clock = class extends Date { static now() { return now; } };
+  const reveal = {};
+  new Function("exports", ts.transpileModule(readFileSync("src\\lib\\walletReveal.ts", "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+  }).outputText)(reveal);
+  let displayed = null;
+  const publish = (balance, game) => { displayed = balance; broadcasts.push([balance, game]); };
   const schedule = (fn, delay, interval = false) => {
     const id = Symbol();
     timers.set(id, { fn, delay, interval });
@@ -39,7 +45,20 @@ function scene(game = "baccarat") {
   };
   const require = (name) => {
     if (name === "react") return react;
-    if (name === "./walletSync") return { broadcastBalanceUpdate: (...args) => broadcasts.push(args) };
+    if (name === "./walletReveal") return reveal;
+    if (name === "./walletSync") return {
+      broadcastBalanceUpdate: (balance, game) => publish(reveal.recordWalletBalance(balance), game),
+      getStoredWalletBalance: () => displayed,
+      holdWalletReveal: key => reveal.beginWalletReveal(key, displayed),
+      confirmWalletReturn: (key, balance, credit) => {
+        reveal.confirmWalletReveal(key, credit);
+        publish(reveal.recordWalletBalance(balance), game);
+      },
+      revealWalletReturn: key => {
+        const balance = reveal.finishWalletReveal(key);
+        if (balance !== null) publish(balance, game);
+      },
+    };
     if (name === "./dailyPoolConsent") return { dailyPoolConsent: () => undefined };
     if (name === "./gameResultNotice") return { notifyGameResult: (...args) => notices.push(args) };
     if (name === "./cardGameRules" || name === "./rouletteGameRules") {
@@ -71,7 +90,7 @@ function scene(game = "baccarat") {
     for (let count = 0; dirty && count < 20; count++) {
       dirty = false;
       cursor = 0;
-      view = loaded.exports.useMultiplayerGame(game);
+      view = loaded.exports.useMultiplayerGame(game, undefined, resultRevealDelay);
       for (const effect of effects.splice(0)) effect();
     }
     assert.equal(dirty, false);
@@ -81,6 +100,11 @@ function scene(game = "baccarat") {
     calls, broadcasts, logs, notices, timers, flush,
     get view() { flush(); return view; },
     setNow(value) { now = value; },
+    tick(ms) {
+      now += ms;
+      [...timers.values()].find(timer => timer.interval && timer.delay === 100).fn();
+      flush();
+    },
     async respond(index, data, status = 200) {
       calls[index].resolve({ ok: status < 400, status, json: async () => data });
       for (let count = 0; count < 10; count++) await Promise.resolve();
@@ -94,6 +118,30 @@ const state = (overrides = {}) => ({
   game: "baccarat", serverNow: 10000, balance: 1000,
   round: { roundNo: 71, phase: "betting", bettingEndsAt: 20000, resultAt: 24000, endsAt: 29000, result: null },
   bets: [], queuedBets: [], myBets: [], myQueuedBets: [], history: [], ...overrides,
+});
+
+test("live delayed card reveals hide winnings from the table and global wallet until the final card", async () => {
+  const s = scene("football-studio", () => 500);
+  const pending = { id: "win", roundNo: 71, status: "pending", amount: 100, payout: 0 };
+  await s.respond(0, state({ game: "football-studio", balance: 900, myBets: [pending] }));
+  void s.view.refresh();
+  await s.respond(1, state({
+    game: "football-studio", serverNow: 24000, balance: 1100,
+    round: { roundNo: 71, phase: "result", bettingEndsAt: 20000, resultAt: 24000, endsAt: 29000, result: { outcome: "HOME" } },
+    myBets: [{ ...pending, status: "win", payout: 200 }],
+  }));
+  assert.equal(s.view.state.balance, 900);
+  assert.equal(s.broadcasts.at(-1)[0], 900);
+  assert.equal(s.notices.length, 0);
+  s.tick(499);
+  assert.equal(s.view.state.balance, 900);
+  s.tick(1);
+  assert.equal(s.view.state.balance, 1100);
+  assert.equal(s.broadcasts.at(-1)[0], 1100);
+  assert.equal(s.notices.length, 1);
+  s.tick(1000);
+  assert.equal(s.notices.length, 1);
+  s.unmount();
 });
 
 test("live transport coalesces reads and only broadcasts changed authoritative balances", async () => {
@@ -121,6 +169,27 @@ test("spectator connection has public live wagers but no wallet or wager writes"
   assert.deepEqual(s.broadcasts, []);
   assert.equal(s.calls.length, 1);
   assert.equal(s.calls[0].options.method, undefined);
+  s.unmount();
+});
+
+test("committed live bet receipts update immediately and stale polling cannot erase them", async () => {
+  const s = scene("birds-beasts");
+  await s.respond(0, state({ game: "birds-beasts" }));
+  const stale = s.view.refresh();
+  const placing = s.view.place("owl", 100);
+  const committed = state({
+    game: "birds-beasts", balance: 900,
+    myBets: [{ id: "owl-bet", option: "owl", amount: 100, roundNo: 71, status: "pending", payout: 0, mine: true }],
+  });
+  await s.respond(2, { ok: true, roundNo: 71, state: committed });
+  await placing;
+  assert.equal(s.view.busy, false);
+  assert.equal(s.view.state.balance, 900);
+  assert.equal(s.view.state.myBets[0].id, "owl-bet");
+  await s.respond(1, state({ game: "birds-beasts" }));
+  await stale;
+  assert.equal(s.view.state.balance, 900);
+  assert.equal(s.calls.length, 3, "No extra GET is required to confirm a committed bet");
   s.unmount();
 });
 

@@ -19,7 +19,7 @@ const specs = [
   ["derby-race/DerbyRaceApp.tsx", "HomePage", "phase, bet, balance, primaryAction, completeRace, planRef, history, queue"],
 ];
 
-function scene(spec) {
+function scene(spec, saved = null) {
   let cursor = 0, dirty = false, now = 0, nextId = 0, probe;
   const slots = [], effects = [], timers = new Map(), listeners = new Map(), cache = new Map();
   const writes = [], requests = [];
@@ -129,6 +129,7 @@ function scene(spec) {
     },
     getStoredWalletBalance: () => funds,
     reportGameBalanceChange: (_game, delta, balance) => { writes.push(delta); funds = balance; },
+    usePoolRoundState: (_game, key, initial) => hooks.useState(spec[1] === "CrashGoal" && key === "machine" ? saved : initial),
   };
   function load(filename) {
     if (cache.has(filename)) return cache.get(filename).exports;
@@ -191,7 +192,16 @@ function scene(spec) {
     } while (dirty);
   }
   flush();
+  if (saved && spec[1] === "CrashGoal") {
+    saved.slots.forEach((slot, index) => {
+      if (slot.placed && slot.cashedOutAt === null && slot.outcome === null) {
+        void wallet.usePoolLifecycle("crash-goal", `panel-${index + 1}`).start(slot.amount);
+      }
+    });
+    flush();
+  }
   const api = {
+    load,
     get probe() { return probe; }, writes, requests,
     async advance(ms) {
       const end = now + ms;
@@ -264,6 +274,104 @@ function scene(spec) {
   };
   return api;
 }
+
+test("CrashGoal: one amount supports betting/cancellation and rejects a second slot", async () => {
+  const game = scene(specs.find(spec => spec[1] === "CrashGoal"));
+  try {
+    assert.equal(game.probe.slots.length, 1);
+    await game.probe.primaryAction(1);
+    await game.advance(1);
+    assert.equal(game.writes.length, 0);
+    assert.match(game.probe.queue.status, /only one bet/i);
+    game.place();
+    await game.advance(1);
+    assert.equal(game.writes.filter(delta => delta < 0).length, 1);
+    assert.equal(game.probe.slots[0].placed, true);
+    await game.probe.primaryAction(0);
+    await game.advance(1);
+    assert.equal(game.probe.slots[0].placed, false);
+    assert.equal(game.writes.reduce((sum, value) => sum + value, 0), 0);
+    await game.until(() => game.phase() === "flying");
+    game.probe.queue.enqueue({ index: 1, slot: { ...game.probe.slots[0] } });
+    await game.until(() => game.open());
+    assert.equal(game.writes.length, 2, "Old unfunded second-slot queues cannot become hidden wagers");
+    assert.match(game.probe.queue.status, /only one bet/i);
+  } finally { game.dispose(); }
+});
+
+for (const phase of ["betting", "flying"]) test(`CrashGoal: a recovered second wager can still ${phase === "betting" ? "cancel" : "cash out"} before retiring`, async () => {
+  const first = { amount: 50, autoTarget: 3, autoEnabled: false, placed: false, cashedOutAt: null, outcome: null };
+  const game = scene(specs.find(spec => spec[1] === "CrashGoal"), {
+    phase, started: 1800000000000, crash: 3, visualSeed: 421,
+    slots: [first, { ...first, amount: 80, placed: true }],
+  });
+  try {
+    await game.probe.primaryAction(1);
+    await game.advance(1);
+    assert.deepEqual(game.writes, [-80, 80], "Existing stake refunds/cash-outs remain wallet-correct");
+    await game.probe.primaryAction(1);
+    await game.advance(1);
+    assert.equal(game.writes.length, 2, "The retired slot cannot create another bet or pay twice");
+    if (game.open()) await game.until(() => !game.open());
+    await game.until(() => game.open());
+    assert.equal(game.probe.slots.length, 1);
+    assert.equal(game.writes.length, 2);
+  } finally { game.dispose(); }
+});
+
+test("CrashGoal: late flights can end near the start, middle or far side instead of converging on one crash area", () => {
+  const game = scene(specs.find(spec => spec[1] === "CrashGoal"));
+  try {
+    const { flightFrame } = game.load(path.resolve(root, "crash-goal", "lib", "flight.ts"));
+    for (const g of [
+      { w: 1000, h: 700, controlsHeight: 140 },
+      { w: 390, h: 650, controlsHeight: 140 },
+    ]) {
+      for (const seed of [0, 421, 996]) {
+        const positions = [];
+        for (let seconds = Math.log(5) / 0.22; seconds <= Math.log(500) / 0.22; seconds += 0.05) {
+          positions.push(flightFrame(Math.exp(0.22 * seconds), g, seed).ball.x / g.w);
+        }
+        assert.ok(positions.some(x => x < 0.3), "Long flights must still visit the beginning of the screen");
+        assert.ok(positions.some(x => x >= 0.4 && x <= 0.6), "Long flights must visit the middle");
+        assert.ok(positions.some(x => x > 0.8), "Long flights must visit the far side");
+      }
+    }
+  } finally { game.dispose(); }
+});
+
+test("CrashGoal: flight and camera vary, stay continuous, and keep the ball above controls", () => {
+  const game = scene(specs.find(spec => spec[1] === "CrashGoal"));
+  try {
+    const { flightFrame, BALL_SIZE } = game.load(path.resolve(root, "crash-goal", "lib", "flight.ts"));
+    const geometries = [
+      { w: 1000, h: 700, controlsHeight: 140 },
+      { w: 780, h: 360, controlsHeight: 140 },
+      { w: 320, h: 470, controlsHeight: 140 },
+      { w: 390, h: 650, controlsHeight: 140 },
+      { w: 610, h: 240, controlsHeight: 140 },
+    ];
+    for (const g of geometries) {
+      for (const seed of [0, 421, 996]) {
+        const frames = [1.01, 1.3, 2, 3, 10, 50, 500].map(m => flightFrame(m, g, seed));
+        assert.ok(Math.max(...frames.map(f => f.ball.x)) - Math.min(...frames.map(f => f.ball.x)) > g.w * 0.25);
+        assert.ok(Math.abs(frames.at(-1).camera.x) > g.w, "Camera must keep travelling on long flights");
+        for (const multiplier of [1, 1.01, 1.3, 2, 3, 10, 50, 500]) {
+          const frame = flightFrame(multiplier, g, seed);
+          assert.ok(frame.ball.x >= BALL_SIZE / 2 && frame.ball.x <= g.w - BALL_SIZE / 2);
+          assert.ok(frame.ball.y >= BALL_SIZE / 2 && frame.ball.y + BALL_SIZE / 2 <= g.h - g.controlsHeight);
+          const tip = frame.path.split(" L").at(-1).split(" ").map(Number);
+          assert.ok(Math.abs(tip[0] - frame.ball.x) < 0.1 && Math.abs(tip[1] - frame.ball.y) < 0.1);
+          const next = flightFrame(multiplier * Math.exp(0.22 * 0.016), g, seed);
+          assert.ok(Math.hypot(next.ball.x - frame.ball.x, next.ball.y - frame.ball.y) < g.w * 0.01);
+          assert.ok(Math.hypot(next.camera.x - frame.camera.x, next.camera.y - frame.camera.y) < g.w * 0.01);
+        }
+      }
+      const positions = [0, 421, 996].map(seed => flightFrame(3, g, seed).ball.x);
+      assert.ok(Math.max(...positions) - Math.min(...positions) > g.w * 0.05, "Round variations cannot share a fixed endpoint");
+    }
+  } finally { game.dispose(); }
+});
 
 for (const spec of specs) test(`${spec[1]}: spectator rounds, one-shot queue, cancel, funding revalidation and no replay`, async () => {
   const game = scene(spec);

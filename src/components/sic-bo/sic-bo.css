@@ -30,6 +30,97 @@
   width: 100%;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.sic-bo-game > .app-shell {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+
+.sic-bo-game .topbar {
+  flex: none;
+  height: auto;
+  min-height: 48px;
+  padding: 6px 0;
+}
+
+.sic-bo-game .topbar-inner {
+  width: calc(100% - 24px);
+  height: auto;
+  min-height: 36px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sic-bo-game .brand-lockup,
+.sic-bo-game .topbar-actions {
+  flex: 0 1 auto;
+}
+
+.sic-bo-game .topbar-actions {
+  min-width: 0;
+  flex-wrap: wrap;
+  margin-left: auto;
+  gap: 8px;
+}
+
+.sic-bo-game .game-layout {
+  flex: none;
+  height: auto;
+  min-height: auto;
+  overflow: visible;
+}
+
+.sic-bo-game .felt-table {
+  flex: none;
+  height: auto;
+}
+
+.sic-bo-game .table-column,
+.sic-bo-game .side-column {
+  display: none;
+}
+
+.sic-bo-game .table-column.sb-tab-active { display: block; }
+.sic-bo-game .side-column.sb-tab-active { display: flex; }
+
+@media (min-width: 1024px) {
+  .sic-bo-game .game-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 316px;
+  }
+  .sic-bo-game .table-column { display: block; }
+  .sic-bo-game .side-column { display: flex; }
+}
+
+.sic-bo-game .chip-option {
+  flex: 1 0 auto;
+  width: auto;
+  min-width: 0;
+  height: auto;
+  min-height: 42px;
+  aspect-ratio: auto;
+  padding: 8px;
+}
+
+.sic-bo-game .chip-amount {
+  min-width: 0;
+  min-height: 0;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.sic-bo-game .chip-coin {
+  min-width: 21px;
+  min-height: 21px;
+  border-radius: 50%;
+}
+
+.sic-bo-game .chip-option.chip-active {
+  transform: translateY(-2px) !important;
 }
 
 .sic-bo-game button,

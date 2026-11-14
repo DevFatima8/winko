@@ -1,5 +1,6 @@
 import { randomInt } from "node:crypto";
 import type { MultiplayerGame } from "./multiplayer-types";
+import { evaluateBets, isBetKey, type AnimalId } from "@/components/birds-beasts/lib/game-config";
 
 export type Suit = "♠" | "♥" | "♦" | "♣";
 export type Card = { rank: string; value: number; suit: Suit };
@@ -16,7 +17,8 @@ export type SevenOutcome = { dice: [number, number]; total: number };
 export type CricketMatch = { innings: 1 | 2; batting: 0 | 1; runs: number; wickets: number; balls: number; target: number | null; thisOver: CricketOutcome["outcome"][] };
 export type CricketOutcome = { outcome: "dot" | "single" | "two" | "four" | "six" | "wicket"; match?: CricketMatch };
 export type BlastOutcome = { crashPoint: number };
-export type MultiplayerOutcome = BaccaratOutcome | SpeedBaccaratOutcome | FootballOutcome | Cards32Outcome | RouletteOutcome | DreamOutcome | DiceOutcome | SevenOutcome | CricketOutcome | BlastOutcome;
+export type BirdsBeastsOutcome = { slot: number; animal: AnimalId; outcome: string };
+export type MultiplayerOutcome = BaccaratOutcome | SpeedBaccaratOutcome | FootballOutcome | Cards32Outcome | RouletteOutcome | DreamOutcome | DiceOutcome | SevenOutcome | CricketOutcome | BlastOutcome | BirdsBeastsOutcome;
 
 const suits: Suit[] = ["♠", "♥", "♦", "♣"];
 const ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
@@ -135,12 +137,15 @@ export function validateOption(game: MultiplayerGame, option: string): boolean {
     case "7-up-down": return ["up", "down", "lucky"].includes(option);
     case "nine-wickets": return Object.hasOwn(cricketMarkets, option);
     case "blast-off": return option === "main";
+    case "birds-beasts": return isBetKey(option);
   }
 }
 
 /** Cryptographic randomness; no bets, player identity, or stake enter outcome generation. */
 export function createOutcome(game: MultiplayerGame): MultiplayerOutcome {
   switch (game) {
+    // The existing quota schedule is consumed once, under the table lock, after bets close.
+    case "birds-beasts": return { slot: -1, animal: "chicken", outcome: "idle" };
     case "baccarat": return baccarat();
     case "speed-baccarat": {
       const hand = baccarat();
@@ -224,7 +229,7 @@ export function advanceCricketMatch(outcome: CricketOutcome["outcome"], previous
 export function timings(game: MultiplayerGame, version: 1 | 2 = 2) {
   const legacyBettingMs = game === "blast-off" ? 6000 : game === "speed-baccarat" ? 9000 : game === "7-up-down" ? 13000 : game === "football-studio" || game === "nine-wickets" ? 12000 : game === "auto-roulette" ? 20000 : game === "lightning-roulette" ? 25000 : 15000;
   return { bettingMs: version === 1 ? legacyBettingMs : 10000,
-    runningMs: game === "blast-off" ? Math.ceil(flightMs(250)) : game === "dream-catcher" ? 12000 : game.includes("roulette") ? 8000 : 5000,
+    runningMs: game === "birds-beasts" ? 11000 : game === "blast-off" ? Math.ceil(flightMs(250)) : game === "dream-catcher" ? 12000 : game.includes("roulette") ? 8000 : 5000,
     resultMs: game === "blast-off" ? 3200 : 5000 };
 }
 
@@ -232,6 +237,8 @@ export function timings(game: MultiplayerGame, version: 1 | 2 = 2) {
 export function grossPayout(game: MultiplayerGame, option: string, amount: number, result: MultiplayerOutcome): number {
   let multiple = 0;
   switch (game) {
+    case "birds-beasts":
+      return isBetKey(option) ? evaluateBets({ [option]: amount }, (result as BirdsBeastsOutcome).slot).payout : 0;
     case "baccarat": {
       const r = result as BaccaratOutcome;
       return r.winner === option ? Math.round(amount * ({ player: 2, banker: 1.95, tie: 9 }[option] ?? 0)) : 0;

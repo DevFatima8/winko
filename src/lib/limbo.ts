@@ -1,4 +1,4 @@
-import { createHash, randomInt, randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { dbConnect } from "./mongo";
 import { Game, GameResult, User, oid, type GameResultDoc, type ObjectId, type UserDoc } from "@/models";
 import { checkGameAccess } from "./gameAccess";
@@ -6,6 +6,7 @@ import { payoutAfterHouseShare, MAX_MULTIPLIER } from "./outcomes";
 import { dedicatedTransaction } from "./dailyPoolDedicated";
 import { cents } from "./dailyPool";
 import type { MultiplayerTransaction } from "./multiplayer-store";
+import { nextBetWin } from "./playerWinCycle";
 
 /** browser/node-safe random hex (provably-fair style seed) */
 function randomHex(bytes = 32) {
@@ -40,46 +41,11 @@ export function roll(target = 1.01, win = false) {
   return { result, hash: hex };
 }
 
-// Every block of 100 different players has exactly 20 winners. A player draws one slot on
-// their first bet in a block; further bets by the same player in that block are no-win.
-export const CYCLE_SIZE = 100, CYCLE_WINS = 20;
-const CYCLE_ID = "limbo:player-cycle:v1";
-type Slot = "win" | "lose";
-type WinCycle = { _id: string; remaining: Slot[]; players: string[] };
-
-function shuffle<T>(values: T[]) {
-  for (let i = values.length - 1; i > 0; i--) {
-    const j = randomInt(i + 1);
-    [values[i], values[j]] = [values[j], values[i]];
-  }
-  return values;
-}
+export const CYCLE_SIZE = 100, CYCLE_WINS = 30;
 
 // The cycle advances inside the accepting transaction, so retries and failed debits never consume a slot.
-async function nextOutcome(tx: MultiplayerTransaction, userId: string, target: number) {
-  const saved = await tx.get<WinCycle>("multiplayerrooms", CYCLE_ID);
-  if (saved && (!Array.isArray(saved.remaining) || !Array.isArray(saved.players) ||
-    saved.remaining.length + saved.players.length !== CYCLE_SIZE || !saved.remaining.length ||
-    saved.remaining.some(slot => slot !== "win" && slot !== "lose") ||
-    saved.players.some(player => typeof player !== "string" || !player) ||
-    new Set(saved.players).size !== saved.players.length ||
-    saved.remaining.filter(slot => slot === "win").length > CYCLE_WINS ||
-    saved.remaining.filter(slot => slot === "lose").length > CYCLE_SIZE - CYCLE_WINS)) {
-    throw new Error("Limbo win cycle is invalid. Contact support.");
-  }
-  let slot: Slot = "lose";
-  if (!saved?.players.includes(userId)) {
-    const remaining = saved ? saved.remaining : shuffle([
-      ...Array<Slot>(CYCLE_WINS).fill("win"), ...Array<Slot>(CYCLE_SIZE - CYCLE_WINS).fill("lose"),
-    ]);
-    const players = saved ? [...saved.players, userId] : [userId];
-    slot = remaining.shift()!;
-    await tx.put("multiplayerrooms", CYCLE_ID, remaining.length ? { _id: CYCLE_ID, remaining, players } : {
-      _id: CYCLE_ID, players: [],
-      remaining: shuffle([...Array<Slot>(CYCLE_WINS).fill("win"), ...Array<Slot>(CYCLE_SIZE - CYCLE_WINS).fill("lose")]),
-    });
-  }
-  const { result, hash } = roll(target, slot === "win");
+async function nextOutcome(tx: MultiplayerTransaction, target: number) {
+  const { result, hash } = roll(target, await nextBetWin(tx, "limbo", CYCLE_WINS, CYCLE_SIZE));
   return { result, hash, won: result >= target, data: `result ${result}x · target ${target}x · ${hash.slice(0, 10)}` };
 }
 
@@ -139,7 +105,7 @@ export async function play(userId: string, amount: number, target: number, reque
     }
     if (!user || !user.isActive || user.role !== "client" || user.blockedGames?.includes("limbo")) return { error: "This account cannot bet on this game." };
     if (cents(user.balance) < cents(amount)) return { error: "Insufficient balance." };
-    const { result, hash, won, data } = await nextOutcome(tx, userId, target);
+    const { result, hash, won, data } = await nextOutcome(tx, target);
     const payout = await instantPayout(tx, amount, won ? payoutAfterHouseShare(gross) : 0);
     const now = new Date(await tx.now());
     const gid = await gameId();

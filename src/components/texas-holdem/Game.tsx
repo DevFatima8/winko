@@ -116,6 +116,7 @@ export default function App() {
       }
     } finally { setPresentation(null); }
     const next = { ...view.state };
+    if (next.phase === "handOver") pool.announce();
     const wallet = getStoredWalletBalance();
     if (wallet !== null) next.playerChips = wallet;
     if (pool.enabled && next.phase === "handOver") next.log = pushLog(next.log, `Provisional claim Rs. ${next.grossReturn}; daily pool settlement pending.`);

@@ -29,6 +29,26 @@
   font-family: Georgia, "Times New Roman", serif;
 }
 
+.rummy-wrapper .rummy-hand-scroll {
+  flex: 0 0 auto;
+  min-height: max-content;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 12px 8px 20px;
+}
+
+.rummy-wrapper .rummy-hand-scroll > div {
+  padding-top: 24px;
+}
+
+.rummy-wrapper .rummy-hand-scroll button {
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+}
+
 /* ── Casino felt table ─────────────────────────────────────── */
 .rummy-felt-bg {
   background-color: #072b20;

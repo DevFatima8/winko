@@ -250,6 +250,7 @@ export default function SlotGame() {
         clearInterval(tickRef.current);
         tickRef.current = null;
       }
+      pool.releaseBalance();
       notifyGameResult("super-fruits", noticeId, amount, pool.enabled);
       busyRef.current = false;
       setGrid(res.grid);

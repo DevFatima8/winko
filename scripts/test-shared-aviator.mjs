@@ -19,6 +19,62 @@ test("Aviator and Aviator X accept requested presets with a Rs. 10 minimum", asy
   assert.equal((await s.flight.getState("alice", "aviator-x")).config.minBet, 10);
 });
 
+test("Aviator X allows only two panels for current and next-round wagers without charging rejected requests", async () => {
+  const s = createLegacyScene();
+  const first = await s.flight.getState("alice", "aviator-x");
+  assert.equal(first.config.slots, 2);
+  const placed = await Promise.all([0, 1].map(slot => s.flight.placeBet("alice", "aviator-x", 50, slot, first.round.id)));
+  assert.ok(placed.every(reply => reply.ok));
+  assert.equal(s.users.get("alice").balance, 900);
+  assert.equal((await s.flight.placeBet("alice", "aviator-x", 50, 0, first.round.id)).error, "Bet already placed.");
+  for (const slot of [2, 3, -1, 0.5]) {
+    assert.equal((await s.flight.placeBet("alice", "aviator-x", 50, slot, first.round.id)).error, "Invalid bet panel.");
+  }
+  s.at(first.round.startsAt + 180);
+  for (const slot of [0, 1]) {
+    assert.equal((await s.flight.placeBet("alice", "aviator-x", 50, slot, first.round.id + 1)).ok, true);
+  }
+  assert.equal((await s.flight.placeBet("alice", "aviator-x", 50, 2, first.round.id + 1, true, 1.01)).error, "Invalid bet panel.");
+  const state = await s.flight.getState("alice", "aviator-x");
+  assert.deepEqual(state.myBets.map(bet => bet.slot).sort(), [0, 1]);
+  assert.deepEqual(state.queued.map(bet => bet.slot).sort(), [0, 1]);
+  assert.equal(s.users.get("alice").balance, 800);
+  assert.equal(s.data.gameresults.length, 4);
+});
+
+test("Aviator X counts an accepted old third-panel wager toward the two-bet limit and keeps its cancellation", async () => {
+  const s = createLegacyScene();
+  const config = s.flight.TABLES["aviator-x"];
+  const first = await s.flight.getState("alice", "aviator-x");
+  config.slots = 3;
+  assert.equal((await s.flight.placeBet("alice", "aviator-x", 70, 2, first.round.id)).ok, true);
+  config.slots = 2;
+  assert.equal((await s.flight.placeBet("alice", "aviator-x", 50, 0, first.round.id)).ok, true);
+  assert.match((await s.flight.placeBet("alice", "aviator-x", 50, 1, first.round.id)).error, /two bets/i);
+  assert.equal(s.users.get("alice").balance, 880);
+  assert.equal((await s.flight.cancelBet("alice", "aviator-x", 2, first.round.id)).ok, true);
+  assert.equal(s.users.get("alice").balance, 950);
+  assert.equal((await s.flight.placeBet("alice", "aviator-x", 50, 1, first.round.id)).ok, true);
+  assert.deepEqual((await s.flight.getState("alice", "aviator-x")).myBets.map(bet => bet.slot).sort(), [0, 1]);
+});
+
+test("Aviator X keeps cashout of an already accepted third-panel bet without permitting another one", async () => {
+  const s = createLegacyScene();
+  const config = s.flight.TABLES["aviator-x"];
+  const first = await s.flight.getState("alice", "aviator-x");
+  config.slots = 3;
+  assert.equal((await s.flight.placeBet("alice", "aviator-x", 70, 2, first.round.id)).ok, true);
+  config.slots = 2;
+  s.at(first.round.startsAt + 180);
+  assert.equal((await s.flight.cashOut("alice", "aviator-x", 2, first.round.id)).ok, true);
+  assert.equal(s.users.get("alice").balance, 1000.7);
+  assert.equal((await s.flight.cashOut("alice", "aviator-x", 2, first.round.id)).error, "No active bet.");
+  assert.equal((await s.flight.placeBet("alice", "aviator-x", 70, 2)).error, "Invalid bet panel.");
+  assert.equal((await s.flight.cashOut("alice", "aviator-x", 3)).error, "Invalid cashout request.");
+  assert.equal((await s.flight.cashOut("alice", "aviator", 2)).error, "Invalid cashout request.");
+  assert.equal(s.users.get("alice").balance, 1000.7);
+});
+
 test("Aviator: two players and a guest share one flight and see actual masked wagers", async () => {
   const s = createLegacyScene();
   const first = await s.flight.getState("alice", "aviator");
@@ -48,6 +104,10 @@ test("Aviator: shared crash settles every actual pending player and cashouts pay
   s.at(first.round.startsAt + 180);
   const paid = await s.flight.cashOut("alice", "aviator", 0, first.round.id);
   assert.equal(paid.ok, true, JSON.stringify(paid));
+  assert.equal(paid.round, first.round.id);
+  assert.equal(paid.balance, s.users.get("alice").balance);
+  assert.equal(paid.bet.outcome, "win");
+  assert.equal(paid.bet.win, paid.win);
   assert.ok((await s.flight.cashOut("alice", "aviator", 0, first.round.id)).error);
   s.at(first.round.startsAt + 1000);
   const guest = await s.flight.getState(null, "aviator");

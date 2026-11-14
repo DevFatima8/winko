@@ -60,7 +60,7 @@ function paytable() {
 
 export default function WheelGame() {
   const [balance, setBalance] = useGameBalance("wheel-betting", START_BALANCE);
-  const { playServer } = useBrowserWager("wheel-betting", START_BALANCE);
+  const { playServer, reveal } = useBrowserWager("wheel-betting", START_BALANCE);
   const poolEnabled = useDailyPoolMode();
   const [bet, setBet] = useState(10);
   const [spinning, setSpinning] = useState(false);
@@ -87,7 +87,7 @@ export default function WheelGame() {
   const [queuedBet, setQueuedBet] = useState<number | null>(null);
   const queuedRef = useRef<number | null>(null);
   const mounted = useRef(false);
-  const roundRef = useRef<() => Promise<void>>(async () => {});
+  const roundRef = useRef<() => Promise<void>>(async () => { });
 
 
   /* ---------------- persistence ---------------- */
@@ -231,6 +231,7 @@ export default function WheelGame() {
       };
 
       setRecords((prev) => [record, ...prev].slice(0, 60));
+      reveal();
       if (accepted) notifyGameResult("wheel-betting", accepted.wagerId, accepted.claim, accepted.poolPending);
       setStats((prev) => ({
         spins: prev.spins + 1,
@@ -259,7 +260,7 @@ export default function WheelGame() {
       if (mounted.current) setSpinning(false);
       lockRef.current = false;
     }
-  }, [stopAuto, turbo]);
+  }, [stopAuto, turbo, reveal]);
 
   useEffect(() => {
     betRef.current = bet;
@@ -377,9 +378,6 @@ export default function WheelGame() {
                 <h2 className="text-xs sm:text-sm font-black uppercase tracking-[0.1em] text-white">
                   Spin the wheel
                 </h2>
-                <p className="text-[0.6rem] text-slate-400 hidden sm:block">
-                  20 segments · land a multiplier to win · 0× loses
-                </p>
               </div>
             </div>
 
@@ -413,9 +411,8 @@ export default function WheelGame() {
                   {poolEnabled ? "Provisional claim · daily payout pending" : "Last payout"}
                 </p>
                 <p
-                  className={`mt-0.5 text-xs sm:text-base font-black tabular-nums ${
-                    lastRound && lastRound.payout > 0 ? "text-emerald-300" : "text-slate-300"
-                  }`}
+                  className={`mt-0.5 text-xs sm:text-base font-black tabular-nums ${lastRound && lastRound.payout > 0 ? "text-emerald-300" : "text-slate-300"
+                    }`}
                   style={{ fontFamily: "var(--font-num)" }}
                 >
                   {lastRound ? formatMoney(lastRound.payout) : formatMoney(0)}
@@ -525,9 +522,8 @@ export default function WheelGame() {
                 {table.map((row, i) => (
                   <div
                     key={row.multiplier}
-                    className={`flex items-center justify-between gap-2 px-3 py-1.5 ${
-                      i % 2 === 0 ? "bg-black/25" : "bg-transparent"
-                    }`}
+                    className={`flex items-center justify-between gap-2 px-3 py-1.5 ${i % 2 === 0 ? "bg-black/25" : "bg-transparent"
+                      }`}
                   >
                     <span
                       className={`inline-flex h-7 min-w-12 items-center justify-center rounded-lg px-2 text-xs font-black ${multiplierChipClass(
@@ -546,12 +542,6 @@ export default function WheelGame() {
             </div>
           </div>
         </div>
-
-        <footer className="hidden sm:flex shrink-0 mt-1 flex-col items-center gap-0.5 border-t border-white/5 pt-1 text-center">
-          <p className="text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-slate-600">
-            Play money only · no real currency
-          </p>
-        </footer>
       </main>
     </div>
   );

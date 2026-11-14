@@ -27,7 +27,7 @@ const resolve = (s, user, wagerId, bet) => s.store.transact(game, tx =>
 
 for (const option of rules.BET_OPTIONS) {
   for (const poolEnabled of [false, true]) {
-    test(`${option.id}, pool=${poolEnabled}: two 100-distinct-player cycles pay exactly ten verified 2x returns`, async () => {
+    test(`${option.id}, pool=${poolEnabled}: two 100-player-round cycles pay exactly thirty verified 2x returns`, async () => {
       const s = scene(players, poolEnabled);
       for (let block = 0; block < 2; block++) {
         let wins = 0;
@@ -44,14 +44,14 @@ for (const option of rules.BET_OPTIONS) {
           wins += Number(reply.outcome.won);
           assert.deepEqual((await resolve(s, user, wagerId, option.id)).outcome, reply.outcome);
         }
-        assert.equal(wins, 10);
+        assert.equal(wins, 30);
       }
       assert.equal(s.data.dailypoolentries.length, 0);
     });
   }
 }
 
-test("Thai Hi-Lo rejects invalid choices/claims, rolls back failures, and repeat players cannot draw again", async () => {
+test("Thai Hi-Lo rejects invalid choices/claims, rolls back failures, and repeat players draw again", async () => {
   const s = scene(["alice"]);
   const wagerId = randomUUID();
   await accept(s, "alice", wagerId, 4321);
@@ -73,8 +73,8 @@ test("Thai Hi-Lo rejects invalid choices/claims, rolls back failures, and repeat
   const cycle = structuredClone(s.data.multiplayerrooms);
   const repeat = randomUUID();
   await accept(s, "alice", repeat, 4321);
-  assert.equal((await resolve(s, "alice", repeat, "triple")).claim, 0);
-  assert.deepEqual(s.data.multiplayerrooms, cycle);
+  await resolve(s, "alice", repeat, "triple");
+  assert.equal(s.data.multiplayerrooms[0].remaining.length, cycle[0].remaining.length - 1);
   await assert.rejects(s.store.transact(game, tx => s.browser.playBrowserWager(tx, "alice", {
     game, wagerId: randomUUID(), stake: 4321, claim: 43210,
   }, true)), /server engine/);

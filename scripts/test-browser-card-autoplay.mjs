@@ -11,10 +11,12 @@ const tree = node => !node || typeof node !== "object" ? [] : Array.isArray(node
 const text = node => node == null || typeof node === "boolean" ? "" : Array.isArray(node)
   ? node.map(text).join("") : typeof node === "object" ? text(node.props?.children) : String(node);
 
-function fixture(path, { props = {}, saved = {}, cardMove, resolveServer } = {}) {
+function fixture(path, { props = {}, saved = {}, cardMove, resolveServer, localApi } = {}) {
   let hook = 0, now = 0, serial = 0, dirty = true, mounted = true, output;
-  const slots = [], effects = [], timers = new Map(), modules = new Map(), calls = [];
+  const slots = [], effects = [], timers = new Map(), modules = new Map(), calls = [], reveals = [];
   const storage = new Map();
+  const handlers = new Map();
+  let walletBalance = 10000;
   const useState = initial => {
     const id = hook++;
     if (!(id in slots)) {
@@ -57,11 +59,19 @@ function fixture(path, { props = {}, saved = {}, cardMove, resolveServer } = {})
     setTimeout: (fn, ms) => schedule(fn, ms), clearTimeout: id => timers.delete(id),
     setInterval: (fn, ms) => schedule(fn, ms, true), clearInterval: id => timers.delete(id),
     localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
-    addEventListener() {}, removeEventListener() {}, dispatchEvent() {},
+    addEventListener(name, handler) {
+      if (!handlers.has(name)) handlers.set(name, new Set());
+      handlers.get(name).add(handler);
+    },
+    removeEventListener(name, handler) { handlers.get(name)?.delete(handler); },
+    dispatchEvent(event) { handlers.get(event.type)?.forEach(handler => handler(event)); },
     matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
   };
   const pool = {
-    busy: false, enabled: false, checkpoint() {}, announce() {},
+    busy: false, enabled: false, checkpoint() {},
+    announce() { reveals.push({ at: now }); },
+    releaseBalance() { reveals.push({ at: now }); },
+    revealReturn(amount) { reveals.push({ at: now, amount }); },
     resume: async () => true,
     start: async amount => { calls.push(["start", amount]); return true; },
     stake: async amount => { calls.push(["stake", amount]); return true; },
@@ -76,6 +86,11 @@ function fixture(path, { props = {}, saved = {}, cardMove, resolveServer } = {})
       return cardMove?.(move, selection);
     },
   };
+  const publishWallet = balance => {
+    walletBalance = balance;
+    window.dispatchEvent({ type: "wx:balance-update", detail: { balance } });
+  };
+  const wallet = () => load("src\\lib\\walletReveal.ts");
   function load(file) {
     file = resolve(file);
     if (modules.has(file)) return modules.get(file).exports;
@@ -98,9 +113,25 @@ function fixture(path, { props = {}, saved = {}, cardMove, resolveServer } = {})
         },
         usePoolLifecycle: () => pool,
         usePoolRoundState: (_game, key, initial) => useState(Object.hasOwn(saved, key) ? saved[key] : initial),
-        getStoredWalletBalance: () => 10000,
-        fetchServerBalance: async () => 10000,
+        getStoredWalletBalance: () => walletBalance,
+        broadcastBalanceUpdate: raw => publishWallet(wallet().recordWalletBalance(raw)),
+        holdWalletReveal: key => wallet().beginWalletReveal(key, walletBalance),
+        confirmWalletReturn: (key, raw, credit) => {
+          wallet().confirmWalletReveal(key, credit);
+          if (raw !== null) publishWallet(wallet().recordWalletBalance(raw));
+        },
+        revealWalletReturn: (key, amount) => {
+          const balance = wallet().finishWalletReveal(key, amount);
+          if (balance !== null) publishWallet(balance);
+        },
+        fetchServerBalance: async () => {
+          if (!localApi) return walletBalance;
+          const response = await localApi("/api/player/balance", {});
+          publishWallet(wallet().recordWalletBalance((await response.json()).balance));
+          return walletBalance;
+        },
       };
+      if (name === "@/lib/client" && localApi) return { localApi };
       if (name === "@/lib/interactiveCardClient") return {
         restoreCardRound: async () => null,
         cardMove: async (_pool, move, selection) => {
@@ -123,14 +154,16 @@ function fixture(path, { props = {}, saved = {}, cardMove, resolveServer } = {})
     const source = ts.transpileModule(readFileSync(file, "utf8"), {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
     }).outputText;
-    new Function("require", "module", "exports", "window", "localStorage", "setTimeout", "clearTimeout", "setInterval", "clearInterval", source)(
+    new Function("require", "module", "exports", "window", "localStorage", "setTimeout", "clearTimeout", "setInterval", "clearInterval",
+      "requestAnimationFrame", "cancelAnimationFrame", "performance", source)(
       require, module, module.exports, window, window.localStorage,
       window.setTimeout, window.clearTimeout, window.setInterval, window.clearInterval,
+      fn => window.setTimeout(() => fn(now), 16), window.clearTimeout, { now: () => now },
     );
     return module.exports;
   }
   const module = load(path);
-  const component = module.default ?? module.ThreeCardPoker ?? module.GameTable;
+  const component = module.default ?? module.ThreeCardPoker ?? module.GameTable ?? module.LimboGame ?? module.PlinkoGame ?? module.Slot777Game;
   const render = () => {
     let safety = 0;
     while (dirty) {
@@ -147,7 +180,9 @@ function fixture(path, { props = {}, saved = {}, cardMove, resolveServer } = {})
   };
   render();
   return {
-    calls, pool, render, flush,
+    calls, reveals, pool, render, flush,
+    get walletBalance() { return walletBalance; },
+    pollWallet(raw) { publishWallet(wallet().recordWalletBalance(raw)); },
     nodes: () => tree(render()),
     find: label => tree(render()).find(node => node.type === "button" && text(node).includes(label)),
     async click(label) {
@@ -180,6 +215,195 @@ function fixture(path, { props = {}, saved = {}, cardMove, resolveServer } = {})
     },
   };
 }
+
+test("Limbo conceals the committed return until the multiplier animation finishes", async () => {
+  const f = fixture("src\\components\\LimboGame.tsx", {
+    localApi: async (_url, options) => ({
+      ok: true, status: 200, json: async () => options.method === "POST"
+        ? { balance: 1050, result: 2, won: true, payout: 100 }
+        : { balance: 1000, limits: { min: 10, max: 10000, minTarget: 1.01, maxTarget: 100, rtp: 0.99 }, recent: [] },
+    }),
+  });
+  try {
+    await f.flush();
+    const play = f.find("Bet").props.onClick();
+    await f.flush();
+    assert.equal(f.walletBalance, 950);
+    f.pollWallet(1050);
+    await f.advance(899);
+    assert.equal(f.walletBalance, 950);
+    assert.ok(text(f.render()).includes("950.00"));
+    await f.advance(13);
+    await play;
+    assert.equal(f.walletBalance, 1050);
+    assert.ok(text(f.render()).includes("1,050.00"));
+  } finally { f.unmount(); }
+});
+
+test("Lucky 777 does not expose a paid result until all three reels stop", async () => {
+  const f = fixture("src\\components\\Slot777Game.tsx", {
+    localApi: async (_url, options) => ({
+      ok: true, status: 200, json: async () => options.method === "POST"
+        ? { balance: 1200, reels: ["seven", "seven", "seven"], win: { label: "Sevens", mult: 3 }, payout: 300 }
+        : { balance: 1000, limits: { min: 10, max: 10000 }, paytable: [], recent: [] },
+    }),
+  });
+  try {
+    await f.flush();
+    await f.click("SPIN");
+    const reels = f.nodes().filter(node => typeof node.props?.onStop === "function");
+    assert.equal(reels.length, 3);
+    f.pollWallet(1200);
+    assert.equal(f.walletBalance, 900);
+    reels[0].props.onStop(); reels[1].props.onStop();
+    await f.flush();
+    assert.equal(f.walletBalance, 900);
+    assert.ok(text(f.render()).includes("900.00"));
+    reels[2].props.onStop();
+    await f.flush();
+    assert.equal(f.walletBalance, 1200);
+    assert.ok(text(f.render()).includes("1,200.00"));
+  } finally { f.unmount(); }
+});
+
+const plinkoTable = [1.8, 1.5, 1.3, 1.1, 1, 0.7, 0, 0.7, 1, 1.1, 1.3, 1.5, 1.8];
+
+test("Plinko releases each return at landing, not on the drop receipt or a wallet poll", async () => {
+  let authoritative = 1000;
+  const f = fixture("src\\components\\PlinkoGame.tsx", {
+    localApi: async (url, options) => {
+      if (options.method === "POST") {
+        assert.equal(JSON.parse(options.body).rows, 12);
+        authoritative = 1080;
+      }
+      return { ok: true, status: 200, json: async () => options.method === "POST"
+        ? { balance: 1080, path: Array(12).fill(1), bucket: 12, multiplier: 1.8, payout: 180 }
+        : url === "/api/player/balance" ? { balance: authoritative }
+        : { balance: authoritative, limits: { min: 10, max: 10000 }, rows: [12],
+          tables: { medium: { 12: plinkoTable } }, recent: [] },
+      };
+    },
+  });
+  try {
+    await f.flush();
+    assert.ok(text(f.render()).includes("13 buckets with one center 0x"));
+    assert.ok(!text(f.render()).includes("25x"));
+    await f.click("Bet");
+    f.pollWallet(1080);
+    assert.equal(f.walletBalance, 900);
+    await f.advance(2469);
+    assert.equal(f.walletBalance, 900);
+    await f.advance(1);
+    assert.equal(f.walletBalance, 1080);
+    assert.ok(text(f.render()).includes("1,080"));
+  } finally { f.unmount(); }
+});
+
+test("overlapping Plinko balls ignore out-of-order balance receipts and reveal separately", async () => {
+  const receipts = [];
+  const f = fixture("src\\components\\PlinkoGame.tsx", {
+    localApi: async (url, options) => {
+      if (options.method === "POST") return new Promise(resolve => receipts.push(resolve));
+      return { ok: true, json: async () => url === "/api/player/balance" ? { balance: 1160 }
+        : { balance: receipts.length ? 1160 : 1000, limits: { min: 10, max: 10000 }, rows: [12],
+          tables: { medium: { 12: plinkoTable } }, recent: [] } };
+    },
+  });
+  const receipt = balance => ({ ok: true, status: 200, json: async () => ({
+    balance, path: Array(12).fill(1), bucket: 12, multiplier: 1.8, payout: 180,
+  }) });
+  try {
+    await f.flush();
+    const first = f.find("Bet").props.onClick();
+    const second = f.find("Bet").props.onClick();
+    receipts[1](receipt(1160));
+    await f.flush();
+    await f.advance(100);
+    receipts[0](receipt(1080));
+    await Promise.all([first, second]);
+    await f.flush();
+    assert.equal(f.walletBalance, 800);
+    await f.advance(2369);
+    assert.equal(f.walletBalance, 800);
+    await f.advance(1);
+    assert.equal(f.walletBalance, 980);
+    await f.advance(100);
+    assert.equal(f.walletBalance, 1160);
+  } finally { f.unmount(); }
+});
+
+test("Casino War reserves the table during a pending first chip and enables Deal on confirmation", async () => {
+  const f = fixture("src\\components\\casino-war\\CasinoWar.tsx");
+  let accept;
+  let submissions = 0;
+  f.pool.stake = () => { submissions++; return new Promise(resolve => { accept = resolve; }); };
+  const ante = () => f.nodes().find(node => node.props?.label === "ANTE" && node.props.onClick);
+  const deal = () => f.nodes().find(node => node.props?.onClick && text(node) === "DEAL");
+  try {
+    await f.advance(9900);
+    const pending = ante().props.onClick();
+    await f.flush();
+    await ante().props.onClick();
+    await f.advance(5000);
+    assert.equal(submissions, 1, "a second chip must not compete with the unconfirmed wager");
+    assert.equal(ante().props.amount, 0, "an unconfirmed chip is not shown as accepted");
+    assert.equal(deal().props.disabled, true);
+    assert.ok(f.nodes().some(node => text(node) === "CONFIRMING BET..."));
+    accept(true);
+    await pending;
+    await f.flush();
+    assert.equal(ante().props.amount, 100);
+    assert.equal(deal().props.disabled, false);
+    await f.advance(20000);
+    assert.equal(ante().props.active, true, "spectator animations cannot seize an accepted table");
+  } finally { f.unmount(); }
+});
+
+test("Casino War releases its idle-table claim after a rejected first chip so retry can succeed", async () => {
+  const f = fixture("src\\components\\casino-war\\CasinoWar.tsx");
+  const ante = () => f.nodes().find(node => node.props?.label === "ANTE" && node.props.onClick);
+  try {
+    f.pool.stake = async () => false;
+    await ante().props.onClick();
+    await f.flush();
+    assert.equal(ante().props.amount, 0);
+    f.pool.stake = async () => true;
+    await ante().props.onClick();
+    await f.flush();
+    assert.equal(ante().props.amount, 100);
+  } finally { f.unmount(); }
+});
+
+test("Casino War does not reuse the previous hand's chips while a rebet is still being confirmed", async () => {
+  const f = fixture("src\\components\\casino-war\\CasinoWar.tsx", {
+    cardMove: async () => ({
+      phase: "result", view: { phase: "result", result: "win",
+        player: { rank: 14, suit: "S" }, dealer: { rank: 2, suit: "H" }, tiePayout: 0 },
+    }),
+  });
+  const ante = () => f.nodes().find(node => node.props?.label === "ANTE" && node.props.onClick);
+  const button = label => f.nodes().find(node => node.props?.onClick && text(node) === label);
+  let accept;
+  f.pool.start = () => new Promise(resolve => { accept = resolve; });
+  try {
+    await ante().props.onClick();
+    await f.flush();
+    const dealing = button("DEAL").props.onClick();
+    await f.advance(3000);
+    await dealing;
+    await f.flush();
+    const pending = button("REBET").props.onClick();
+    await f.flush();
+    assert.equal(ante().props.amount, 0);
+    assert.equal(button("DEAL").props.disabled, true);
+    await f.advance(15000);
+    accept(true);
+    await pending;
+    await f.flush();
+    assert.equal(ante().props.amount, 100);
+    assert.equal(button("DEAL").props.disabled, false);
+  } finally { f.unmount(); }
+});
 
 test("Three Card Poker accepts custom stakes above 1000 on both spots and Play uses the server action", async () => {
   const cards = [
@@ -358,8 +582,11 @@ test("blackjack: completing an interactive hand resumes spectator cycles, withou
   await dealt;
   const stand = f.find("STAND").props.onClick();
   const duplicate = f.find("STAND").props.onClick();
-  await f.advance(9000);
+  await f.advance(100);
+  assert.equal(f.reveals.length, 0, "a confirmed win must remain hidden while dealer cards are revealing");
+  await f.advance(8900);
   await Promise.all([stand, duplicate]);
+  assert.equal(f.reveals.length, 1, "the terminal card presentation releases the balance once");
   assert.deepEqual(f.calls.map(call => call.slice(0, 2)), [["start", 50], ["move", "deal"], ["move", "stand"]]);
   const next = JSON.stringify(f.render());
   await f.advance(12000);
@@ -382,7 +609,7 @@ test("red vs black: clicks during dealing cannot queue or charge the following r
 
 test("Bollywood: clicks during a spectator deal cannot queue or charge the following hand", async () => {
   const f = fixture("src\\components\\bollywood-casino\\CasinoGame.tsx");
-  await f.advance(20500);
+  await f.advance(10500);
   const zone = f.nodes().find(node => node.props?.["aria-label"] === "Bet on andar");
   assert.ok(zone);
   await zone.props.onClick();

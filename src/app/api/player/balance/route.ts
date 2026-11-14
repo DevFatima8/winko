@@ -11,6 +11,7 @@ import { isRouletteGame, isWheelGame } from "@/lib/rouletteGameRules";
 import { isSlotGame } from "@/lib/slotGameRules";
 import { actBrowserCard } from "@/lib/browserCardActions";
 import { LOCAL_GAMES_CONNECTED, LOCAL_GAMES_UNAVAILABLE } from "@/lib/gameAvailability";
+import { isThirtyWinGame } from "@/lib/winOpportunityRules";
 
 export const dynamic = "force-dynamic";
 
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
       if (!isBrowserPoolGame(game) || !isDailyPoolGame(game)) {
         return NextResponse.json({ error: "Explicit pool lifecycle is unavailable for this game." }, { status: 409 });
       }
-      if (body.action === "card-action" && !isCardGame(game)) {
+      if (body.action === "card-action" && !isCardGame(game) && game !== "tower-betting") {
         return NextResponse.json({ error: "Card moves are unavailable for this game." }, { status: 409 });
       }
       try {
@@ -105,7 +106,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: error instanceof BrowserWagerError ? error.message : "Wager unavailable. Retry the same wager identity." }, { status: error instanceof BrowserWagerError ? 409 : 500 });
       }
     }
-    if (isCardGame(game) || isRouletteGame(game) || isWheelGame(game) || isSlotGame(game) || game === "thai-hi-lo") {
+    if (isThirtyWinGame(game) || isCardGame(game) || isRouletteGame(game) || isWheelGame(game) || isSlotGame(game) || game === "thai-hi-lo") {
       return NextResponse.json({
         error: "This game requires an explicit accepted-wager lifecycle; balance deltas cannot create stakes or winnings.",
       }, { status: 409 });

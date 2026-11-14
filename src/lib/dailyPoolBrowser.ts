@@ -43,7 +43,7 @@ export async function browserPoolLifecycle(tx: MultiplayerTransaction, userId: s
   const id = createHash("sha256").update(`browser-active:${userId}:${input.game}:${input.wagerId}`).digest("hex");
   let result = await tx.get<LifecycleResult>("gameresults", id);
   if (serverGame(input.game) && ["complete", "award"].includes(input.action) && !verified &&
-      !((input.game === "derby-race" || input.game === "thai-hi-lo" || isSlotGame(input.game) || isServerBrowserCardGame(input.game) || isBrowserRouletteGame(input.game)) && result && !result.browserServerRequired)) {
+      !((input.game === "dice" || input.game === "rock-paper-scissors" || input.game === "race-betting" || input.game === "tower-betting" || input.game === "derby-race" || input.game === "thai-hi-lo" || isSlotGame(input.game) || isServerBrowserCardGame(input.game) || isBrowserRouletteGame(input.game)) && result && !result.browserServerRequired)) {
     throw new BrowserWagerError("Server outcome verification is required.");
   }
   const user = await tx.get<UserDoc>("users", userId, true);
@@ -55,7 +55,7 @@ export async function browserPoolLifecycle(tx: MultiplayerTransaction, userId: s
       claim: result!.browserCompletedClaim ?? result!.poolClaim ?? 0, status: result!.browserStatus, replay: true,
       shotWin: result!.browserShotWin };
   }
-  if (!verified && result?.browserServerRequired && result.browserCardState && isInteractiveBrowserCardGame(input.game) &&
+  if (!verified && result?.browserServerRequired && result.browserCardState && (isInteractiveBrowserCardGame(input.game) || input.game === "tower-betting") &&
       ["increment", "refund", "reduce"].includes(input.action)) {
     throw new BrowserWagerError("Use a verified table action for this dealt card wager.");
   }
@@ -80,7 +80,7 @@ export async function browserPoolLifecycle(tx: MultiplayerTransaction, userId: s
       _id: id, gameId: game._id, userId, roundNo: null, betSlot: 0,
       betAmount: amount, winAmount: 0, outcome: "pending", resultData: enabled ? "Browser wager active | Daily pool" : "Browser wager active",
       browserGame: input.game, browserStatus: "active", browserOperations: {}, browserTotalStake: amount,
-      ...(input.game === "derby-race" || input.game === "thai-hi-lo" || isSlotGame(input.game) || isServerBrowserCardGame(input.game) || isBrowserRouletteGame(input.game) ? { browserServerRequired: true } : {}),
+      ...(input.game === "dice" || input.game === "rock-paper-scissors" || input.game === "race-betting" || input.game === "tower-betting" || input.game === "derby-race" || input.game === "thai-hi-lo" || isSlotGame(input.game) || isServerBrowserCardGame(input.game) || isBrowserRouletteGame(input.game) ? { browserServerRequired: true } : {}),
       createdAt: now, updatedAt: now,
     };
     if (input.game === "fishing-arcade") result.browserShotWin = await nextBetWin(tx, input.game, 30);
@@ -208,7 +208,7 @@ type BrowserResult = GameResultDoc & PoolFields & {
   browserServerInput?: string; browserOutcome?: unknown;
 };
 
-export const SERVER_BROWSER_POOL_GAMES = ["head-tail", "wheel-betting", "derby-race", "ludo", "birds-beasts", "treasure-bowl", "super-fruits", "sweet-bonanza", "fortune-ox", "fortune-gems", "fortune-toucan", "gates-of-olympus", "diao-chan", "hotline", "thai-hi-lo", ...SERVER_BROWSER_CARD_GAMES, ...BROWSER_ROULETTE_GAMES] as const;
+export const SERVER_BROWSER_POOL_GAMES = ["dice", "rock-paper-scissors", "race-betting", "tower-betting", "head-tail", "wheel-betting", "derby-race", "ludo", "birds-beasts", "treasure-bowl", "super-fruits", "sweet-bonanza", "fortune-ox", "fortune-gems", "fortune-toucan", "gates-of-olympus", "diao-chan", "hotline", "thai-hi-lo", ...SERVER_BROWSER_CARD_GAMES, ...BROWSER_ROULETTE_GAMES] as const;
 const serverGame = (game: string) => SERVER_BROWSER_POOL_GAMES.some(value => value === game) || isServerBrowserCardGame(game);
 
 function validateSlotClaim(game: string, stake: number, claim: number) {
@@ -222,7 +222,7 @@ export async function resolveServerBrowserWager(tx: MultiplayerTransaction, user
   game: string; wagerId: string; operationId: string; selection?: unknown;
 }, enabled: boolean) {
   if (!isDailyPoolGame(input.game) || !serverGame(input.game)) throw new BrowserWagerError("Unsupported server browser engine.");
-  if (isInteractiveBrowserCardGame(input.game)) throw new BrowserWagerError("Continue this wager using its card table actions.");
+  if (isInteractiveBrowserCardGame(input.game) || input.game === "tower-betting") throw new BrowserWagerError("Continue this wager using its table actions.");
   await settleDailyPools(tx, input.game);
   const id = createHash("sha256").update(`browser-active:${userId}:${input.game}:${input.wagerId}`).digest("hex");
   const result = await tx.get<LifecycleResult>("gameresults", id);
@@ -250,6 +250,34 @@ export async function resolveServerBrowserWager(tx: MultiplayerTransaction, user
 
 async function serverOutcome(tx: MultiplayerTransaction, userId: string, game: string, stake: number, selection: unknown) {
   const input = (selection && typeof selection === "object" ? selection : {}) as Record<string, unknown>;
+  if (game === "tower-betting") throw new BrowserWagerError("Tower requires an accepted wager and table actions.");
+  if (game === "dice") {
+    const rules = await import("@/components/dice/dice");
+    if (typeof input.target !== "number" || !Number.isFinite(input.target) || input.target < 1 || input.target > 99 ||
+        rules.round2(input.target) !== input.target || input.dir !== "over" && input.dir !== "under") {
+      throw new BrowserWagerError("Select a valid dice target and direction.");
+    }
+    const win = await nextPlayerWin(tx, game, userId);
+    const threshold = Math.round(input.target * 100);
+    const below = input.dir === "under" ? win : !win;
+    const value = (below ? randomInt(threshold) : randomInt(threshold + 1, 10001)) / 100;
+    const payout = win ? rules.round2(stake * rules.payoutFor(rules.winChanceFor(input.target, input.dir))) : 0;
+    return { claim: payout, outcome: { value, win, payout } };
+  }
+  if (game === "rock-paper-scissors") {
+    if (input.choice !== "rock" && input.choice !== "paper" && input.choice !== "scissors") {
+      throw new BrowserWagerError("Choose rock, paper or scissors.");
+    }
+    const win = await nextPlayerWin(tx, game, userId);
+    const beats = { rock: "scissors", paper: "rock", scissors: "paper" };
+    const loses = { rock: "paper", paper: "scissors", scissors: "rock" };
+    const payout = win ? cents(stake * 1.96) / 100 : 0;
+    return { claim: payout, outcome: { win, house: win ? beats[input.choice] : loses[input.choice], payout } };
+  }
+  if (game === "race-betting") {
+    const { serverRaceOutcome } = await import("./browserRaceOutcome");
+    return serverRaceOutcome(tx, userId, stake, selection);
+  }
   if (game === "derby-race") {
     const rules = await import("@/components/derby-race/lib/derby");
     if (typeof input.horseId !== "number" || !rules.HORSES.some(horse => horse.id === input.horseId) ||
@@ -362,7 +390,7 @@ async function serverOutcome(tx: MultiplayerTransaction, userId: string, game: s
   if (game === "ludo") {
     const engine = await import("./ludo");
     if (!engine.isValidBet(stake)) throw new BrowserWagerError("Invalid Ludo wager.");
-    const outcome = engine.createDeal(stake, Math.floor(Math.random() * 2147483646) + 1);
+    const outcome = engine.createDeal(stake, randomInt(1, 2147483647), await nextPlayerWin(tx, game, userId));
     return { claim: cents(engine.settlementFor(outcome, 0).total + stake) / 100, outcome };
   }
   if (game === "birds-beasts") {
@@ -406,7 +434,6 @@ export async function playBrowserWager(
 ) {
   enabled = enabled && !isCardGame(input.game) && !isRouletteGame(input.game) && !isWheelGame(input.game) && !isSlotGame(input.game) && input.game !== "thai-hi-lo";
   if (!isBrowserPoolGame(input.game)) throw new BrowserWagerError("Daily-pool betting is not supported for this browser game yet.");
-  if (serverGame(input.game) && !verified) throw new BrowserWagerError("This game's outcome must be generated by its server engine.");
   if (!/^[a-f0-9-]{36}$/i.test(input.wagerId)) throw new BrowserWagerError("A valid accepted-wager identity is required.");
   if (!Number.isFinite(input.stake) || input.stake <= 0 || input.stake > Number.MAX_SAFE_INTEGER / 100 ||
       !Number.isFinite(input.claim) || input.claim < 0 || input.claim > Number.MAX_SAFE_INTEGER / 100 ||
@@ -426,6 +453,7 @@ export async function playBrowserWager(
     return { ok: true, balance: user.balance, wagerId: input.wagerId, poolPending: existing.poolPending === true,
       poolVersion: existing.poolVersion, claim: existing.browserClaim, replay: true };
   }
+  if (serverGame(input.game) && !verified) throw new BrowserWagerError("This game's outcome must be generated by its server engine.");
   if (input.stake < 10) throw new BrowserWagerError("Minimum bet is Rs. 10.");
   if (enabled && input.poolVersion !== DAILY_POOL_VERSION) throw new BrowserWagerError("Accept the current daily-pool rules before placing a new bet.");
   if (!user.isActive || user.role !== "client" || user.blockedGames?.includes(input.game)) throw new BrowserWagerError("This account cannot bet on this game.");

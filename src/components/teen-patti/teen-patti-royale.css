@@ -17,6 +17,26 @@
 }
 
 /* ===== Playing cards ===== */
+.tpr-felt .tpr-table {
+  display: grid;
+  grid-template-rows: auto auto auto;
+  gap: 12px;
+  padding-block: 16px;
+  min-height: max-content;
+  overflow: visible;
+}
+
+.tpr-felt .tpr-chip {
+  flex-shrink: 0;
+  width: auto;
+}
+
+.tpr-felt .tpr-chip span {
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1;
+}
+
 .tpr-card {
   position: relative;
   flex: 0 0 auto;
@@ -126,6 +146,30 @@
   }
   .tpr-corner span + span {
     font-size: 0.85rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .tpr-felt {
+    container-type: size;
+  }
+
+  .tpr-felt .tpr-card {
+    --tpr-card-height: clamp(80px, 15cqh, 140px);
+    height: var(--tpr-card-height);
+    width: calc(var(--tpr-card-height) * 24 / 35);
+  }
+
+  .tpr-felt .tpr-corner {
+    font-size: clamp(10px, 1.8cqh, 16px);
+  }
+
+  .tpr-felt .tpr-corner span + span {
+    font-size: clamp(9px, 1.5cqh, 13.6px);
+  }
+
+  .tpr-felt .tpr-center-suit {
+    font-size: clamp(24px, 4.2cqh, 38.4px);
   }
 }
 

@@ -148,7 +148,6 @@ export default function EvoCasinoGame({ backHref = "/player" }: { backHref?: str
               >
                 ← Back
               </Link>
-              <div className="demo-badge">DEMO PLAY</div>
             </div>
             <div className="balance-display"><span>BALANCE</span><strong>{money(balance)}</strong></div>
           </div>
@@ -166,11 +165,11 @@ export default function EvoCasinoGame({ backHref = "/player" }: { backHref?: str
                 <div className="wheel-center-disc" />
               </div>
               <div className="wheel-pointer" />
-              <div className="brand-mark">
-                <div className="bolt">ϟ</div>
-                <div className="brand-first">LIGHTNING</div>
-                <div className="brand-second">STORM</div>
-              </div>
+            </div>
+            <div className="brand-mark">
+              <div className="bolt">ϟ</div>
+              <div className="brand-first">LIGHTNING</div>
+              <div className="brand-second">STORM</div>
             </div>
           </div>
 

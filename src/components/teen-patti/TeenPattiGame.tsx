@@ -286,6 +286,7 @@ export default function TeenPattiGame() {
   };
 
   const resolveRound = async (win: boolean, playChoice: "blind" | "seen") => {
+    pool.announce();
     const currentBet = betRef.current;
     if (win) {
       // Bets are paid 1:1 — stake comes back plus an equal amount from the dealer.
@@ -336,7 +337,7 @@ export default function TeenPattiGame() {
   const broke = balance < MIN_BET;
 
   return (
-    <main className="tpr-felt relative h-full w-full overflow-hidden text-slate-100 flex flex-col justify-between px-1 sm:px-2 md:px-3 py-1 select-none">
+    <main className="tpr-felt relative h-full min-h-0 w-full overflow-x-hidden overflow-y-auto text-slate-100 flex flex-col justify-between px-1 sm:px-2 md:px-3 py-1 select-none">
       {idleRound.countdown !== null && <p className="relative z-20 shrink-0 text-center text-xs text-amber-200" role="status">Next round in {idleRound.countdown}s</p>}
       {/* falling coins on win */}
       {coins.map((c) => (
@@ -354,7 +355,7 @@ export default function TeenPattiGame() {
       ))}
 
       {/* Header */}
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 px-2 py-1">
+      <header className="mx-auto flex flex-wrap w-full max-w-6xl shrink-0 items-center justify-between gap-2 px-2 py-1">
         <div className="flex items-center gap-2">
           <div className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-amber-300 to-amber-600 text-base font-black text-amber-950 shadow-md">
             ♠
@@ -393,8 +394,8 @@ export default function TeenPattiGame() {
       </header>
 
       {/* Table */}
-      <section className="mx-auto flex-1 min-h-0 w-full max-w-5xl flex flex-col justify-between my-0.5 sm:my-1 px-1 sm:px-3">
-        <div className="relative h-full flex flex-col justify-between overflow-hidden rounded-xl sm:rounded-2xl border border-amber-300/20 bg-emerald-950/40 shadow-[inset_0_0_60px_rgba(0,0,0,0.5),0_15px_30px_rgba(0,0,0,0.4)] py-1.5 sm:py-3">
+      <section className="mx-auto shrink-0 w-full max-w-5xl my-0.5 sm:my-1 px-1 sm:px-3">
+        <div className="tpr-table relative rounded-xl sm:rounded-2xl border border-amber-300/20 bg-emerald-950/40 shadow-[inset_0_0_60px_rgba(0,0,0,0.5),0_15px_30px_rgba(0,0,0,0.4)]">
           {/* watermark */}
           <div
             aria-hidden
@@ -404,7 +405,7 @@ export default function TeenPattiGame() {
           </div>
 
           {/* Dealer row */}
-          <div className="relative flex flex-col items-center gap-1 sm:gap-2 px-2">
+          <div className="relative flex shrink-0 flex-col items-center gap-1 sm:gap-2 px-2">
             <div className="flex items-center gap-2">
               <span className="rounded-full bg-red-600/90 px-3 py-0.5 text-[10px] font-bold tracking-widest uppercase shadow">
                 Dealer
@@ -428,7 +429,7 @@ export default function TeenPattiGame() {
           </div>
 
           {/* Center: pot + status */}
-          <div className="relative mx-auto flex max-w-xl flex-col items-center gap-1.5 px-2 py-0.5 text-center">
+          <div className="relative mx-auto flex max-w-xl shrink-0 flex-col items-center gap-1.5 px-2 py-0.5 text-center">
             <div className="rounded-full border border-amber-300/30 bg-emerald-900/70 px-4 py-1 shadow-inner">
               <span className="text-[9px] tracking-wider text-emerald-200/70 uppercase">
                 {phase === "betting" ? "Bet" : "Pot"}
@@ -465,7 +466,7 @@ export default function TeenPattiGame() {
           </div>
 
           {/* Player row */}
-          <div className="relative flex flex-col items-center gap-1 sm:gap-2 px-2">
+          <div className="relative flex shrink-0 flex-col items-center gap-1 sm:gap-2 px-2">
             <div className="flex -space-x-2.5 sm:-space-x-3 scale-90 sm:scale-100 origin-center">
               {playerCards.map((card, i) => (
                 <CardView
@@ -496,7 +497,7 @@ export default function TeenPattiGame() {
       </section>
 
       {/* Controls */}
-      <section className="mx-auto w-full max-w-5xl px-1 sm:px-3 pt-1 pb-1">
+      <section className="mx-auto w-full max-w-5xl shrink-0 px-1 sm:px-3 pt-1 pb-1">
         <div className="rounded-xl sm:rounded-2xl border border-amber-300/15 bg-slate-950/80 p-2 sm:p-3 shadow-xl backdrop-blur">
           {/* chips */}
           <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5">
@@ -508,13 +509,13 @@ export default function TeenPattiGame() {
                   key={value}
                   onClick={() => addChip(value)}
                   disabled={disabled}
-                  className={`h-9 w-9 sm:h-11 sm:w-11 rounded-full border-b-2 bg-gradient-to-br text-[11px] sm:text-xs font-black shadow-md transition ${
+                  className={`tpr-chip min-h-9 min-w-9 sm:min-h-11 sm:min-w-11 px-2 rounded-full border-b-2 bg-gradient-to-br text-[11px] sm:text-xs font-black shadow-md transition ${
                     disabled
                       ? "cursor-not-allowed opacity-35 grayscale"
                       : "hover:-translate-y-0.5 hover:shadow-[0_4px_12px_rgba(0,0,0,0.4)] active:translate-y-0"
                   } ${style}`}
                 >
-                  {value}
+                  <span>{value}</span>
                 </button>
               );
             })}

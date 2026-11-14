@@ -42,19 +42,19 @@ export default function Roadmap({ history }: { history: HistoryEntry[] }) {
   const bead = history.slice(-72);
 
   return (
-    <section className="gold-rim relative flex min-h-0 flex-col rounded-xl p-3">
+    <section className="baccarat-roadmap gold-rim relative flex min-w-0 shrink-0 flex-col rounded-xl p-3">
       <header className="mb-2 flex items-center justify-between gap-2">
         <h2 className="font-display text-[12px] font-bold uppercase tracking-[0.22em] text-[#e7c877]">Scoreboard</h2>
         <span className="font-num text-[10px] uppercase tracking-[0.14em] text-white/40">{history.length} hands</span>
       </header>
 
-      <nav className="mb-3 flex flex-wrap gap-1">
+      <nav aria-label="Scoreboard roads" className="mb-3 grid grid-cols-2 gap-1">
         {TABS.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={`font-num rounded-[4px] border px-2 py-[3px] text-[9.5px] uppercase tracking-[0.14em] transition ${
+            className={`baccarat-sidebar-button min-w-0 rounded-[4px] border px-2 py-[3px] uppercase transition ${
               tab === t.id
                 ? "border-[rgba(231,200,119,.7)] bg-[rgba(231,200,119,.14)] text-[#ffe9a8]"
                 : "border-white/10 text-white/45 hover:border-white/25 hover:text-white/75"
@@ -65,11 +65,11 @@ export default function Roadmap({ history }: { history: HistoryEntry[] }) {
         ))}
       </nav>
 
-      <div className="thin-scroll relative min-h-[168px] overflow-auto rounded-md bg-[rgba(0,0,0,.34)] p-2 ring-1 ring-white/5">
+      <div className="baccarat-road-chart thin-scroll relative h-[208px] shrink-0 overflow-auto rounded-md bg-[rgba(0,0,0,.34)] p-2 ring-1 ring-white/5">
         {tab === "bead" && (
           <div className="flex gap-[3px]">
             {Array.from({ length: Math.ceil(bead.length / 6) || 1 }, (_, col) => (
-              <div key={col} className="flex flex-col gap-[3px]">
+              <div key={col} className="flex shrink-0 flex-col gap-[3px]">
                 {Array.from({ length: 6 }, (_, row) => {
                   const entry = bead[col * 6 + row];
                   if (!entry)
@@ -100,7 +100,7 @@ export default function Roadmap({ history }: { history: HistoryEntry[] }) {
             {Array.from({ length: visibleCols }, (_, c) => {
               const col = columns[c];
               return (
-                <div key={c} className="relative flex h-[156px] w-[26px] flex-col border-l border-white/[.06]">
+                <div key={c} className="relative flex h-[156px] w-[26px] shrink-0 flex-col border-l border-white/[.06]">
                   {Array.from({ length: 6 }, (_, r) => (
                     <div key={r} className="h-[26px] w-full border-b border-white/[.05]" />
                   ))}
@@ -131,7 +131,7 @@ export default function Roadmap({ history }: { history: HistoryEntry[] }) {
               );
             })}
             {orphanTies > 0 && (
-              <div className="ml-1 flex h-[156px] w-[34px] flex-col items-center justify-start pt-1">
+              <div className="ml-1 flex h-[156px] w-[34px] shrink-0 flex-col items-center justify-start pt-1">
                 <span className="font-num text-[9px] text-[#19d17e]">T×{orphanTies}</span>
               </div>
             )}
@@ -141,7 +141,7 @@ export default function Roadmap({ history }: { history: HistoryEntry[] }) {
         {(tab === "eye" || tab === "small") && (
           <div className="relative flex h-[156px] gap-[2px]">
             {Array.from({ length: visibleCols }, (_, c) => (
-              <div key={c} className="relative h-[156px] w-[22px] border-l border-white/[.06]">
+              <div key={c} className="relative h-[156px] w-[22px] shrink-0 border-l border-white/[.06]">
                 {Array.from({ length: 6 }, (_, r) => (
                   <div key={r} className="h-[26px] w-full border-b border-white/[.05]" />
                 ))}
@@ -172,9 +172,9 @@ export default function Roadmap({ history }: { history: HistoryEntry[] }) {
           const n = history.filter((h) => h.winner === side).length;
           const pct = history.length ? Math.round((n / history.length) * 100) : 0;
           return (
-            <div key={side} className="flex flex-1 items-center gap-1.5">
+            <div key={side} className="flex min-w-0 flex-1 items-center gap-1.5">
               <span
-                className="h-2.5 w-2.5 rounded-full"
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
                 style={{ background: side === "player" ? "#3d8bff" : side === "banker" ? "#ff4d54" : "#19d17e" }}
               />
               <span className="font-num text-[10px] uppercase tracking-[0.1em] text-white/55">

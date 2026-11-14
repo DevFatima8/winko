@@ -235,7 +235,7 @@ export default function GameStudio({ backHref = "/player" }: { backHref?: string
         : "NEXT ROUND BETTING OPEN";
 
   return (
-    <div className="studio-stage relative flex h-full w-full flex-col justify-between overflow-y-auto overflow-x-hidden sm:overflow-hidden px-2 sm:px-4 py-1.5 select-none text-white">
+    <div className="studio-stage relative flex h-full min-h-0 w-full flex-col justify-between overflow-y-auto overflow-x-hidden px-2 sm:px-4 py-1.5 select-none text-white">
       {/* light beams */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-32 left-[8%] h-[520px] w-40 rotate-[18deg] bg-gradient-to-b from-fuchsia-400/20 to-transparent blur-2xl" />
@@ -245,8 +245,8 @@ export default function GameStudio({ backHref = "/player" }: { backHref?: string
       {confetti ? <Confetti /> : null}
 
       {/* ------------------------------ top bar ------------------------------ */}
-      <header className="panel flex shrink-0 items-center justify-between gap-2 rounded-xl px-3 py-1.5 z-10">
-        <div className="flex items-center gap-2">
+      <header className="dw-panel flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-1.5 z-10">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           <Link
             href={backHref}
             className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-bold text-slate-300 hover:bg-white/15 hover:text-white transition-colors"
@@ -268,12 +268,12 @@ export default function GameStudio({ backHref = "/player" }: { backHref?: string
           <StatusPill text={statusText} active={locked} />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           <details className="relative">
             <summary className={`cursor-pointer rounded-lg border border-white/20 bg-black/40 px-2 py-1 text-[10px] ${live.error ? "text-amber-300" : ""}`}>
               Players · {live.state?.bets.filter((bet) => bet.status !== "cancelled").length ?? 0}
             </summary>
-            <div className="absolute right-0 top-full z-50 mt-1 w-72 max-w-[85vw] bg-black/95">
+            <div className="absolute left-0 top-full z-50 mt-1 w-72 max-w-[85vw] bg-black/95 sm:left-auto sm:right-0">
               <LiveMultiplayerBets state={live.state} error={live.error} />
             </div>
           </details>
@@ -299,42 +299,43 @@ export default function GameStudio({ backHref = "/player" }: { backHref?: string
       </header>
 
       {/* ------------------------------ stage center ------------------------------ */}
-      <main className="flex-1 sm:min-h-0 flex flex-col justify-between sm:overflow-hidden gap-1.5 py-1 z-10">
-        <section className="studio-floor relative flex shrink-0 sm:shrink sm:flex-1 sm:min-h-0 flex-col items-center justify-center sm:overflow-hidden rounded-2xl border border-violet-300/15 p-1.5">
+      <main className="dw-layout flex-1 sm:min-h-0 flex flex-col justify-between gap-1.5 py-1 z-10">
+        <section className="dw-wheel-panel studio-floor relative flex shrink-0 sm:shrink sm:flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl border border-violet-300/15 p-1.5">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px gold-rule" />
 
-          <div className="relative flex w-[min(100%,92vw)] max-w-[440px] sm:w-auto sm:max-w-none sm:h-full sm:max-h-[220px] md:max-h-[260px] lg:max-h-[280px] aspect-square items-center justify-center">
-            <MoneyWheel
-              ref={wheelRef}
-              highlightIndex={highlightIndex}
-              dimmed={banner?.kind === "loss"}
-              sharedSpin={step && serverRound ? {
-                key: `${serverRound.roundNo}-${stepIndex}`, index: step.index,
-                fromIndex: stepIndex > 0 ? outcome!.steps[stepIndex - 1].index : 0,
-                startedAt: serverRound.bettingEndsAt + stepIndex * stepDuration,
-                endsAt: serverRound.bettingEndsAt + (stepIndex + 1) * stepDuration, now: live.now,
-              } : null}
-            />
+          <div className="dw-wheel-space">
+            <div className="dw-wheel relative flex w-[min(100%,92vw)] max-w-[440px] aspect-square items-center justify-center">
+              <MoneyWheel
+                ref={wheelRef}
+                highlightIndex={highlightIndex}
+                dimmed={banner?.kind === "loss"}
+                sharedSpin={step && serverRound ? {
+                  key: `${serverRound.roundNo}-${stepIndex}`, index: step.index,
+                  fromIndex: stepIndex > 0 ? outcome!.steps[stepIndex - 1].index : 0,
+                  startedAt: serverRound.bettingEndsAt + stepIndex * stepDuration,
+                  endsAt: serverRound.bettingEndsAt + (stepIndex + 1) * stepDuration, now: live.now,
+                } : null}
+              />
 
-            {/* floating numbers */}
-            <div className="pointer-events-none absolute inset-x-0 top-[38%] flex flex-col items-center gap-1">
-              {floaters.map((f) => (
-                <span
-                  key={f.id}
-                  className={`float-up text-2xl sm:text-3xl font-black drop-shadow-[0_3px_10px_rgba(0,0,0,0.8)] ${
-                    f.tone === "win" ? "text-emerald-300" : "text-rose-300"
-                  }`}
-                >
-                  {f.text}
-                </span>
-              ))}
+              {/* floating numbers */}
+              <div className="pointer-events-none absolute inset-x-0 top-[38%] flex flex-col items-center gap-1">
+                {floaters.map((f) => (
+                  <span
+                    key={f.id}
+                    className={`float-up text-2xl sm:text-3xl font-black drop-shadow-[0_3px_10px_rgba(0,0,0,0.8)] ${
+                      f.tone === "win" ? "text-emerald-300" : "text-rose-300"
+                    }`}
+                  >
+                    {f.text}
+                  </span>
+                ))}
+              </div>
+
             </div>
-
-            <BannerOverlay banner={banner} />
           </div>
 
           {/* Compact recent history row */}
-          <div className="flex items-center gap-1 overflow-x-auto py-0.5 max-w-full">
+          <div className="dw-history flex shrink-0 items-center gap-1 overflow-x-auto py-0.5 max-w-full">
             <span className="text-[9px] font-bold uppercase tracking-wider text-violet-200/50 shrink-0">History:</span>
             {history.length === 0 ? (
               <span className="text-[10px] text-violet-200/40">No spins yet</span>
@@ -356,95 +357,99 @@ export default function GameStudio({ backHref = "/player" }: { backHref?: string
           </div>
         </section>
 
-        {/* --------------------------- betting table --------------------------- */}
-        <BettingBoard
-          bets={bets}
-          locked={locked}
-          winningSpot={phase === "spinning" ? null : winningSpot}
-          tableMultiplier={tableMultiplier}
-          balance={available}
-          onPlace={placeChip}
-          onRemove={removeChip}
-        />
+        <div className="dw-betting-column thin-scroll flex shrink-0 flex-col gap-1.5">
+          <RoundBanner banner={banner} />
 
-        {/* --------------------------- bottom controls --------------------------- */}
-        <section className="panel flex shrink-0 flex-col gap-2 rounded-2xl p-2 sm:p-2.5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-[9px] font-black tracking-[0.2em] text-violet-200/55 uppercase">Chip</span>
-              <div className="flex items-end gap-1">
-                {CHIP_DENOMS.map((denom) => (
-                  <button
-                    key={denom}
-                    type="button"
+          {/* --------------------------- betting table --------------------------- */}
+          <BettingBoard
+            bets={bets}
+            locked={locked}
+            winningSpot={phase === "spinning" ? null : winningSpot}
+            tableMultiplier={tableMultiplier}
+            balance={available}
+            onPlace={placeChip}
+            onRemove={removeChip}
+          />
+
+          {/* --------------------------- bottom controls --------------------------- */}
+          <section className="dw-controls dw-panel flex shrink-0 flex-col gap-2 rounded-2xl p-2 sm:p-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="shrink-0 text-[9px] font-black tracking-[0.2em] text-violet-200/55 uppercase">Chip</span>
+                <div className="flex min-w-0 flex-wrap items-end gap-1">
+                  {CHIP_DENOMS.map((denom) => (
+                    <button
+                      key={denom}
+                      type="button"
+                      disabled={locked}
+                      onClick={() => {
+                        setChip(denom);
+                        tableAudio.unlock();
+                        tableAudio.chipDrop();
+                      }}
+                      className={`transition-all duration-150 ${locked ? "opacity-50" : "hover:-translate-y-1 hover:brightness-110 active:scale-95"}`}
+                      title={`${denom} credit chip`}
+                    >
+                      <Chip value={denom} size={chip === denom ? 38 : 32} selected={chip === denom} />
+                    </button>
+                  ))}
+                  <input
+                    type="number"
+                    min={10}
+                    inputMode="numeric"
+                    aria-label="Custom bet amount"
+                    placeholder="Custom"
                     disabled={locked}
-                    onClick={() => {
-                      setChip(denom);
-                      tableAudio.unlock();
-                      tableAudio.chipDrop();
-                    }}
-                    className={`transition-all duration-150 ${locked ? "opacity-50" : "hover:-translate-y-1 hover:brightness-110 active:scale-95"}`}
-                    title={`${denom} credit chip`}
-                  >
-                    <Chip value={denom} size={chip === denom ? 38 : 32} selected={chip === denom} />
-                  </button>
-                ))}
-                <input
-                  type="number"
-                  min={10}
-                  inputMode="numeric"
-                  aria-label="Custom bet amount"
-                  placeholder="Custom"
-                  disabled={locked}
-                  value={chip || ""}
-                  onChange={(e) => setChip(Math.max(0, Math.floor(Number(e.target.value)) || 0))}
-                  className="ml-1 h-8 w-16 rounded-md border border-white/20 bg-black/40 text-center text-xs font-bold text-white outline-none"
-                />
+                    value={chip || ""}
+                    onChange={(e) => setChip(Math.max(0, Math.floor(Number(e.target.value)) || 0))}
+                    className="ml-1 h-8 w-16 shrink-0 rounded-md border border-white/20 bg-black/40 text-center text-xs font-bold text-white outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <ActionButton variant="amber" onClick={undo} disabled={locked || placements.length === 0}>
+                  Undo
+                </ActionButton>
+                <ActionButton variant="red" onClick={clearBets} disabled={locked || totalBet === 0}>
+                  Clear
+                </ActionButton>
+                <ActionButton variant="blue" onClick={repeatBets} disabled={locked}>
+                  Repeat
+                </ActionButton>
+                <ActionButton
+                  variant={autoSpin ? "red" : "cyan"}
+                  onClick={() => setAutoSpin((v) => !v)}
+                  active={autoSpin}
+                  disabled={false}
+                >
+                  Auto {autoSpin ? "On" : "Off"}
+                </ActionButton>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-              <ActionButton variant="amber" onClick={undo} disabled={locked || placements.length === 0}>
-                Undo
-              </ActionButton>
-              <ActionButton variant="red" onClick={clearBets} disabled={locked || totalBet === 0}>
-                Clear
-              </ActionButton>
-              <ActionButton variant="blue" onClick={repeatBets} disabled={locked}>
-                Repeat
-              </ActionButton>
-              <ActionButton
-                variant={autoSpin ? "red" : "cyan"}
-                onClick={() => setAutoSpin((v) => !v)}
-                active={autoSpin}
-                disabled={false}
+            <div className="flex flex-col flex-wrap sm:flex-row items-center justify-between gap-2 rounded-xl bg-black/40 px-3 py-1.5 ring-1 ring-white/5">
+              <div className="flex items-center justify-around sm:justify-start gap-4 sm:gap-6 text-center sm:text-left w-full sm:w-auto">
+                <Metric label="Total bet" value={formatMoney(totalBet)} tone="gold" />
+                <Metric label="Max win" value={formatMoney(maxPotential)} tone="cyan" />
+                <Metric label="Rounds" value={`${stats.rounds}`} tone="violet" />
+              </div>
+              <button
+                type="button"
+                disabled={!serverRound}
+                onClick={() => flash("The shared wheel spins automatically when betting closes.")}
+                className={`shimmer relative w-full sm:w-auto min-w-[150px] overflow-hidden rounded-xl px-7 py-2 text-base font-black tracking-[0.16em] uppercase transition-all
+                  ${
+                    locked || totalBet === 0
+                      ? "cursor-not-allowed bg-white/10 text-white/35 shadow-none"
+                      : "bg-gradient-to-b from-emerald-400 via-emerald-500 to-green-700 text-white shadow-lg shadow-emerald-950/50 hover:from-emerald-300 hover:to-green-600 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                  }`}
               >
-                Auto {autoSpin ? "On" : "Off"}
-              </ActionButton>
+                {phase === "betting" ? `Bets close ${countdown}s` : phase === "spinning" ? "Spinning…" : "Next round bets"}
+              </button>
             </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 rounded-xl bg-black/40 px-3 py-1.5 ring-1 ring-white/5">
-            <div className="flex items-center justify-around sm:justify-start gap-4 sm:gap-6 text-center sm:text-left w-full sm:w-auto">
-              <Metric label="Total bet" value={formatMoney(totalBet)} tone="gold" />
-              <Metric label="Max win" value={formatMoney(maxPotential)} tone="cyan" />
-              <Metric label="Rounds" value={`${stats.rounds}`} tone="violet" />
-            </div>
-            <button
-              type="button"
-              disabled={!serverRound}
-              onClick={() => flash("The shared wheel spins automatically when betting closes.")}
-              className={`shimmer relative w-full sm:w-auto min-w-[150px] overflow-hidden rounded-xl px-7 py-2 text-base font-black tracking-[0.16em] uppercase transition-all
-                ${
-                  locked || totalBet === 0
-                    ? "cursor-not-allowed bg-white/10 text-white/35 shadow-none"
-                    : "bg-gradient-to-b from-emerald-400 via-emerald-500 to-green-700 text-white shadow-lg shadow-emerald-950/50 hover:from-emerald-300 hover:to-green-600 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
-                }`}
-            >
-              {phase === "betting" ? `Bets close ${countdown}s` : phase === "spinning" ? "Spinning…" : "Next round bets"}
-            </button>
-          </div>
-        </section>
+          </section>
+        </div>
       </main>
 
       {toast ? (
@@ -579,7 +584,7 @@ function IconButton({
 function StatusPill({ text, active }: { text: string; active: boolean }) {
   return (
     <div
-      className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-black tracking-[0.2em] uppercase ring-1 transition-colors ${
+      className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[9px] font-black tracking-[0.2em] uppercase ring-1 transition-colors ${
         active
           ? "bg-rose-500/15 text-rose-200 ring-rose-300/40"
           : "bg-emerald-400/15 text-emerald-200 ring-emerald-300/40"
@@ -641,14 +646,14 @@ function Metric({ label, value, tone }: { label: string; value: string; tone: "g
   );
 }
 
-function BannerOverlay({ banner }: { banner: Banner }) {
+function RoundBanner({ banner }: { banner: Banner }) {
   if (!banner) return null;
   const isWin = banner.kind === "win";
   const isMulti = banner.kind === "multiplier";
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-[6%] flex justify-center px-4">
+    <div className="dw-banner pointer-events-none flex w-full shrink-0 justify-center">
       <div
-        className={`banner-in max-w-full rounded-2xl px-6 py-3 text-center ring-1 backdrop-blur-sm ${
+        className={`dw-banner-card max-w-full rounded-2xl text-center ring-1 backdrop-blur-sm ${
           isWin
             ? "bg-gradient-to-b from-amber-300/95 to-amber-600/90 ring-amber-100/70 text-[#2a1c00]"
             : isMulti
@@ -659,7 +664,7 @@ function BannerOverlay({ banner }: { banner: Banner }) {
         }`}
       >
         <div
-          className={`text-xl font-black tracking-[0.16em] uppercase sm:text-2xl ${isWin ? "" : isMulti ? "" : ""}`}
+          className="dw-banner-title font-black uppercase"
         >
           {banner.title}
         </div>

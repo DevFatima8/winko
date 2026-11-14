@@ -1,0 +1,131 @@
+.race20-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.race20-recent,
+.race20-studio,
+.race20-tabs,
+.race20-markets { flex-shrink: 0; min-width: 0; }
+.race20-controls { flex-shrink: 0; }
+.race20-root [hidden] { display: none; }
+
+@media (min-width: 1024px) {
+  .race20-main {
+    display: grid;
+    grid-template-areas: "recent recent" "studio markets";
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    align-items: start;
+    overflow: hidden;
+  }
+  .race20-recent { grid-area: recent; }
+  .race20-studio { grid-area: studio; max-height: 100%; overflow-y: auto; }
+  .race20-markets { grid-area: markets; height: 100%; min-height: 0; overflow-y: auto; }
+  .race20-bets > div:first-child > div:first-child,
+  .race20-bets .font-mono { flex-wrap: wrap; gap: 6px; }
+}
+
+@media (max-width: 1023px) {
+  .race20-main { gap: 8px; padding: 6px 0; }
+  .race20-recent { display: none; }
+  .race20-root > header { position: static; padding: 4px; }
+  .race20-header-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 8px;
+  }
+  .race20-brand h1 { font-size: 18px; line-height: 24px; }
+  .race20-brand > div > div:first-child,
+  .race20-brand .tracking-widest { display: none; }
+  .race20-header-actions { gap: 4px; }
+  .race20-header-actions button { min-width: 36px; min-height: 36px; justify-content: center; padding: 6px; }
+  .race20-header-actions button span { display: none; }
+  .race20-wallet { grid-column: 1 / -1; grid-row: 2; gap: 6px; }
+  .race20-wallet > div { flex: 1; padding: 5px 8px; }
+  .race20-wallet .w-6 { display: none; }
+  .race20-wallet > div > div:last-child { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }
+  .race20-wallet .text-\[9px\] { font-size: 11px; }
+  .race20-wallet .text-xs { font-size: 14px; line-height: 20px; }
+
+  .race20-track { padding: 6px; border-radius: 12px; }
+  .race20-table-heading { display: none; }
+  .race20-status { margin: 0 0 6px; }
+  .race20-status > div { padding: 6px; min-height: 36px; }
+  .race20-status .text-sm,
+  .race20-status .text-base,
+  .race20-status .text-lg { font-size: 13px; line-height: 18px; }
+  .race20-status .text-xs { font-size: 12px; }
+  .race20-status > div > div { padding-left: 0; padding-right: 0; gap: 4px; }
+  .race20-status .text-xs.text-amber-200 { display: none; }
+  .race20-status > .flex { flex-wrap: wrap; gap: 4px; }
+  .race20-lanes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 0; }
+  .race20-lanes > div { margin: 0; padding: 5px; }
+  .race20-lane { flex-direction: column; align-items: stretch; gap: 4px; }
+  .race20-suit > div:last-child { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 2px; }
+  .race20-suit .text-sm { font-size: 12px; letter-spacing: 0; }
+  .race20-suit .text-lg { font-size: 18px; line-height: 20px; }
+  .race20-suit .text-\[11px\] { font-size: 12px; white-space: nowrap; }
+  .race20-suit .text-\[11px\] > span:first-child { display: none; }
+  .race20-card-slots { gap: 3px; padding: 0; }
+  .race20-card-slots > div { flex: 1; min-width: 0; }
+  .race20-card-slots > div > div:first-child { width: 100%; height: 38px; padding: 2px; }
+  .race20-card-slots > div:last-child > div:last-child:not(:first-child) { display: none; }
+  .race20-card-slots .text-3xl { font-size: 20px; opacity: 0.3; }
+  .race20-card-slots .text-xs { font-size: 12px; }
+  .race20-card-slots .text-\[10px\] { font-size: 12px; }
+  .race20-card-slots .text-\[9px\] { display: none; }
+  .race20-card-slots .rotate-180 { display: none; }
+  .race20-track details summary { min-height: 28px; padding: 5px 0; font-size: 12px; }
+
+  .race20-tabs { gap: 6px; padding: 0; }
+  .race20-tabs button { flex: 1; min-height: 40px; font-size: 14px; }
+  .race20-board > div:first-child { gap: 4px; margin-bottom: 6px; }
+  .race20-board > div:first-child button { min-height: 44px; padding: 6px 2px; font-size: 14px; }
+  .race20-winner > div:first-child,
+  .race20-winner > div:nth-child(2) { display: none; }
+  .race20-winner > div:last-child { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 6px; }
+  .race20-winner > div:last-child > div { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 4px; gap: 6px 2px; border: 0; border-radius: 8px; background: #1e293b; }
+  .race20-winner .col-span-6 { grid-column: 1 / -1; gap: 6px; flex-wrap: wrap; }
+  .race20-winner .col-span-3 { grid-column: span 1; padding: 0 2px; }
+  .race20-winner .text-xl { font-size: 18px; padding: 0 5px; }
+  .race20-winner .text-sm { font-size: 14px; }
+  .race20-winner .col-span-6 > div { min-width: 0; }
+  .race20-winner .col-span-6 .text-\[11px\] { flex-wrap: wrap; }
+  .race20-winner button { min-height: 46px; padding: 5px 2px; }
+  .race20-winner button .text-sm { font-size: 16px; }
+  .race20-winner button .text-\[10px\] { font-size: 11px; line-height: 14px; }
+  .race20-color .p-3,
+  .race20-fancy > div { padding: 8px; }
+  .race20-color button,
+  .race20-fancy button { min-height: 48px; }
+  .race20-color .text-xs,
+  .race20-fancy .text-xs { font-size: 13px; line-height: 18px; }
+  .race20-color .text-\[10px\],
+  .race20-fancy .text-\[9px\],
+  .race20-fancy .text-\[10px\],
+  .race20-fancy .text-\[11px\] { font-size: 12px; }
+  .race20-fancy button { flex-wrap: wrap; gap: 4px; padding: 8px; }
+  .race20-bets button { min-width: 44px; min-height: 44px; }
+  .race20-bets .text-\[10px\],
+  .race20-bets .text-\[11px\] { font-size: 12px; }
+
+  .race20-controls > div { padding: 6px; border-radius: 10px 10px 0 0; }
+  .race20-controls > div > div { gap: 6px; }
+  .race20-chip-options { display: grid; grid-template-columns: repeat(5, minmax(44px, 1fr)) minmax(56px, 1.4fr); gap: 4px; padding: 0; }
+  .race20-chip-options > span { display: none; }
+  .race20-controls button.rounded-full { width: 100%; height: 44px; font-size: 12px; }
+  .race20-controls button.rounded-full > div { width: 32px; height: 32px; }
+  .race20-controls button.rounded-full.ring-4 { --tw-ring-offset-width: 0; --tw-ring-shadow: 0 0 0 2px #fbbf24; transform: none; }
+  .race20-controls input { height: 44px; width: 100%; min-width: 0; font-size: 16px; }
+  .race20-quick-actions { gap: 6px; }
+  .race20-quick-actions > div:first-child { flex: 1; gap: 4px; }
+  .race20-quick-actions button { flex: 1; min-height: 40px; justify-content: center; gap: 3px; padding: 4px; font-size: 12px; }
+  .race20-quick-actions button span { display: inline; }
+  .race20-quick-actions .font-mono { gap: 4px; padding: 4px 6px; }
+  .race20-quick-actions .text-\[10px\] { font-size: 11px; }
+  .race20-quick-actions .text-sm { font-size: 14px; }
+}

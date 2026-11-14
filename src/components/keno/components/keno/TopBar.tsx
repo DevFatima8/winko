@@ -1,7 +1,5 @@
 "use client";
 
-import { cn } from "@/lib/cn";
-
 type Props = {
   balance: number;
   muted: boolean;
@@ -25,21 +23,6 @@ export default function TopBar({ balance, muted, onToggleMute, onWallet }: Props
           <span className="hidden rounded-full bg-[#1a2c38] px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-[#b1c2cf] md:block">
             Originals
           </span>
-          <nav className="ml-2 hidden items-center gap-1 lg:flex">
-            {["Casino", "Sports", "Promotions"].map((item, i) => (
-              <span
-                key={item}
-                className={cn(
-                  "cursor-pointer rounded-md px-3 py-1.5 text-sm font-semibold transition-colors",
-                  i === 0
-                    ? "bg-[#1a2c38] text-white"
-                    : "text-[#b1c2cf] hover:bg-[#1a2c38] hover:text-white",
-                )}
-              >
-                {item}
-              </span>
-            ))}
-          </nav>
         </div>
 
         <div className="flex items-center gap-2">

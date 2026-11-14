@@ -393,7 +393,7 @@ export default function KenoGame() {
   const broke = balance < 0.01 && !busy && !autoRunning;
 
   return (
-    <div className="h-full w-full flex flex-col justify-between overflow-hidden bg-[#1a2c38] px-1 sm:px-2.5 py-1 select-none">
+    <div className="keno-root h-full w-full flex flex-col justify-between overflow-hidden bg-[#1a2c38] px-1 sm:px-2.5 py-1 select-none">
       <TopBar
         balance={balance}
         muted={muted}
@@ -409,7 +409,7 @@ export default function KenoGame() {
       <main className="mx-auto w-full max-w-[1180px] flex-1 min-h-0 flex flex-col overflow-hidden px-1 sm:px-2 pt-1">
         <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden rounded-lg bg-[#0f212e] shadow-[0_18px_50px_rgba(0,0,0,0.45)] flex flex-col">
           <div className="flex flex-col lg:flex-row shrink-0 lg:shrink lg:flex-1 lg:min-h-0">
-            <div className="border-b border-[#2f4553] lg:border-b-0 lg:border-r shrink-0">
+            <div className="border-b border-[#2f4553] lg:border-b-0 lg:border-r shrink-0 lg:overflow-y-auto">
               <BetPanel
                 mode={mode}
                 onModeChange={setMode}
@@ -440,65 +440,67 @@ export default function KenoGame() {
               />
             </div>
 
-            <div className="relative flex flex-1 flex-col items-center justify-between gap-2 bg-[#1a2c38] p-2 sm:p-4 lg:min-h-0 lg:overflow-hidden">
-              <div className="flex h-8 w-full max-w-[560px] items-center justify-between gap-2 shrink-0">
-                {busy && drawn.length > 0 ? (
-                  <div className="flex items-center gap-2 rounded-md bg-[#0f212e] px-2.5 py-1 text-xs font-bold text-[#b1c2cf]">
-                    <span className="h-2 w-2 animate-pulse rounded-full bg-[#00e701]" />
-                    Drawing {revealIndex}/{drawn.length}
-                  </div>
-                ) : null}
-                {!busy && result ? (
-                  <div
-                    className={cn(
-                      "keno-chip-in flex items-center gap-2 rounded-md px-2.5 py-1 text-xs font-bold",
-                      result.win
-                        ? "bg-[#00e701]/15 text-[#00e701]"
-                        : "bg-[#ed3333]/10 text-[#ff6b6b]",
-                    )}
-                  >
-                    <span>
-                      {result.hits}/{picks} hits
+            <div className="keno-board-panel relative min-w-0 flex-1 bg-[#1a2c38] p-2 sm:p-4 lg:min-h-0 lg:overflow-y-auto">
+              <div className="keno-board-info flex w-full max-w-[560px] shrink-0 flex-col gap-2">
+                <div className="keno-board-status flex min-h-8 w-full flex-wrap items-center justify-between gap-2">
+                  {busy && drawn.length > 0 ? (
+                    <div className="flex items-center gap-2 rounded-md bg-[#0f212e] px-2.5 py-1 text-xs font-bold text-[#b1c2cf]">
+                      <span className="h-2 w-2 animate-pulse rounded-full bg-[#00e701]" />
+                      Drawing {revealIndex}/{drawn.length}
+                    </div>
+                  ) : null}
+                  {!busy && result ? (
+                    <div
+                      className={cn(
+                        "keno-chip-in flex items-center gap-2 rounded-md px-2.5 py-1 text-xs font-bold",
+                        result.win
+                          ? "bg-[#00e701]/15 text-[#00e701]"
+                          : "bg-[#ed3333]/10 text-[#ff6b6b]",
+                      )}
+                    >
+                      <span>
+                        {result.hits}/{picks} hits
+                      </span>
+                      <span className="opacity-60">•</span>
+                      <span>{formatMultiplier(result.multiplier)}</span>
+                      <span className="opacity-60">•</span>
+                      <span>
+                        {result.profit >= 0 ? `+Rs. ${formatMoney(result.profit)}` : ""}
+                      </span>
+                    </div>
+                  ) : !busy ? (
+                    <span className="text-xs font-semibold text-[#6f8f9f]">
+                      Pick 1-{MAX_PICKS} tiles, then hit Bet
                     </span>
-                    <span className="opacity-60">•</span>
-                    <span>{formatMultiplier(result.multiplier)}</span>
-                    <span className="opacity-60">•</span>
-                    <span>
-                      {result.profit >= 0 ? `+Rs. ${formatMoney(result.profit)}` : ""}
-                    </span>
-                  </div>
-                ) : !busy ? (
-                  <span className="text-xs font-semibold text-[#6f8f9f]">
-                    Pick 1-{MAX_PICKS} tiles, then hit Bet
+                  ) : null}
+                  <span className="shrink-0 rounded bg-[#0f212e] px-2 py-0.5 text-[11px] font-bold text-[#b1c2cf]">
+                    {picks}/{MAX_PICKS} picked
                   </span>
+                </div>
+
+                {drawn.length > 0 ? (
+                  <div className="flex w-full shrink-0 flex-wrap items-center justify-center gap-1">
+                    {drawn.slice(0, revealIndex).map((n, i) => {
+                      const hit = selected.includes(n);
+                      return (
+                        <span
+                          key={`${n}-${i}`}
+                          className={cn(
+                            "keno-ball-in flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-black tabular-nums sm:h-7 sm:w-7 sm:text-xs",
+                            hit
+                              ? "bg-[#ffcd3c] text-[#05212d] ring-2 ring-white"
+                              : "bg-[#b1c2cf] text-[#0f212e]",
+                          )}
+                        >
+                          {n}
+                        </span>
+                      );
+                    })}
+                  </div>
                 ) : null}
-                <span className="shrink-0 rounded bg-[#0f212e] px-2 py-0.5 text-[11px] font-bold text-[#b1c2cf]">
-                  {picks}/{MAX_PICKS} picked
-                </span>
               </div>
 
-              {drawn.length > 0 ? (
-                <div className="flex w-full max-w-[560px] shrink-0 flex-wrap items-center justify-center gap-1">
-                  {drawn.slice(0, revealIndex).map((n, i) => {
-                    const hit = selected.includes(n);
-                    return (
-                      <span
-                        key={`${n}-${i}`}
-                        className={cn(
-                          "keno-ball-in flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-black tabular-nums sm:h-7 sm:w-7 sm:text-xs",
-                          hit
-                            ? "bg-[#ffcd3c] text-[#05212d] ring-2 ring-white"
-                            : "bg-[#b1c2cf] text-[#0f212e]",
-                        )}
-                      >
-                        {n}
-                      </span>
-                    );
-                  })}
-                </div>
-              ) : null}
-
-              <div className="w-full flex-1 lg:min-h-0 flex items-center justify-center">
+              <div className="keno-board-viewport flex w-full items-center justify-center">
                 <Board
                   selected={selected}
                   drawn={drawn}
@@ -508,7 +510,7 @@ export default function KenoGame() {
                 />
               </div>
 
-              <div className="flex w-full max-w-[560px] flex-wrap items-center gap-2 shrink-0">
+              <div className="keno-board-actions flex w-full max-w-[560px] shrink-0 flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={autoPick}
@@ -580,7 +582,7 @@ export default function KenoGame() {
               ) : null}
             </div>
 
-            <div className="shrink-0 border-t border-[#2f4553] p-3 sm:p-4 xl:w-[254px] xl:border-l xl:border-t-0">
+            <div className="shrink-0 border-t border-[#2f4553] p-3 sm:p-4 lg:w-[240px] lg:min-h-0 lg:overflow-y-auto lg:border-l lg:border-t-0 xl:w-[254px]">
               <PayTable
                 risk={risk}
                 picks={picks}

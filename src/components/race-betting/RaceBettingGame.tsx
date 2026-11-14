@@ -16,7 +16,6 @@ import {
   Suit,
 } from './types';
 import {
-  generateControlledRound,
   generateRaceSequence,
   generateRoundId,
   settleBets,
@@ -31,6 +30,7 @@ import { ActiveBetsPanel } from './components/ActiveBetsPanel';
 import { RulesModal } from './components/RulesModal';
 import { SettingsModal } from './components/SettingsModal';
 import { RoundDetailModal } from './components/BetDetailModal';
+import './race-betting.css';
 
 const BETTING_DURATION = 10;
 const INITIAL_BALANCE = 0;
@@ -42,7 +42,6 @@ export default function Race20GamePage() {
   const [roundId, setRoundId] = useState<string>('');
   const [turboMode, setTurboMode] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
-  const winRatio = 0.35;
 
   // Studio Table Display State
   const [suitCards, setSuitCards] = useState<Record<Suit, Card[]>>({
@@ -68,6 +67,7 @@ export default function Race20GamePage() {
 
   // History & Statistics
   const [history, setHistory] = useState<RoundResult[]>([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [stats, setStats] = useState<GameStats>({
     totalRounds: 0,
     playerRounds: 0,
@@ -119,26 +119,22 @@ export default function Race20GamePage() {
 
       const savedTurbo = localStorage.getItem('race20_turbo');
       if (savedTurbo) setTurboMode(savedTurbo === 'true');
-    } catch {
-      // ignore
+      const savedHistory: unknown = JSON.parse(localStorage.getItem('race20_history') ?? '[]');
+      if (Array.isArray(savedHistory)) setHistory(savedHistory.filter((item): item is RoundResult =>
+        Boolean(item && typeof item.roundId === 'string' && ['SPADE', 'HEART', 'CLUB', 'DIAMOND'].includes(item.winningSuit) &&
+          Array.isArray(item.cardsSequence) && item.suitCards && Number.isFinite(item.totalCards) && Number.isFinite(item.totalPoints))
+      ).slice(0, 40));
+    } catch (error) {
+      console.error('[race history]', error);
     }
-
-    // Seed mock initial historical rounds for instant rich display
-    const mockHistory: RoundResult[] = [];
-    for (let i = 0; i < 8; i++) {
-      const generated = generateRaceSequence();
-      mockHistory.push({
-        roundId: generateRoundId(),
-        winningSuit: generated.winningSuit,
-        totalCards: generated.totalCards,
-        totalPoints: generated.totalPoints,
-        cardsSequence: generated.cards,
-        suitCards: generated.suitCards,
-        timestamp: Date.now() - (8 - i) * 60000,
-      });
-    }
-    setHistory(mockHistory);
+    setHistoryLoaded(true);
   }, []);
+
+  useEffect(() => {
+    if (!historyLoaded) return;
+    try { localStorage.setItem('race20_history', JSON.stringify(history.slice(0, 40))); }
+    catch (error) { console.error('[race history save]', error); }
+  }, [history, historyLoaded]);
 
   // Save balance on change
   useEffect(() => {
@@ -164,9 +160,10 @@ export default function Race20GamePage() {
 
     let remaining = BETTING_DURATION;
     const timer = setInterval(() => {
-      remaining -= 1;
+      remaining = Math.max(0, remaining - 1);
       setCountdown(remaining);
       if (remaining <= 0) {
+        if (pool.busy) return;
         clearInterval(timer);
         flowRef.current.close();
         return;
@@ -182,29 +179,26 @@ export default function Race20GamePage() {
   }, [phase]);
 
   // Trigger BETS CLOSED -> DEALING
-  const triggerBetsClosed = useCallback(() => {
+  const triggerBetsClosed = useCallback(async () => {
     if (pool.busy) return;
     if (phaseRef.current !== 'BETTING') return;
     phaseRef.current = 'CLOSED';
     setPhase('CLOSED');
     soundManager.playBetsClosed();
 
-    const planned = generateControlledRound(activeBetsRef.current, winRatio);
+    let planned: ReturnType<typeof generateRaceSequence>;
     if (activeBetsRef.current.length) {
-      const result: RoundResult = {
-        roundId: roundIdRef.current, winningSuit: planned.winningSuit,
-        totalCards: planned.totalCards, totalPoints: planned.totalPoints,
-        cardsSequence: planned.cards, suitCards: planned.suitCards, timestamp: Date.now(),
-      };
-      pool.plan(settleBets(activeBetsRef.current, result).totalPayout, planned);
-    }
+      const resolved = await pool.resolveServer({ bets: activeBetsRef.current }, { holdBalance: true });
+      if (!resolved) { phaseRef.current = 'BETTING'; setPhase('BETTING'); return; }
+      planned = resolved as ReturnType<typeof generateRaceSequence>;
+    } else planned = generateRaceSequence();
     plannedRoundRef.current = planned;
 
     // Small delay before cards start dealing
     closeTimerRef.current = setTimeout(() => {
       flowRef.current.deal();
     }, 1500);
-  }, [activeBets, winRatio]);
+  }, [activeBets]);
 
   // Deal cards one-by-one from the shoe
   const startDealingCards = useCallback(() => {
@@ -269,7 +263,8 @@ export default function Race20GamePage() {
         setLastRoundBets(activeBets);
 
         // Update balance
-        if (!await pool.complete(totalPayout)) { settledRef.current = false; return; }
+        pool.releaseBalance();
+        pool.announce();
         setNetProfitToday((prev) => prev + netProfit);
 
         // Update stats
@@ -313,7 +308,7 @@ export default function Race20GamePage() {
       }
 
       // Add to history
-      setHistory((prev) => [currentRoundResult, ...prev.slice(0, 24)]);
+      setHistory((prev) => [currentRoundResult, ...prev].slice(0, 40));
 
       // Reset and start next round after 5 seconds
       nextTimerRef.current = setTimeout(() => {
@@ -366,7 +361,12 @@ export default function Race20GamePage() {
     target?: Suit,
     isLay: boolean = false
   ) => {
-    if (!Number.isFinite(selectedChip) || selectedChip < 1 || !Number.isFinite(odds) || odds <= 1) return;
+    if (pool.busy) return;
+    if (!Number.isSafeInteger(selectedChip) || selectedChip < 10) {
+      alert('Enter a bet amount of at least Rs. 10.');
+      return;
+    }
+    if (!Number.isFinite(odds) || odds <= 1) return;
 
     const stake = selectedChip;
     const requiredAmount = isLay ? stake * (odds - 1) : stake;
@@ -539,23 +539,23 @@ export default function Race20GamePage() {
   const [mobileTab, setMobileTab] = useState<'odds' | 'bets'>('odds');
 
   return (
-    <div className="h-full w-full bg-slate-950 text-slate-100 flex flex-col font-sans overflow-y-auto overflow-x-hidden px-1 sm:px-2 md:px-3 py-0.5 select-none">
+    <div className="race20-root h-full min-h-0 w-full bg-slate-950 text-slate-100 flex flex-col font-sans overflow-hidden px-1 sm:px-2 md:px-3 py-0.5 select-none">
       {/* Top Header */}
       <CasinoHeader
         balance={balance}
         liability={totalLiability}
         netProfit={netProfitToday}
         isMuted={isMuted}
-        winRatio={winRatio}
+        winRatio={0.30}
         onToggleMute={handleToggleMute}
         onOpenRules={() => setIsRulesOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
       {/* Main Body */}
-      <main className="max-w-7xl w-full mx-auto flex flex-col gap-1 py-0.5 pb-4">
+      <main className="race20-main max-w-7xl w-full mx-auto gap-1 py-0.5">
         {/* Recent Results Ribbon */}
-        <div className="shrink-0">
+        <div className="race20-recent shrink-0">
           <RecentResultsBar
             history={history}
             onSelectRound={(round) => setSelectedHistoryRound(round)}
@@ -563,7 +563,7 @@ export default function Race20GamePage() {
         </div>
 
         {/* Live Dealer Studio / 4 Kings Race Arena */}
-        <div className="shrink-0">
+        <div className="race20-studio shrink-0">
           <RaceTrackStudio
             phase={phase}
             countdown={countdown}
@@ -582,7 +582,7 @@ export default function Race20GamePage() {
         </div>
 
         {/* Mobile Tab Switcher */}
-        <div className="flex lg:hidden items-center justify-center gap-2 shrink-0 py-0.5">
+        <div className="race20-tabs flex lg:hidden items-center justify-center gap-2 shrink-0 py-0.5">
           <button
             onClick={() => setMobileTab('odds')}
             className={`px-3 py-1 rounded-lg text-xs font-bold transition-all border ${mobileTab === 'odds'
@@ -604,9 +604,9 @@ export default function Race20GamePage() {
         </div>
 
         {/* Main Odds & Bets Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-2">
+        <div className="race20-markets grid grid-cols-1 lg:grid-cols-12 gap-2">
           {/* Betting Exchange Board */}
-          <div className={`lg:col-span-8 flex flex-col ${mobileTab === 'bets' ? 'hidden lg:flex' : 'flex'}`}>
+          <div className={`race20-odds lg:col-span-8 min-h-0 min-w-0 flex-col ${mobileTab === 'bets' ? 'hidden lg:flex' : 'flex'}`}>
             <OddsBoard
               phase={phase}
               activeBets={activeBets}
@@ -617,7 +617,7 @@ export default function Race20GamePage() {
           </div>
 
           {/* Active Bets & Settled Bets Panel */}
-          <div className={`lg:col-span-4 flex flex-col space-y-2 ${mobileTab === 'odds' ? 'hidden lg:flex' : 'flex'}`}>
+          <div className={`race20-bets lg:col-span-4 min-h-0 min-w-0 flex-col space-y-2 overflow-y-auto ${mobileTab === 'odds' ? 'hidden lg:flex' : 'flex'}`}>
             <ActiveBetsPanel
               activeBets={activeBets}
               settledBets={settledBets}
@@ -641,26 +641,26 @@ export default function Race20GamePage() {
           </div>
         </div>
 
-        {/* Chips & Quick Controls Bar */}
-        <div className="shrink-0">
-          <ChipsAndControls
-            phase={phase}
-            selectedChip={selectedChip}
-            onSelectChip={(val) => {
-              setSelectedChip(val);
-              soundManager.playChip();
-            }}
-            totalStake={totalStake}
-            potentialProfit={maxPotentialProfit}
-            onClearBets={handleClearBets}
-            onDoubleBets={handleDoubleBets}
-            onRepeatBets={handleRepeatBets}
-            canRepeat={lastRoundBets.length > 0}
-            canDouble={activeBets.length > 0}
-          />
-        </div>
       </main>
 
+      {/* Chips & Quick Controls Bar */}
+      <div className="race20-controls max-w-7xl w-full mx-auto shrink-0">
+        <ChipsAndControls
+          phase={phase}
+          selectedChip={selectedChip}
+          onSelectChip={(val) => {
+            setSelectedChip(val);
+            soundManager.playChip();
+          }}
+          totalStake={totalStake}
+          potentialProfit={maxPotentialProfit}
+          onClearBets={handleClearBets}
+          onDoubleBets={handleDoubleBets}
+          onRepeatBets={handleRepeatBets}
+          canRepeat={lastRoundBets.length > 0}
+          canDouble={activeBets.length > 0}
+        />
+      </div>
       {/* Modals */}
       <RulesModal isOpen={isRulesOpen} onClose={() => setIsRulesOpen(false)} />
       <SettingsModal

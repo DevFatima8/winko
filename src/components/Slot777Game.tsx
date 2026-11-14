@@ -2,7 +2,8 @@
 
 import { localApi } from "@/lib/client";
 import { playGameSound, speakGameVoice } from "@/lib/gameAudio";
-import { broadcastBalanceUpdate } from "@/lib/walletSync";
+import { broadcastBalanceUpdate, confirmWalletReturn, getStoredWalletBalance, holdWalletReveal, revealWalletReturn } from "@/lib/walletSync";
+import { presentedWalletBalance } from "@/lib/walletReveal";
 import { BET_PRESETS } from "@/lib/betPresets";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -89,9 +90,20 @@ export function Slot777Game({ backHref = "/player" }: { backHref?: string }) {
   const [lever, setLever] = useState(false);
   const requestRef = useRef<{ requestId: string; amount: number } | null>(null);
   const submitting = useRef(false);
+  const revealKey = useRef<string | null>(null);
 
-  const load = useCallback(async () => { const r = await localApi("/api/slot777", { cache: "no-store" }); if (r.ok) setSt(await r.json()); }, []);
+  const load = useCallback(async () => {
+    const r = await localApi("/api/slot777", { cache: "no-store" });
+    if (r.ok) {
+      const state: State = await r.json();
+      broadcastBalanceUpdate(state.balance, "Lucky 777");
+      setSt({ ...state, balance: presentedWalletBalance(state.balance) });
+    }
+  }, []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => () => {
+    if (revealKey.current) revealWalletReturn(revealKey.current);
+  }, []);
 
   const spin = useCallback(async () => {
     if (spinning || !st || submitting.current) return;
@@ -99,6 +111,9 @@ export function Slot777Game({ backHref = "/player" }: { backHref?: string }) {
     setErr(null); setShow(null); setLever(true); setTimeout(() => setLever(false), 500);
     const request = requestRef.current ?? { requestId: crypto.randomUUID(), amount };
     requestRef.current = request;
+    const key = `slot777:${request.requestId}`;
+    revealKey.current = key;
+    holdWalletReveal(key);
     let r: Response;
     try { r = await localApi("/api/slot777", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) }); }
     catch { submitting.current = false; setErr("Connection interrupted. Spin again to safely retry the same wager."); setAuto(false); return; }
@@ -106,8 +121,12 @@ export function Slot777Game({ backHref = "/player" }: { backHref?: string }) {
     const j = await r.json();
     submitting.current = false;
     if (r.status < 500) requestRef.current = null;
-    if (j.error) { setErr(j.error); setAuto(false); return; }
-    setSt((s) => (s ? { ...s, balance: j.balance } : s));
+    if (j.error) {
+      if (r.status < 500) revealWalletReturn(key);
+      setErr(j.error); setAuto(false); return;
+    }
+    confirmWalletReturn(key, j.balance, j.poolPending ? 0 : j.payout);
+    setSt((s) => (s ? { ...s, balance: presentedWalletBalance(j.balance) } : s));
     setReels(j.reels); setResult({ win: j.win, payout: j.payout, balance: j.balance, poolPending: j.poolPending, poolClaim: j.poolClaim }); setStopped(0); setSpinning(true);
     playGameSound("launch");
   }, [spinning, st, amount]);
@@ -116,7 +135,9 @@ export function Slot777Game({ backHref = "/player" }: { backHref?: string }) {
   useEffect(() => {
     if (spinning && stopped >= 3) {
       setSpinning(false);
-      if (result) { setSt((s) => (s ? { ...s, balance: result.balance } : s)); broadcastBalanceUpdate(result.balance, "Lucky 777"); window.dispatchEvent(new CustomEvent("wx:game-result", { detail: { game: "Lucky 777", bet: amount, win: result.payout, won: !result.poolPending && !!result.win, poolPending: result.poolPending, poolClaim: result.poolClaim } })); if (result.win && !result.poolPending) { playGameSound("coin"); speakGameVoice("slotWin"); setShow({ ...result.win, payout: result.payout }); } }
+      if (revealKey.current) revealWalletReturn(revealKey.current);
+      revealKey.current = null;
+      if (result) { setSt((s) => (s ? { ...s, balance: getStoredWalletBalance() ?? presentedWalletBalance(result.balance) } : s)); window.dispatchEvent(new CustomEvent("wx:game-result", { detail: { game: "Lucky 777", bet: amount, win: result.payout, won: !result.poolPending && !!result.win, poolPending: result.poolPending, poolClaim: result.poolClaim } })); if (result.win && !result.poolPending) { playGameSound("coin"); speakGameVoice("slotWin"); setShow({ ...result.win, payout: result.payout }); } }
       if (auto) setTimeout(() => spin(), 900);
     }
   }, [stopped, spinning, result, auto, spin]);

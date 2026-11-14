@@ -9,7 +9,7 @@ type ChipButtonProps = {
 
 const CHIP_THEME: Record<number, { bg: string; dark: string; label: string }> = {
   5: { bg: "#c81e3a", dark: "#7a1022", label: "5" },
-  25: { bg: "#147a43", dark: "#0b4a28", label: "25" },
+  25: { bg: "#147a43", dark: "#0b4a28", label: " 25" },
   50: { bg: "#c81e3a", dark: "#7a1022", label: "50" },
   100: { bg: "#1c1c1c", dark: "#050505", label: "100" },
   200: { bg: "#147a43", dark: "#0b4a28", label: "200" },
@@ -32,7 +32,7 @@ export function ChipButton({ value, selected, disabled, onClick }: ChipButtonPro
       aria-label={`Select ${value} chip`}
     >
       <span className="chip-ring" />
-      <span className="chip-core">{theme.label}</span>
+      <span className="chip-core">{CHIP_THEME[value]?.label ?? String(value)}</span>
     </button>
   );
 }
@@ -46,7 +46,7 @@ export function MiniChip({ value }: { value: number }) {
         background: `radial-gradient(circle at 35% 30%, ${theme.bg}, ${theme.dark})`,
       }}
     >
-      {theme.label}
+      {CHIP_THEME[value]?.label ?? String(value)}
     </span>
   );
 }

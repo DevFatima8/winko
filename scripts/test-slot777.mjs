@@ -5,9 +5,9 @@ import { createHash } from "node:crypto";
 import ts from "typescript";
 import { createLegacyScene } from "./multiplayer-legacy-harness.mjs";
 
-const cycleId = "lucky-777:ten-player-wins:v1";
-const prizeId = "lucky-777:player-prizes:v1";
-const categories = { miss: 90, orange: 1, lemon: 2, cherry3: 3, cherry2: 2, cherry1: 2 };
+const cycleId = "lucky-777:bet-wins-30-of-100:v1";
+const prizeId = "lucky-777:player-prizes:profitable-v2";
+const categories = { miss: 70, orange: 3, lemon: 6, cherry3: 9, cherry2: 12, cherry1: 0 };
 const players = ["alice", "bob", ...Array.from({ length: 98 }, (_, i) => `player-${i}`)];
 const today = Date.parse("2026-10-25T12:00:00Z");
 function scene(pooled) {
@@ -19,10 +19,9 @@ function scene(pooled) {
 const play = (s, index, amount = 10, user = players[index % 100]) =>
   s.slot.spin(user, amount, `slot-request-${String(index).padStart(6, "0")}`);
 const cycle = s => s.data.multiplayerrooms.find(row => row._id === cycleId);
-const quota = s => structuredClone(s.data.multiplayerrooms);
 function forceWin(s) {
   s.data.multiplayerrooms.push(
-    { _id: cycleId, players: Array.from({ length: 99 }, (_, i) => `previous-${i}`), remaining: [true] },
+    { _id: cycleId, remaining: [true] },
     { _id: prizeId, remaining: ["orange"] },
   );
 }
@@ -50,41 +49,37 @@ function count(results, amount = 10) {
 
 for (const pooled of [false, true]) {
   const mode = pooled ? "pooled" : "legacy";
-  test(`${mode}: two completed blocks of 100 distinct players give exactly ten genuine wins`, async () => {
+  test(`${mode}: two completed 100-round blocks give exactly 30 profitable wins after house share`, async () => {
     const s = scene(pooled);
     for (let block = 0; block < 2; block++) {
       const results = [];
       for (let index = block * 100; index < (block + 1) * 100; index++) results.push(await play(s, index));
       assert.deepEqual(count(results), categories);
-      assert.equal(results.filter(result => result.win).length, 10);
+      assert.equal(results.filter(result => result.payout > 10).length, 30);
       for (const result of results) assert.equal(Boolean(s.slot.evaluate(result.reels)), Boolean(result.win));
-      assert.deepEqual(cycle(s).players, []);
       assert.equal(cycle(s).remaining.length, 100);
-      assert.equal(cycle(s).remaining.filter(Boolean).length, 10);
+      assert.equal(cycle(s).remaining.filter(Boolean).length, 30);
       assert.ok(results.every(result => result.payout <= 20 && !result.poolPending));
       assert.equal(s.data.dailypoolentries.length, 0);
     }
     assert.equal(s.data.gameresults.length, 200);
     assert.equal(s.data.multiplayerrequests.length, 200);
-    assert.equal(s.slot.theoreticalRtp(), 0.18);
+    assert.equal(s.slot.theoreticalRtp(), 0.6);
   });
 
-  test(`${mode}: repeated admitted players lose without consuming more quota or prizes`, async () => {
+  test(`${mode}: repeat-player rounds consume the same 30/100 profitable-win cycle`, async () => {
     const s = scene(pooled);
     const first = await play(s, 0);
     assert.ok(first.ok);
-    const before = quota(s);
+    const results = [first];
     for (let i = 1; i < 21; i++) {
       const repeat = await play(s, 1000 + i, 10, "alice");
-      assert.equal(repeat.win, null);
-      assert.equal(s.slot.evaluate(repeat.reels), null);
-      assert.equal(repeat.payout, 0);
-      assert.equal(repeat.poolClaim ?? 0, 0);
+      assert.ok(repeat.payout === 0 || repeat.payout > 10);
+      results.push(repeat);
     }
-    assert.deepEqual(quota(s), before);
-    const rest = [];
-    for (let i = 1; i < 100; i++) rest.push(await play(s, i));
-    assert.deepEqual(count([first, ...rest]), categories);
+    assert.equal(cycle(s).remaining.length, 79);
+    for (let i = 21; i < 100; i++) results.push(await play(s, 1000 + i, 10, "alice"));
+    assert.deepEqual(count(results), categories);
   });
 
   test(`${mode}: concurrent duplicate requests charge once and consume one cycle slot`, async () => {
@@ -106,7 +101,6 @@ for (const pooled of [false, true]) {
     const results = await Promise.all(Array.from({ length: 100 }, (_, index) => play(s, index)));
     assert.deepEqual(count(results), categories);
     assert.equal(cycle(s).remaining.length, 100);
-    assert.deepEqual(cycle(s).players, []);
     assert.equal(s.data.gameresults.length, 100);
   });
 
@@ -156,7 +150,7 @@ for (const pooled of [false, true]) {
       const s = scene(pooled);
       s.data.multiplayerrooms.push({ _id: cycleId, players: [], remaining });
       const before = structuredClone(s.data);
-      await assert.rejects(play(s, 1), /player win cycle is invalid/);
+      await assert.rejects(play(s, 1), /bet win cycle is invalid/);
       assert.deepEqual(s.data, before);
     }
   });
@@ -199,6 +193,19 @@ test("changing pool activation cannot replay an accepted request as another spin
   }
 });
 
+test("new profitable cycles do not rewrite historic player or one-cherry prize cycles", async () => {
+  const s = scene(false);
+  const old = [
+    { _id: "lucky-777:ten-player-wins:v1", players: ["alice"], remaining: [false] },
+    { _id: "lucky-777:player-prizes:v1", remaining: ["cherry1"] },
+  ];
+  s.data.multiplayerrooms.push(...structuredClone(old));
+  forceWin(s);
+  const result = await play(s, 1);
+  assert.ok(result.payout > 10);
+  for (const row of old) assert.deepEqual(s.data.multiplayerrooms.find(value => value._id === row._id), row);
+});
+
 test("previously accepted pooled requests retain their original claim and never redraw", async () => {
   const s = scene(true);
   const requestId = "slot-request-000001";
@@ -235,7 +242,7 @@ test("pool activation cannot add extra winners or allocate extra slot payments o
   const before = s.data.users.reduce((sum, user) => sum + user.balance, 0);
   for (let i = 0; i < 100; i++) await play(s, i);
   const winners = s.data.gameresults.filter(entry => entry.winAmount > 0).length;
-  assert.equal(winners, 10);
+  assert.equal(winners, 30);
   s.at(Date.parse("2026-10-26T12:00:00Z"));
   await s.store.transact("daily-pool:lucky-777", tx => s.pool.settleDailyPools(tx, "lucky-777"));
   const after = s.data.users.reduce((sum, user) => sum + user.balance, 0);
@@ -243,7 +250,7 @@ test("pool activation cannot add extra winners or allocate extra slot payments o
   assert.equal(Math.round((before - after) * 100), 100000 - paid);
   assert.equal(s.data.dailypoolentries.length, 0);
   assert.equal(s.data.dailypools.length, 0);
-  assert.equal(paid + s.data.winholds.reduce((sum, row) => sum + Math.round(row.amount * 100), 0), 18000);
+  assert.equal(paid + s.data.winholds.reduce((sum, row) => sum + Math.round(row.amount * 100), 0), 60000);
   const remaining = structuredClone(cycle(s).remaining);
   const balance = s.users.get("bob").balance;
   const replay = await play(s, 1);

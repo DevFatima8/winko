@@ -34,7 +34,7 @@ export default function BettingBoard({
   const totalBet = ALL_SPOTS.reduce((sum, s) => sum + (bets[s] ?? 0), 0);
 
   return (
-    <div className="panel rounded-2xl p-3 sm:p-4">
+    <div className="dw-betting-board dw-panel shrink-0 rounded-2xl p-3 sm:p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-black tracking-[0.22em] text-violet-200/70 uppercase">
@@ -58,7 +58,7 @@ export default function BettingBoard({
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-1.5 sm:gap-2 lg:grid-cols-8">
+      <div className="dw-spots grid grid-cols-4 gap-1.5 sm:gap-2">
         {ALL_SPOTS.map((spot) => {
           const theme = SPOT_THEME[spot];
           const stake = bets[spot] ?? 0;

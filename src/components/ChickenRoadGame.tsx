@@ -2,7 +2,8 @@
 
 import { localApi } from "@/lib/client";
 import { playGameSound, speakGameVoice } from "@/lib/gameAudio";
-import { broadcastBalanceUpdate } from "@/lib/walletSync";
+import { broadcastBalanceUpdate, confirmWalletReturn, fetchServerBalance, getStoredWalletBalance, holdWalletReveal, revealWalletReturn } from "@/lib/walletSync";
+import { presentedWalletBalance, walletRevealRevision } from "@/lib/walletReveal";
 import { BET_PRESETS } from "@/lib/betPresets";
 import { drawBarrier as drawDashBarrier, drawGrass, drawTile } from "./ChickenDashGame";
 import Link from "next/link";
@@ -460,14 +461,19 @@ export function ChickenRoadGame({ backHref = "/player" }: { backHref?: string })
   const loadedRef = useRef(false);
   const stRef = useRef<State | null>(null);
   const setBusyBoth = (b: boolean) => { busyRef.current = b; setBusy(b); };
+  const [revealKey] = useState(() => `chicken-road:${crypto.randomUUID()}`);
+  useEffect(() => () => revealWalletReturn(revealKey), [revealKey]);
 
   const refresh = useCallback(async () => {
+    const revision = walletRevealRevision();
     const r = await localApi("/api/chicken/state", { cache: "no-store" });
     if (!r.ok) return;
     const s: State = await r.json();
+    if (revision !== walletRevealRevision()) return;
+    broadcastBalanceUpdate(s.balance, "Chicken Road 2");
+    s.balance = presentedWalletBalance(s.balance);
     stRef.current = s;
     setSt(s);
-    if (typeof s.balance === "number") broadcastBalanceUpdate(s.balance, "Chicken Road 2");
     if (!loadedRef.current) {
       loadedRef.current = true;
       if (s.game?.status === "active" && s.game.bet > 0) {
@@ -544,9 +550,18 @@ export function ChickenRoadGame({ backHref = "/player" }: { backHref?: string })
     if (!v || busyRef.current || v.status !== "active" || v.hop) return;
     setBusyBoth(true); setMsg(null);
     playGameSound("jump"); speakGameVoice("chickenJump");
-    const j = await post("/api/chicken/step");
-    if (j.error) { setMsg({ t: "err", m: j.error }); setBusyBoth(false); return; }
+    holdWalletReveal(revealKey);
+    let j;
+    try { j = await post("/api/chicken/step"); }
+    catch {
+      revealWalletReturn(revealKey);
+      setMsg({ t: "err", m: "Connection interrupted. Check the refreshed round before continuing." });
+      setBusyBoth(false); void refresh(); return;
+    }
+    if (j.error) { revealWalletReturn(revealKey); setMsg({ t: "err", m: j.error }); setBusyBoth(false); return; }
     const g: G = j.game; setGame(g);
+    confirmWalletReturn(revealKey, null, j.event === "finished" && !g.poolPending ? g.win ?? 0 : 0);
+    if (j.event === "finished") void fetchServerBalance();
     const target = g.position;
     if (j.event === "dead") {
       v.moving[target] = v.moving[target].filter((c) => c.y >= MANHOLE_Y + 50);
@@ -565,6 +580,9 @@ export function ChickenRoadGame({ backHref = "/player" }: { backHref?: string })
       hopTo(v, target, () => {
         if (j.event === "finished") {
           hopTo(v, target + 1, () => {
+            revealWalletReturn(revealKey);
+            const balance = getStoredWalletBalance();
+            if (balance !== null) setSt(state => state ? { ...state, balance } : state);
             playGameSound("coin"); if (!g.poolPending) speakGameVoice("chickenWin");
             v.status = "finished"; v.finishedAt = performance.now(); burst(v, v.cx, MANHOLE_Y); setPhase("idle"); setBusyBoth(false);
             setMsg({ t: "ok", m: g.poolPending ? `Road crossed! Claim ${money(g.poolClaim ?? 0)} — daily payout pending` : `Poori road cross! ${money(g.win)} jeete!` }); refresh();
@@ -573,7 +591,7 @@ export function ChickenRoadGame({ backHref = "/player" }: { backHref?: string })
         } else setBusyBoth(false);
       });
     }
-  }, [refresh]);
+  }, [refresh, revealKey]);
   const stepRef = useRef(step); stepRef.current = step;
 
   const cashout = async () => {

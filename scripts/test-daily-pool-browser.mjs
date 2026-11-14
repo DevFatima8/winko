@@ -9,7 +9,7 @@ function scene() {
   let failure = null;
   const rows = {
     users: [{ _id: "alice", balance: 1000, role: "client", isActive: true, blockedGames: [] }],
-    games: [{ _id: "dice-id", slug: "dice", isActive: true }, { _id: "rps-id", slug: "rock-paper-scissors", isActive: true }],
+    games: [{ _id: "crash-bonus-id", slug: "crash-bonus", isActive: true }, { _id: "rps-id", slug: "rock-paper-scissors", isActive: true }],
     gameresults: [], dailypools: [], dailypoolentries: [],
   };
   const copy = value => structuredClone(value);
@@ -59,7 +59,7 @@ function scene() {
   return {
     rows, pool: load("dailyPool"), tx, transact,
     lifecycle: (input, enabled = true) => transact(tx => browser.browserPoolLifecycle(tx, "alice", {
-      game: "dice", wagerId: input.wagerId, operationId: randomUUID(),
+      game: "crash-bonus", wagerId: input.wagerId, operationId: randomUUID(),
       action: "accept", amount: 100, poolVersion: "daily-pool-v1", ...input,
     }, enabled)),
     serverPlay: (input, enabled = true) => transact(tx => browser.playServerBrowserWager(tx, "alice", {
@@ -69,7 +69,7 @@ function scene() {
     at: value => { now = value; },
     fail: table => { failure = table; },
     play: (input, enabled = true) => transact(tx => browser.playBrowserWager(tx, "alice", {
-      game: "dice", wagerId: randomUUID(), stake: 100, claim: 200, poolVersion: "daily-pool-v1", ...input,
+      game: "crash-bonus", wagerId: randomUUID(), stake: 100, claim: 200, poolVersion: "daily-pool-v1", ...input,
     }, enabled)),
   };
 }
@@ -88,7 +88,7 @@ test("explicit instant stake/claim closes a persisted wager without wallet win c
   assert.equal(s.rows.dailypoolentries.length, 1);
   await assert.rejects(s.play({ wagerId, claim: 300 }), /different amounts/);
   s.at(Date.parse("2026-10-24T19:00:00Z"));
-  await s.transact(tx => s.pool.settleDailyPools(tx, "dice"));
+  await s.transact(tx => s.pool.settleDailyPools(tx, "crash-bonus"));
   assert.equal(s.rows.users[0].balance, 935);
 });
 
@@ -97,7 +97,7 @@ test("explicit zero claim is a real losing wager and participates in no-claim fa
   await s.play({ claim: 0 });
   assert.equal(s.rows.dailypoolentries[0].claimCents, 0);
   s.at(Date.parse("2026-10-24T19:00:00Z"));
-  await s.transact(tx => s.pool.settleDailyPools(tx, "dice"));
+  await s.transact(tx => s.pool.settleDailyPools(tx, "crash-bonus"));
   assert.equal(s.rows.users[0].balance, 935);
 });
 
@@ -109,7 +109,7 @@ test("consent, account access, supported games, and genuine positive stakes are 
   await assert.rejects(s.play({ stake: NaN }), /amounts/);
   await assert.rejects(s.play({ claim: -1 }), /amounts/);
   await assert.rejects(s.play({ stake: 2000 }), /Insufficient/);
-  s.rows.users[0].blockedGames = ["dice"];
+  s.rows.users[0].blockedGames = ["crash-bonus"];
   await assert.rejects(s.play({}), /cannot bet/);
   assert.equal(s.rows.gameresults.length, 0);
   assert.equal(s.rows.users[0].balance, 1000);
@@ -127,10 +127,10 @@ test("incremental wagers retain each accepted Pakistan day and split claims acro
   await s.lifecycle({ wagerId, action: "complete", amount: 800 });
   assert.equal(s.rows.users[0].balance, 600);
   assert.deepEqual(s.rows.dailypoolentries.map(entry => entry.claimCents), [20000, 60000]);
-  await s.transact(tx => s.pool.settleDailyPools(tx, "dice"));
+  await s.transact(tx => s.pool.settleDailyPools(tx, "crash-bonus"));
   assert.equal(s.rows.users[0].balance, 635);
   s.at(Date.parse("2026-10-25T19:00:00Z"));
-  await s.transact(tx => s.pool.settleDailyPools(tx, "dice"));
+  await s.transact(tx => s.pool.settleDailyPools(tx, "crash-bonus"));
   assert.equal(s.rows.users[0].balance, 740);
 });
 
@@ -145,7 +145,7 @@ test("undo, partial cancellation, full refund, and replays exclude exactly the r
   assert.equal(s.rows.dailypoolentries.reduce((sum, entry) => sum + entry.stakeCents, 0), 15000);
   await s.lifecycle({ wagerId, action: "complete", amount: 0 });
   s.at(Date.parse("2026-10-24T19:00:00Z"));
-  await s.transact(tx => s.pool.settleDailyPools(tx, "dice"));
+  await s.transact(tx => s.pool.settleDailyPools(tx, "crash-bonus"));
   assert.equal(s.rows.users[0].balance, 902.5);
   const second = randomUUID();
   await s.lifecycle({ wagerId: second, amount: 10 });

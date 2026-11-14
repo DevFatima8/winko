@@ -62,7 +62,7 @@ function parseAmount(value: string): number {
 
 export default function HeadTailGame({ backHref = "/player" }: { backHref?: string }) {
   const [balance] = useGameBalance("head-tail", START_BALANCE);
-  const { playServer } = useBrowserWager("head-tail", START_BALANCE);
+  const { playServer, reveal } = useBrowserWager("head-tail", START_BALANCE);
   const poolEnabled = useDailyPoolMode();
   const [side, setSide] = useState<Side>("head");
   const [amountStr, setAmountStr] = useState("10");
@@ -84,11 +84,13 @@ export default function HeadTailGame({ backHref = "/player" }: { backHref?: stri
   const roundIdRef = useRef(0);
   const [livePhase, setLivePhase] = useState("betting");
   const [nextBet, setNextBet] = useState({ head: 0, tail: 0 });
+  const pendingBet = nextBet.head + nextBet.tail;
+  const controlsLocked = flipping || livePhase !== "betting" || pendingBet > 0;
   const alive = useRef(true);
   const request = useRef<AbortController | null>(null);
   const live = useLiveTable({
     phase: livePhase, balance, draft: nextBet, targets: ["head", "tail"],
-    minBet: MIN_BET, singleTarget: true,
+    minBet: MIN_BET, singleTarget: true, queueNextRound: false,
     start: () => { void handleFlip(true); },
     reset: () => { setNextBet({ head: 0, tail: 0 }); setLivePhase("betting"); },
     apply: setNextBet,
@@ -174,7 +176,7 @@ export default function HeadTailGame({ backHref = "/player" }: { backHref?: stri
 
   /* ---------- game actions ---------- */
   const handleFlip = async (spectator = false) => {
-    if (flipping) return;
+    if (flipping || livePhase !== "betting" || !spectator && pendingBet > 0) return;
     setError(null);
     let wager = spectator ? nextBet : { head: side === "head" ? amount : 0, tail: side === "tail" ? amount : 0 };
     let stake = wager.head + wager.tail;
@@ -186,6 +188,15 @@ export default function HeadTailGame({ backHref = "/player" }: { backHref?: stri
     if (stake > balance && !spectator) {
       setError("Insufficient balance for this bet");
       return;
+    }
+    if (!spectator) {
+      setNextBet(wager);
+      return;
+    }
+    if (stake > balance) {
+      setError("Bet cancelled: insufficient balance.");
+      setNextBet({ head: 0, tail: 0 });
+      wager = { head: 0, tail: 0 };
     }
     const accepted = live.begin(wager);
     if (!accepted) return;
@@ -206,10 +217,10 @@ export default function HeadTailGame({ backHref = "/player" }: { backHref?: stri
       if (roundAmount === 0) {
         data = { result: Math.random() < 0.5 ? "head" : "tail", win: false };
       } else {
-      const accepted = await playServer(roundAmount, { choice: pick });
-      notice = accepted;
-      data = accepted.outcome as FlipResponse;
-      if (accepted.poolPending) setError("Provisional claim only. Wallet payment awaits daily pool settlement.");
+        const accepted = await playServer(roundAmount, { choice: pick });
+        notice = accepted;
+        data = accepted.outcome as FlipResponse;
+        if (accepted.poolPending) setError("Provisional claim only. Wallet payment awaits daily pool settlement.");
       }
     } catch {
       if (!alive.current) return;
@@ -274,6 +285,7 @@ export default function HeadTailGame({ backHref = "/player" }: { backHref?: stri
         net: round2(s.net + (data.win ? roundAmount * (PAYOUT_MULTIPLIER - 1) : -roundAmount)),
       }));
       setLastRound(item);
+      reveal();
       if (notice) notifyGameResult("head-tail", notice.wagerId, notice.claim, notice.poolPending);
       setTossing(false);
       setFlipping(false);
@@ -292,20 +304,34 @@ export default function HeadTailGame({ backHref = "/player" }: { backHref?: stri
   };
 
   const chooseSide = (s: Side) => {
-    if (flipping) return;
+    if (controlsLocked) return;
     setSide(s);
     sfx(playClick);
   };
 
   const statusText = useMemo(() => {
     if (flipping) return "Flipping the coin…";
+    if (pendingBet > 0) return "Bet placed. Waiting for the countdown to finish.";
     if (lastRound) return null;
-    return "Pick Head or Tail, enter your bet and flip the coin!";
-  }, [flipping, lastRound]);
+    return "Pick Head or Tail, enter your amount and place your bet!";
+  }, [flipping, pendingBet, lastRound]);
 
   return (
     <div className="head-tail-container relative h-full w-full flex flex-col justify-between overflow-y-auto overflow-x-hidden md:overflow-hidden px-2 sm:px-4 py-1.5 select-none font-sans text-slate-100">
-      {live.controls}
+      {livePhase === "betting" && (
+        <div className="flex shrink-0 flex-wrap items-center justify-center gap-2 py-1">
+          <span className="text-center text-xs text-amber-200" role="status">Next round in {live.countdown}s</span>
+          {pendingBet > 0 && (
+            <button type="button" onClick={() => {
+              if (flipping || livePhase !== "betting") return;
+              setNextBet({ head: 0, tail: 0 });
+              setError(null);
+            }} className="rounded-lg border border-rose-400/40 bg-rose-950/60 px-3 py-1 text-xs font-bold text-rose-200 hover:bg-rose-900/60">
+              Cancel bet
+            </button>
+          )}
+        </div>
+      )}
       {/* ================= HEADER ================= */}
       <header className="z-30 border-b border-white/10 bg-[#070b18]/85 backdrop-blur-xl rounded-xl px-2.5 sm:px-4 py-1.5 shrink-0">
         <div className="flex items-center justify-between gap-2">
@@ -362,9 +388,8 @@ export default function HeadTailGame({ backHref = "/player" }: { backHref?: stri
       <main className="flex-1 md:min-h-0 flex flex-col md:flex-row items-stretch justify-between gap-1.5 sm:gap-3 max-w-5xl mx-auto w-full my-auto md:overflow-hidden">
         {/* Game Stage (Order 1 on mobile, Order 2 on desktop) */}
         <section
-          className={`stage-bg relative order-1 md:order-2 flex-1 min-h-[250px] md:min-h-0 overflow-hidden rounded-2xl border border-white/10 shadow-xl flex flex-col justify-between p-2 sm:p-3 ${
-            lastRound && !lastRound.win ? "shake" : ""
-          }`}
+          className={`stage-bg relative order-1 md:order-2 flex-1 min-h-[250px] md:min-h-0 overflow-hidden rounded-2xl border border-white/10 shadow-xl flex flex-col justify-between p-2 sm:p-3 ${lastRound && !lastRound.win ? "shake" : ""
+            }`}
         >
           <div className="table-arc" />
 
@@ -398,18 +423,16 @@ export default function HeadTailGame({ backHref = "/player" }: { backHref?: stri
                   <span
                     key={r.id}
                     title={`${r.result.toUpperCase()} · ${r.win ? "Win" : ""}`}
-                    className={`grid h-4.5 w-4.5 sm:h-5 sm:w-5 place-items-center rounded-full border text-[8px] sm:text-[9px] font-black ${
-                      r.win ? "border-emerald-400/60 bg-emerald-500/15 text-emerald-300" : "border-red-400/60 bg-red-500/15 text-red-300"
-                    }`}
+                    className={`grid h-4.5 w-4.5 sm:h-5 sm:w-5 place-items-center rounded-full border text-[8px] sm:text-[9px] font-black ${r.win ? "border-emerald-400/60 bg-emerald-500/15 text-emerald-300" : "border-red-400/60 bg-red-500/15 text-red-300"
+                      }`}
                   >
                     {r.result === "head" ? "H" : "T"}
                   </span>
                 ))}
               </div>
             </div>
-            <span className={`rounded-full px-2 py-0.5 text-[8.5px] sm:text-[10px] font-bold uppercase tracking-wider ${
-              side === "head" ? "bg-amber-400/15 text-amber-300" : "bg-indigo-400/15 text-indigo-300"
-            }`}>
+            <span className={`rounded-full px-2 py-0.5 text-[8.5px] sm:text-[10px] font-bold uppercase tracking-wider ${side === "head" ? "bg-amber-400/15 text-amber-300" : "bg-indigo-400/15 text-indigo-300"
+              }`}>
               Pick: {side}
             </span>
           </div>
@@ -429,9 +452,8 @@ export default function HeadTailGame({ backHref = "/player" }: { backHref?: stri
             {!flipping && lastRound && (
               <div
                 key={lastRound.id}
-                className={`pop-in rounded-xl border px-2.5 py-0.5 sm:px-3 sm:py-1 text-center shadow-lg ${
-                  lastRound.win ? "glow-win border-emerald-400/50 bg-emerald-500/15" : "border-red-400/40 bg-red-500/15"
-                }`}
+                className={`pop-in rounded-xl border px-2.5 py-0.5 sm:px-3 sm:py-1 text-center shadow-lg ${lastRound.win ? "glow-win border-emerald-400/50 bg-emerald-500/15" : "border-red-400/40 bg-red-500/15"
+                  }`}
               >
                 <p className={`text-[11px] sm:text-sm font-black uppercase tracking-wider leading-tight ${lastRound.win ? "text-emerald-400" : "text-red-400"}`}>
                   {poolEnabled ? "DAILY PAYOUT PENDING" : lastRound.win ? "🎉 You Won!" : ""}
@@ -470,13 +492,12 @@ export default function HeadTailGame({ backHref = "/player" }: { backHref?: stri
                     key={s}
                     type="button"
                     onClick={() => chooseSide(s)}
-                    disabled={flipping}
+                    disabled={controlsLocked}
                     aria-pressed={active}
-                    className={`relative flex flex-col items-center gap-0.5 sm:gap-1 rounded-xl border-2 px-1.5 py-1 sm:py-2.5 transition cursor-pointer hover:scale-[1.02] active:scale-95 ${
-                      active
-                        ? "border-gold bg-gold/15 shadow-[0_0_18px_-4px_rgba(245,179,1,0.6)]"
-                        : "border-white/10 bg-panel-2 hover:border-white/25"
-                    } ${flipping && !active ? "opacity-50" : ""}`}
+                    className={`relative flex flex-col items-center gap-0.5 sm:gap-1 rounded-xl border-2 px-1.5 py-1 sm:py-2.5 transition cursor-pointer hover:scale-[1.02] active:scale-95 ${active
+                      ? "border-gold bg-gold/15 shadow-[0_0_18px_-4px_rgba(245,179,1,0.6)]"
+                      : "border-white/10 bg-panel-2 hover:border-white/25"
+                      } ${flipping && !active ? "opacity-50" : ""}`}
                   >
                     {active && (
                       <span className="absolute right-1.5 top-1.5 grid h-3.5 w-3.5 place-items-center rounded-full bg-gold text-[#2a1700]">
@@ -502,7 +523,7 @@ export default function HeadTailGame({ backHref = "/player" }: { backHref?: stri
                 type="text"
                 inputMode="decimal"
                 value={amountStr}
-                disabled={flipping}
+                disabled={controlsLocked}
                 onChange={(e) => onAmountChange(e.target.value)}
                 placeholder="0.00"
                 aria-label="Bet amount"
@@ -511,10 +532,10 @@ export default function HeadTailGame({ backHref = "/player" }: { backHref?: stri
             </div>
 
             <div className="mt-1 grid grid-cols-4 gap-1">
-              <QuickBtn disabled={flipping} onClick={() => setAmount(MIN_BET)}>Min</QuickBtn>
-              <QuickBtn disabled={flipping} onClick={() => setAmount(Math.max(MIN_BET, amount / 2))}>½</QuickBtn>
-              <QuickBtn disabled={flipping} onClick={() => setAmount(Math.min(cap, Math.max(MIN_BET, amount * 2)))}>2×</QuickBtn>
-              <QuickBtn disabled={flipping} onClick={() => setAmount(cap)}>Max</QuickBtn>
+              <QuickBtn disabled={controlsLocked} onClick={() => setAmount(MIN_BET)}>Min</QuickBtn>
+              <QuickBtn disabled={controlsLocked} onClick={() => setAmount(Math.max(MIN_BET, amount / 2))}>½</QuickBtn>
+              <QuickBtn disabled={controlsLocked} onClick={() => setAmount(Math.min(cap, Math.max(MIN_BET, amount * 2)))}>2×</QuickBtn>
+              <QuickBtn disabled={controlsLocked} onClick={() => setAmount(cap)}>Max</QuickBtn>
             </div>
 
             <div className="mt-1 grid grid-cols-4 gap-1">
@@ -522,13 +543,12 @@ export default function HeadTailGame({ backHref = "/player" }: { backHref?: stri
                 <button
                   key={c}
                   type="button"
-                  disabled={flipping}
+                  disabled={controlsLocked}
                   onClick={() => setAmount(c)}
-                  className={`rounded-lg border px-1 py-0.5 text-[10px] sm:text-[11px] font-bold transition hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50 ${
-                    amount === c
-                      ? "border-gold/70 bg-gold/20 text-gold"
-                      : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
-                  }`}
+                  className={`rounded-lg border px-1 py-0.5 text-[10px] sm:text-[11px] font-bold transition hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-50 ${amount === c
+                    ? "border-gold/70 bg-gold/20 text-gold"
+                    : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
+                    }`}
                 >
                   {c}
                 </button>
@@ -549,7 +569,7 @@ export default function HeadTailGame({ backHref = "/player" }: { backHref?: stri
               <button
                 type="button"
                 onClick={() => { void handleFlip(); }}
-                disabled={flipping}
+                disabled={controlsLocked}
                 className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-600 hover:from-emerald-400 hover:to-green-500 text-white font-black uppercase tracking-wider py-1.5 sm:py-2.5 text-xs sm:text-sm shadow-lg shadow-green-600/30 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer disabled:opacity-50"
               >
                 {flipping ? (
@@ -558,7 +578,7 @@ export default function HeadTailGame({ backHref = "/player" }: { backHref?: stri
                     Flipping…
                   </>
                 ) : (
-                  <>🪙 Flip Coin</>
+                  pendingBet > 0 ? "Bet Placed" : <>🪙 Place Bet</>
                 )}
               </button>
             )}
@@ -570,7 +590,7 @@ export default function HeadTailGame({ backHref = "/player" }: { backHref?: stri
       </main>
 
       <footer className="shrink-0 text-center text-[9px] text-white/35 py-0.5 hidden sm:block">
-        Demo entertainment with virtual credits only — no real money. Pick Head or Tail for 2x multipliers.
+        Pick Head or Tail for 2x multipliers.
       </footer>
 
       {/* History Modal */}
@@ -628,10 +648,7 @@ export default function HeadTailGame({ backHref = "/player" }: { backHref?: stri
             <div className="overflow-y-auto flex-1 my-3 space-y-3 text-xs text-slate-300">
               <p><strong>1. Choose your side:</strong> Select Head or Tail before you flip.</p>
               <p><strong>2. Set your bet:</strong> Enter any amount from {fmt(MIN_BET)} up to your balance.</p>
-              <p><strong>3. Flip the coin:</strong> Hit Flip Coin. If your side lands, you win {PAYOUT_MULTIPLIER}x your bet!</p>
-              <div className="rounded-xl bg-white/5 p-3 text-[11px] text-slate-400">
-                Certified RNG fair-play coin simulation with 50/50 probability. Virtual demo credits only.
-              </div>
+              <p><strong>3. Place your bet:</strong> Hit Place Bet before the countdown ends. You can cancel during the countdown; your stake is charged only when the flip starts. If your side lands, you win {PAYOUT_MULTIPLIER}x your bet!</p>
             </div>
           </div>
         </div>

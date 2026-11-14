@@ -96,7 +96,11 @@ async function payFlightBet(tx: Tx, user: UserDoc, bet: LiveResult, multiplier: 
   });
   await tx.put("gameresults", bet._id, bet);
   await saveFlightWallet(tx, user, bet, win, "payout", now);
-  return { ok: true, multiplier, win, netWin: bet.netProfit!, netProfit: bet.netProfit! };
+  return {
+    ok: true, round: bet.roundNo, balance: user.balance, multiplier, win,
+    netWin: bet.netProfit!, netProfit: bet.netProfit!,
+    bet: { id: bet._id, slot: bet.betSlot, bet: bet.betAmount, win, outcome: bet.outcome, data: bet.resultData, netProfit: bet.netProfit },
+  };
 }
 
 async function saveFlightWallet(tx: Tx, user: UserDoc, bet: LiveResult, delta: number, action: "stake" | "payout" | "refund", now: number) {
@@ -287,6 +291,9 @@ export async function sharedFlightBet(userId: string, amount: number, slot: numb
       bets = await flightBets(tx, gid, target, context);
     }
     if (bets.some((bet) => bet.userId === userId && bet.betSlot === slot)) return { error: "Bet already placed." };
+    if (table === "aviator-x" && bets.filter(bet => bet.userId === userId).length >= flight.TABLES[table].slots) {
+      return { error: "Only two bets are allowed per round." };
+    }
     if (bets.length >= LIMIT - 1) return { error: "This flight is full. Please wait for the next round." };
     const flightModel = target === round.roundNo ? round.fairness.version : round.fairness.nextVersion ?? round.fairness.version;
     const _id = randomUUID();

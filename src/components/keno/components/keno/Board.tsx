@@ -22,7 +22,7 @@ export default function Board({
   const tiles = Array.from({ length: POOL_SIZE }, (_, i) => i + 1);
 
   return (
-    <div className="grid w-full max-w-[560px] grid-cols-8 gap-1.5 sm:gap-2">
+    <div className="keno-board-grid grid w-full max-w-[560px] shrink-0 grid-cols-8 gap-1.5 sm:gap-2">
       {tiles.map((tile) => {
         const isSelected = selected.includes(tile);
         const isDrawn = revealed.includes(tile);

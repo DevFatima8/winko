@@ -2,25 +2,15 @@
 import { gameSfx } from "@/lib/gameSfx";
 import { GameOverOverlay } from "@/components/GameOverOverlay";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useGameBalance, usePoolLifecycle, usePoolRoundState } from "@/lib/walletSync";
 import { BET_PRESETS } from "@/lib/betPresets";
 
-// ===== Game config =====
+import { cardMove, restoreCardRound, type CardOutcome } from "@/lib/interactiveCardClient";
+import { DIFF, ROWS, type Difficulty, type TowerCell as Cell, type TowerView } from "@/lib/towerRules";
+
+// Previously accepted browser rounds keep their original per-pick chance.
 const WIN_CHANCE = 0.35;
-const ROWS = 9;
-
-type Difficulty = "easy" | "medium" | "hard" | "expert" | "master";
-
-const DIFF: Record<Difficulty, { cols: number; safe: number; mults: number[] }> = {
-  easy: { cols: 4, safe: 3, mults: [1.31, 1.74, 2.32, 3.1, 4.13, 5.51, 7.34, 9.79, 13.05] },
-  medium: { cols: 3, safe: 2, mults: [1.47, 2.21, 3.31, 4.96, 7.44, 11.16, 16.74, 25.11, 37.67] },
-  hard: { cols: 2, safe: 1, mults: [1.96, 3.92, 7.84, 15.68, 31.36, 62.72, 125.44, 250.88, 501.76] },
-  expert: { cols: 3, safe: 1, mults: [2.94, 8.82, 26.46, 79.38, 238.14, 714.42, 2143.26, 6429.78, 19289.34] },
-  master: { cols: 4, safe: 1, mults: [3.92, 15.68, 62.72, 250.88, 1003.52, 4014.08, 16056.32, 64225.28, 256901.12] },
-};
-
-type Cell = "hidden" | "egg" | "dragon" | "egg-dim" | "dragon-dim";
 
 function emptyBoard(cols: number): Cell[][] {
   return Array.from({ length: ROWS }, () => Array<Cell>(cols).fill("hidden"));
@@ -59,6 +49,33 @@ export default function TowerGame() {
   const [result, setResult] = useState<{ win: boolean; mult: number; amount: number } | null>(null);
   const [endDismissed, setEndDismissed] = useState(false);
   const [tab, setTab] = useState<"manual" | "auto">("manual");
+  const [serverDriven, setServerDriven] = useState(true);
+
+  const applyServer = (outcome: CardOutcome<TowerView>) => {
+    const view = outcome.view;
+    setDifficulty(view.difficulty); setBoard(view.board); setLevel(view.level); setBet(outcome.stake);
+    const ended = outcome.phase === "won" || outcome.phase === "lost";
+    setPlaying(!ended);
+    if (ended) {
+      const win = outcome.phase === "won";
+      setResult({ win, mult: win ? DIFF[view.difficulty].mults[view.level - 1] : 0, amount: outcome.payout });
+      setEndDismissed(false);
+      pool.announce();
+      if (win) gameSfx.win(); else gameSfx.lose();
+    }
+  };
+  useEffect(() => {
+    let alive = true;
+    void restoreCardRound<TowerView>("tower-betting", pool).then(async outcome => {
+      if (!alive || !outcome) return;
+      if (outcome.phase === "legacy") { setServerDriven(false); return; }
+      if (outcome.phase === "accepted") outcome = await cardMove<TowerView>(pool, "deal", { difficulty });
+      if (alive && outcome?.view) applyServer(outcome);
+    });
+    return () => { alive = false; };
+    // Recovery runs once; later actions use the current table state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const cfg = DIFF[difficulty];
   const currentMult = level > 0 ? cfg.mults[level - 1] : 1;
@@ -82,21 +99,32 @@ export default function TowerGame() {
     });
 
   const startGame = async () => {
+    if (pool.busy) return;
     gameSfx.click();
     const amt = Math.max(0, parseFloat(betInput) || 0);
     if (amt <= 0 || amt > balance) return;
     pool.checkpoint({ difficulty, board: emptyBoard(cfg.cols), playing: true, level: 0, bet: amt });
-    if (!await pool.start(amt, () => setBalance((b) => +(b - amt).toFixed(2)))) return;
+    if (!localStorage.getItem("wx:browser-active:tower-betting:main") &&
+      !await pool.start(amt, () => setBalance((b) => +(b - amt).toFixed(2)))) return;
+    setServerDriven(true);
+    const dealt = await cardMove<TowerView>(pool, "deal", { difficulty });
+    if (!dealt) return;
     setBet(amt);
     setBoard(emptyBoard(cfg.cols));
     setLevel(0);
     setResult(null);
     setEndDismissed(false);
     setPlaying(true);
+    applyServer(dealt);
   };
 
   const cashout = async (lvl = level, b = board) => {
     if (!playing || lvl === 0) return;
+    if (serverDriven) {
+      const outcome = await cardMove<TowerView>(pool, "cashout");
+      if (outcome) applyServer(outcome);
+      return;
+    }
     const mult = cfg.mults[lvl - 1];
     const win = +(bet * mult).toFixed(2);
     if (!await pool.complete(win, () => setBalance((x) => +(x + win).toFixed(2)))) return;
@@ -109,6 +137,11 @@ export default function TowerGame() {
 
   const pick = async (rowIdx: number, col: number) => {
     if (!playing || rowIdx !== level) return;
+    if (serverDriven) {
+      const outcome = await cardMove<TowerView>(pool, "pick", { col });
+      if (outcome) applyServer(outcome);
+      return;
+    }
     gameSfx.click();
     const safe = Math.random() < WIN_CHANCE;
     const nb = board.map((r) => [...r]);
@@ -270,8 +303,7 @@ export default function TowerGame() {
                           key={c}
                           onClick={() => pick(r, c)}
                           disabled={!active}
-                          className={`flex h-6 sm:h-8 md:h-9 flex-1 items-center justify-center rounded transition-all ${
-                            cell === "egg"
+                          className={`flex h-6 sm:h-8 md:h-9 flex-1 items-center justify-center rounded transition-all ${cell === "egg"
                               ? "bg-[#00e701]/20 ring-2 ring-[#00e701]"
                               : cell === "dragon"
                                 ? "bg-[#ff3b4e]/20 ring-2 ring-[#ff3b4e]"
@@ -280,7 +312,7 @@ export default function TowerGame() {
                                   : active
                                     ? "-translate-y-0.5 bg-[#557086] shadow-[0_2px_0_#2f4553] hover:bg-[#6b8aa1]"
                                     : "bg-[#2f4553] shadow-[0_2px_0_#213743]"
-                          }`}
+                            }`}
                         >
                           {cell === "hidden" && (
                             <span className={`text-[10px] sm:text-xs font-bold ${active ? "text-white" : "text-[#7c93a5]"}`}>
@@ -312,11 +344,6 @@ export default function TowerGame() {
         </div>
 
         {/* Footer bar */}
-        <div className="hidden sm:flex shrink-0 items-center justify-between rounded-b-lg border-t border-[#213743] bg-[#0f212e] px-3 py-1.5 text-xs text-[#b1bad3]">
-          <span>⚙️ ⛶ 📊</span>
-          <span className="font-bold text-white">Stake</span>
-          <span>{playing ? `Next: ${nextMult.toFixed(2)}×` : "Fairness"}</span>
-        </div>
       </main>
       <GameOverOverlay open={!!result && !endDismissed} winAmount={result?.win ? result.amount : 0} result={pool.enabled ? `Provisional claim Rs. ${(result?.amount ?? 0).toFixed(2)}. Daily pool settlement pending.` : result?.win ? `You won Rs. ${result.amount.toFixed(2)}.` : ""} onPlayAgain={startGame} onClose={() => setEndDismissed(true)} />
     </div>

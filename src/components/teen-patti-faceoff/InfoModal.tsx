@@ -127,10 +127,6 @@ export function InfoModal({ open, onClose }: { open: boolean; onClose: () => voi
             </p>
           </section>
         </div>
-
-        <p className="mt-5 rounded-xl border border-amber-400/20 bg-amber-400/5 p-3 text-[11px] leading-relaxed text-amber-100/70">
-          <strong className="font-bold text-amber-200">Demo table.</strong> Chips have no monetary value.
-        </p>
       </div>
     </div>
   );

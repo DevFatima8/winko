@@ -277,7 +277,7 @@ export default function HomePage() {
   return (
     <main className="felt-bg h-full w-full overflow-hidden text-white flex flex-col justify-between px-1 sm:px-2 md:px-3 py-1 select-none">
       {live.controls}
-      <p className="shrink-0 text-center text-[10px] text-emerald-100/80">Server results · 10 winning slots per 100 distinct players · standard category returns summed, then capped at 2x total stake gross (stake included).</p>
+      <p className="shrink-0 text-center text-[10px] text-emerald-100/80">Standard category returns summed, then capped at 2x total stake gross (stake included).</p>
       <Confetti show={showConfetti} />
 
       <div className="mx-auto w-full max-w-5xl h-full flex flex-col justify-between overflow-hidden">

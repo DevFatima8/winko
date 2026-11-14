@@ -289,6 +289,7 @@ export default function RummyGame() {
     }
     setTimeout(
       () => {
+        pool.announce();
         setPhase("result");
         lockRef.current = true;
       },
@@ -582,7 +583,7 @@ export default function RummyGame() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex h-full min-h-0 flex-1 flex-col justify-between py-1 overflow-hidden"
+              className="flex h-full min-h-0 flex-1 flex-col justify-between py-1 overflow-y-auto"
             >
               {/* top strip */}
               <div className="flex items-center justify-center gap-1.5 px-2 pt-0.5 sm:gap-3 flex-wrap shrink-0">
@@ -643,32 +644,34 @@ export default function RummyGame() {
               <motion.div
                 animate={shake ? { x: [0, -10, 10, -6, 6, 0] } : { x: 0 }}
                 transition={{ duration: 0.4 }}
-                className="flex items-end justify-center px-2 pb-1 overflow-x-auto my-auto"
+                className="rummy-hand-scroll my-auto shrink-0 overflow-x-auto px-2 pt-8 pb-5"
               >
-                <AnimatePresence initial={false}>
-                  {freeCards.map((c, i) => {
-                    const isSel = selected.includes(c.id);
-                    const isHint = hintIds.includes(c.id);
-                    return (
-                      <motion.button
-                        key={`${dealKey}-${c.id}`}
-                        type="button"
-                        initial={{ y: -80, opacity: 0, rotate: -8 }}
-                        animate={{ y: isSel ? -16 : 0, opacity: 1, rotate: 0 }}
-                        exit={{ y: -60, scale: 0.6, opacity: 0, transition: { duration: 0.2 } }}
-                        transition={{ delay: i * 0.045, type: "spring", stiffness: 300, damping: 24 }}
-                        onClick={() => selectCard(c.id)}
-                        style={{ zIndex: isSel ? 60 : i }}
-                        className={`w-[36px] cursor-pointer sm:w-[48px] md:w-[56px] ${
-                          i > 0 ? "-ml-2.5 sm:-ml-3.5 md:-ml-4" : ""
-                        } rounded-[7px] ${isHint ? "card-hint" : ""}`}
-                        aria-label={`${RANK_LABEL[c.rank]} of ${c.suit}`}
-                      >
-                        <PlayingCard card={c} />
-                      </motion.button>
-                    );
-                  })}
-                </AnimatePresence>
+                <div className="mx-auto flex w-max items-end">
+                  <AnimatePresence initial={false}>
+                    {freeCards.map((c, i) => {
+                      const isSel = selected.includes(c.id);
+                      const isHint = hintIds.includes(c.id);
+                      return (
+                        <motion.button
+                          key={`${dealKey}-${c.id}`}
+                          type="button"
+                          initial={{ y: -80, opacity: 0, rotate: -8 }}
+                          animate={{ y: isSel ? -16 : 0, opacity: 1, rotate: 0 }}
+                          exit={{ y: -60, scale: 0.6, opacity: 0, transition: { duration: 0.2 } }}
+                          transition={{ delay: i * 0.045, type: "spring", stiffness: 300, damping: 24 }}
+                          onClick={() => selectCard(c.id)}
+                          style={{ zIndex: isSel ? 60 : i }}
+                          className={`w-[36px] shrink-0 cursor-pointer sm:w-[48px] md:w-[56px] ${
+                            i > 0 ? "-ml-2.5 sm:-ml-3.5 md:-ml-4" : ""
+                          } rounded-[7px] ${isHint ? "card-hint" : ""}`}
+                          aria-label={`${RANK_LABEL[c.rank]} of ${c.suit}`}
+                        >
+                          <PlayingCard card={c} />
+                        </motion.button>
+                      );
+                    })}
+                  </AnimatePresence>
+                </div>
               </motion.div>
 
               {/* action bar */}
@@ -770,7 +773,7 @@ export default function RummyGame() {
                   <span className="font-bold text-[#f6e3a1]">5 · Fold:</span> If the hand is busted, press{" "}
                   <span className="font-bold text-[#b23a2c]">FORFEIT</span> to surrender and deal the next hand.
                 </li>
-                <li>The server deals 30 fully meldable hands per 100 dealt wagers, including repeat players. Correct declaration is required; forfeiting a winning hand still pays zero.</li>
+                <li>Correct declaration is required; forfeiting a winning hand still pays zero.</li>
               </ol>
               <button
                 type="button"

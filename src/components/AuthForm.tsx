@@ -25,7 +25,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     if (s?.success) {
       setToast({ type: "success", message: s.success });
       if (s.redirect) {
-        const timer = setTimeout(() => window.location.assign(s.redirect), 1500);
+        const timer = setTimeout(() => window.location.replace(s.redirect), mode === "signup" ? 0 : 1500);
         return () => clearTimeout(timer);
       } else {
         const timer = setTimeout(() => setToast(null), 3000);
@@ -36,7 +36,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       const timer = setTimeout(() => setToast(null), 4000);
       return () => clearTimeout(timer);
     }
-  }, [state]);
+  }, [state, mode]);
 
   useEffect(() => {
     const r = new URLSearchParams(window.location.search).get("ref");

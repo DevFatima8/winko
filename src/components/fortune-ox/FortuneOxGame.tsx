@@ -121,6 +121,7 @@ export default function FortuneOxGame({ backHref = "/player" }: { backHref?: str
       });
     }
 
+    pool.announce();
     if (res.total > 0) gameSfx.win(); else gameSfx.lose();
     setResult(res);
     if (res.total > 0) {
@@ -435,7 +436,7 @@ export default function FortuneOxGame({ backHref = "/player" }: { backHref?: str
           <div className="max-h-[90vh] w-full max-w-[480px] overflow-y-auto rounded-3xl border-4 border-yellow-500 bg-gradient-to-b from-[#6b0a0a] to-[#2b0202] p-5" onClick={(e) => e.stopPropagation()}>
             <h3 className="mb-1 text-center text-xl font-black tracking-widest text-yellow-300">PAYTABLE</h3>
             <p className="mb-4 text-center text-[11px] text-yellow-100/70">3 of a kind on a payline · Wild substitutes all symbols · All 9 Wilds = x10</p>
-            <p className="mb-4 text-center text-[11px] text-yellow-100/70">Server-settled reels: 10 winning players per 100 distinct players. Eligible reel results return at most 2× the paid stake in total.</p>
+            <p className="mb-4 text-center text-[11px] text-yellow-100/70">Eligible reel results return at most 2× the paid stake in total.</p>
             <div className="grid grid-cols-3 gap-3">
               {SYMBOL_LIST.map((s) => (
                 <div key={s.id} className="flex flex-col items-center rounded-xl bg-black/30 p-2">

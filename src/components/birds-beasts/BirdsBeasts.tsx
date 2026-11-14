@@ -1,628 +1,205 @@
 "use client";
 
-import { notifyGameResult } from "@/lib/gameResultNotice";
-
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useGameBalance, usePoolLifecycle, usePoolRoundState } from "@/lib/walletSync";
-import { QueuedWager, useRoundQueue } from "../blast-off/useRoundQueue";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useMultiplayerGame } from "@/lib/useMultiplayerGame";
+import { usePoolLifecycle } from "@/lib/walletSync";
+import type { BirdsBeastsOutcome } from "@/lib/multiplayer-rules";
+import type { MultiplayerBet, MultiplayerState } from "@/lib/multiplayer-types";
 import {
-  ANIMALS,
-  BET_SECONDS,
-  RESULT_MS,
-  SLOT_COUNT,
-  START_BALANCE,
-  START_BANNER_MS,
-  TIMES_UP_MS,
-  WHEEL,
-  evaluateBets,
-  formatMoney,
-  round2,
-  slotsCoveredBy,
-  totalOf,
-  type BetKey,
-  type Bets,
+  ANIMALS, MIN_BET, SLOT_COUNT, TIMES_UP_MS, WHEEL,
+  evaluateBets, formatMoney, isBetKey, slotsCoveredBy, totalOf, type BetKey, type Bets,
 } from "./lib/game-config";
 import { useSounds } from "./hooks/useSounds";
-import "./birds-beasts.css";
 import Wheel from "./Wheel";
 import BetBoard from "./BetBoard";
 import ChipRail from "./ChipRail";
 import HistoryStrip from "./HistoryStrip";
 import RulesModal from "./RulesModal";
 import type { Phase, RoundRecord } from "./types";
+import "./birds-beasts.css";
 
-const LS = { balance: "bb_balance", history: "bb_history", round: "bb_round" } as const;
-
-interface Placement {
-  key: BetKey;
-  amount: number;
+function selections(bets: MultiplayerBet[]): Bets {
+  const result: Bets = {};
+  for (const bet of bets) {
+    if (bet.status !== "cancelled" && isBetKey(bet.option)) result[bet.option] = (result[bet.option] ?? 0) + bet.amount;
+  }
+  return result;
 }
 
-interface Toast {
-  id: number;
-  text: string;
-  kind: "info" | "error" | "win";
+function record(round: number, outcome: BirdsBeastsOutcome, bets: Bets = {}): RoundRecord {
+  return { round, slot: outcome.slot, animal: outcome.animal, ...evaluateBets(bets, outcome.slot), at: 0 };
 }
 
-function isRecord(value: unknown): value is RoundRecord {
-  if (!value || typeof value !== "object") return false;
-  const v = value as Record<string, unknown>;
-  return (
-    typeof v.round === "number" &&
-    typeof v.slot === "number" &&
-    typeof v.animal === "string" &&
-    typeof v.totalBet === "number" &&
-    typeof v.payout === "number" &&
-    typeof v.net === "number"
-  );
+const legacyKey = "wx:browser-active:birds-beasts:main";
+const hasLegacyWager = () => Boolean(localStorage.getItem(legacyKey) || localStorage.getItem(`${legacyKey}:request`));
+function subscribeLegacy(onChange: () => void) {
+  window.addEventListener("wx:browser-resumed", onChange);
+  window.addEventListener("wx:balance-update", onChange);
+  return () => {
+    window.removeEventListener("wx:browser-resumed", onChange);
+    window.removeEventListener("wx:balance-update", onChange);
+  };
 }
 
 export default function BirdsBeasts({ backHref = "/player" }: { backHref?: string }) {
+  const legacy = usePoolLifecycle("birds-beasts");
   const sounds = useSounds();
-
-  const [ready, setReady] = useState(false);
-  const [phase, setPhase] = useState<Phase>("betting");
-  const [round, setRound] = useState(1);
-  const [secondsLeft, setSecondsLeft] = useState(BET_SECONDS);
-  const [showStartBanner, setShowStartBanner] = useState(true);
-  const [balance] = useGameBalance("birds-beasts", START_BALANCE);
-  const pool = usePoolLifecycle("birds-beasts");
-  const [bets, setBetsState] = usePoolRoundState<Bets>("birds-beasts", "bets", {});
-  const [lastBets, setLastBets] = useState<Bets>({});
-  const [undoStack, setUndoStack] = usePoolRoundState<Placement[]>("birds-beasts", "undoStack", []);
-  const [chip, setChip] = useState<number>(50);
-  const [activeSlot, setActiveSlot] = useState<number | null>(null);
-  const [resultSlot, setResultSlot] = useState<number | null>(null);
-  const [result, setResult] = useState<RoundRecord | null>(null);
-  const [lastResult, setLastResult] = useState<RoundRecord | null>(null);
-  const [history, setHistory] = useState<RoundRecord[]>([]);
-  const [toast, setToast] = useState<Toast | null>(null);
+  const [chip, setChip] = useState<number>(MIN_BET);
   const [rulesOpen, setRulesOpen] = useState(false);
-
-  const betsRef = useRef<Bets>(bets);
-  const roundRef = useRef(1);
-  const positionRef = useRef(0);
-  const targetRef = useRef(0);
-  const idleRoundRef = useRef<{ round: number; id: string } | null>(null);
-  const phaseRef = useRef<Phase>("betting");
-  const settledRoundRef = useRef(0);
-  const toastTimer = useRef<number | null>(null);
-  const queue = useRoundQueue<Placement>();
-  const balanceRef = useRef(balance);
-  useEffect(() => { balanceRef.current = balance; }, [balance]);
-  useEffect(() => () => {
-    if (toastTimer.current) window.clearTimeout(toastTimer.current);
-  }, []);
-
-  const setBets = useCallback((next: Bets) => {
-    betsRef.current = next;
-    setBetsState(next);
-  }, []);
-
-  const showToast = useCallback((text: string, kind: Toast["kind"] = "info") => {
-    setToast({ id: Date.now(), text, kind });
-    if (toastTimer.current) window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToast(null), 1800);
-  }, []);
-
-  /* ---------- load persisted state ---------- */
-  useEffect(() => {
-    try {
-      const h: unknown = JSON.parse(window.localStorage.getItem(LS.history) ?? "[]");
-      if (Array.isArray(h)) setHistory(h.filter(isRecord).slice(0, 50));
-      const r = Number(window.localStorage.getItem(LS.round));
-      if (Number.isFinite(r) && r >= 1) {
-        roundRef.current = Math.floor(r);
-        setRound(Math.floor(r));
-      }
-    } catch {
-      /* ignore corrupted storage */
+  const [message, setMessage] = useState("");
+  const [lastBets, setLastBets] = useState<Bets>({});
+  const [lastResult, setLastResult] = useState<RoundRecord | null>(null);
+  const recovering = useSyncExternalStore(subscribeLegacy, hasLegacyWager, () => false);
+  const reportedRound = useRef(0);
+  const lastTick = useRef(-1);
+  const previousSlot = useRef<number | null>(null);
+  const onState = useCallback((snapshot: MultiplayerState<BirdsBeastsOutcome>) => {
+    if (snapshot.round.phase !== "result" || !snapshot.round.result || reportedRound.current === snapshot.round.roundNo) return;
+    reportedRound.current = snapshot.round.roundNo;
+    const accepted = selections(snapshot.myBets);
+    const settled = record(snapshot.round.roundNo, snapshot.round.result, accepted);
+    setLastResult(settled);
+    lastTick.current = -1;
+    if (settled.totalBet > 0) {
+      setLastBets(accepted);
+      if (settled.net > 0) sounds.win();
+      else sounds.lose();
     }
-    const t = window.setTimeout(() => setReady(true), 900);
-    return () => window.clearTimeout(t);
-  }, []);
-
-  /* ---------- persist ---------- */
-  useEffect(() => {
-    if (!ready) return;
-    try {
-      window.localStorage.setItem(LS.balance, String(balance));
-    } catch {
-      /* ignore */
-    }
-  }, [balance, bets, ready]);
-
-  useEffect(() => {
-    if (!ready) return;
-    try {
-      window.localStorage.setItem(LS.history, JSON.stringify(history.slice(0, 50)));
-    } catch {
-      /* ignore */
-    }
-  }, [history, ready]);
-
-  useEffect(() => {
-    if (!ready) return;
-    try {
-      window.localStorage.setItem(LS.round, String(round));
-    } catch {
-      /* ignore */
-    }
-  }, [round, ready]);
-
-  /* ---------- round state machine ---------- */
-  useEffect(() => {
-    if (!ready) return;
-    const timers: number[] = [];
-    let cancelled = false;
-    const later = (fn: () => void, ms: number) => {
-      timers.push(window.setTimeout(fn, ms));
-    };
-    const cleanup = () => {
-      cancelled = true;
-      timers.forEach((t) => window.clearTimeout(t));
-    };
-
-    if (phase === "betting") {
-      setSecondsLeft(BET_SECONDS);
-      setShowStartBanner(true);
-      later(() => setShowStartBanner(false), START_BANNER_MS);
-
-      const endAt = Date.now() + BET_SECONDS * 1000;
-      let shown = BET_SECONDS;
-      const interval = window.setInterval(() => {
-        const remain = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
-        if (remain !== shown) {
-          shown = remain;
-          setSecondsLeft(remain);
-          if (remain > 0 && remain <= 3) sounds.countdown();
-        }
-        if (remain <= 0) {
-          if (pool.busy) return;
-          window.clearInterval(interval);
-          phaseRef.current = "closed";
-          setPhase("closed");
-        }
-      }, 100);
-
-      return () => {
-        window.clearInterval(interval);
-        cleanup();
-      };
-    }
-
-    if (phase === "closed") {
-      sounds.timesUp();
-      const snapshot: Bets = { ...betsRef.current };
-      if (totalOf(snapshot) > 0) setLastBets(snapshot);
-      const pending = totalOf(snapshot) > 0
-        ? pool.resolveServer({ bets: snapshot }, { holdBalance: true }).then(outcome => {
-          if (!outcome) throw new Error("Server result confirmation failed. Retry before betting.");
-          return (outcome as { slot: number }).slot;
-        }) : (async () => {
-          if (idleRoundRef.current?.round !== roundRef.current) {
-            idleRoundRef.current = { round: roundRef.current, id: crypto.randomUUID() };
-          }
-          const response = await fetch("/api/spin", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ roundId: idleRoundRef.current.id }),
-          });
-          const outcome = await response.json();
-          if (!response.ok) throw new Error(outcome.error || "Server result unavailable.");
-          if (!Number.isInteger(outcome.slot) || outcome.slot < 0 || outcome.slot >= SLOT_COUNT) {
-            throw new Error("Invalid server round result.");
-          }
-          return outcome.slot as number;
-        })();
-      void Promise.all([pending, new Promise<void>(resolve => later(resolve, TIMES_UP_MS))])
-        .then(([slot]) => {
-          if (cancelled) return;
-          targetRef.current = slot;
-          phaseRef.current = "spinning";
-          setPhase("spinning");
-        }).catch(error => {
-          if (!cancelled) showToast(error instanceof Error ? error.message : "Server result unavailable.", "error");
-        });
-      return cleanup;
-    }
-
-    if (phase === "spinning") {
-      const target = targetRef.current;
-      const start = positionRef.current;
-      const steps = 2 * SLOT_COUNT + ((target - start + SLOT_COUNT) % SLOT_COUNT);
-      let k = 0;
-
-      const step = () => {
-        if (cancelled) return;
-        k += 1;
-        const pos = (start + k) % SLOT_COUNT;
-        positionRef.current = pos;
-        setActiveSlot(pos);
-        sounds.tick();
-        if (k >= steps) {
-          sounds.stop();
-          later(() => {
-            if (!cancelled) {
-              phaseRef.current = "result";
-              setPhase("result");
-            }
-          }, 500);
-          return;
-        }
-        const p = k / steps;
-        later(step, 26 + 290 * p * p * p);
-      };
-
-      later(step, 120);
-      return cleanup;
-    }
-
-    if (phase === "result") {
-      const slot = positionRef.current;
-      const currentRound = roundRef.current;
-
-      if (settledRoundRef.current !== currentRound) {
-        settledRoundRef.current = currentRound;
-        const ev = evaluateBets(betsRef.current, slot);
-        const record: RoundRecord = {
-          round: currentRound,
-          slot,
-          animal: WHEEL[slot],
-          totalBet: ev.totalBet,
-          payout: ev.payout,
-          net: ev.net,
-          winningKeys: ev.winningKeys,
-          at: Date.now(),
-        };
-        setResultSlot(slot);
-        setResult(record);
-        setLastResult(record);
-        setHistory((h) => [record, ...h].slice(0, 50));
-        pool.releaseBalance();
-
-        if (ev.totalBet > 0) {
-          notifyGameResult("birds-beasts", String(currentRound), ev.payout, pool.enabled);
-          if (ev.net > 0) {
-            if (ev.payout >= ev.totalBet * 8) sounds.bigWin();
-            else sounds.win();
-          } else {
-            sounds.lose();
-          }
-        }
-      }
-
-      later(async () => {
-        if (cancelled) return;
-        setBets({});
-        setUndoStack([]);
-        const queued = queue.consume();
-        if (queued) {
-          if (Number.isFinite(queued.amount) && queued.amount >= 50 && queued.amount <= balanceRef.current) {
-            if (!await pool.start(queued.amount)) return;
-            setBets({ [queued.key]: queued.amount });
-            setUndoStack([queued]);
-            queue.setStatus("Bet accepted for this round");
-          } else queue.setStatus("Queued bet rejected — invalid stake or insufficient balance");
-        }
-        setResultSlot(null);
-        setActiveSlot(null);
-        setResult(null);
-        roundRef.current = currentRound + 1;
-        setRound(roundRef.current);
-        phaseRef.current = "betting";
-        setPhase("betting");
-      }, RESULT_MS);
-      return cleanup;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, ready]);
-
-  /* ---------- betting actions ---------- */
-  const placeBet = async (key: BetKey) => {
-    sounds.unlock();
-    if (!Number.isFinite(chip) || chip < 50) {
-      sounds.error();
-      showToast("Minimum bet is Rs. 50. Please place at least Rs. 50.", "error");
-      return;
-    }
-    if (chip > balanceRef.current) {
-      sounds.error();
-      showToast("Insufficient balance", "error");
-      return;
-    }
-    if (phaseRef.current !== "betting") {
-      queue.enqueue({ key, amount: chip });
-      return;
-    }
-    pool.checkpoint({ bets: { ...betsRef.current, [key]: round2((betsRef.current[key] ?? 0) + chip) }, undoStack: [...undoStack, { key, amount: chip }] });
-    if (!await pool.stake(chip)) return;
-    setBets({ ...betsRef.current, [key]: round2((betsRef.current[key] ?? 0) + chip) });
-    setUndoStack((s) => [...s, { key, amount: chip }]);
-    sounds.chip();
-  };
-
-  const undoBet = async () => {
-    if (phase !== "betting" || undoStack.length === 0) return;
-    const last = undoStack[undoStack.length - 1];
-    const next: Bets = { ...betsRef.current };
-    const remaining = round2((next[last.key] ?? 0) - last.amount);
-    if (remaining > 0) next[last.key] = remaining;
-    else delete next[last.key];
-    pool.checkpoint({ bets: next, undoStack: undoStack.slice(0, -1) });
-    if (!await pool.reduce(last.amount)) return;
-    setBets(next);
-    setUndoStack((s) => s.slice(0, -1));
-    sounds.click();
-  };
-
-  const clearBets = async () => {
-    if (phase !== "betting") return;
-    const refund = totalOf(betsRef.current);
-    if (refund <= 0) return;
-    if (!await pool.refund()) return;
-    setBets({});
-    setUndoStack([]);
-    sounds.click();
-  };
-
-  const rebet = async () => {
-    if (phase !== "betting") return;
-    const total = totalOf(lastBets);
-    if (total <= 0) return;
-    if (total < 50) {
-      sounds.error();
-      showToast("Minimum bet is Rs. 50. Please place at least Rs. 50.", "error");
-      return;
-    }
-    if (total > balanceRef.current) {
-      sounds.error();
-      showToast("Insufficient balance for rebet", "error");
-      return;
-    }
-    const next: Bets = { ...betsRef.current };
-    const added: Placement[] = [];
-    for (const [key, amount] of Object.entries(lastBets) as [BetKey, number | undefined][]) {
-      if (!amount) continue;
-      next[key] = round2((next[key] ?? 0) + amount);
-      added.push({ key, amount });
-    }
-    pool.checkpoint({ bets: next, undoStack: [...undoStack, ...added] });
-    if (!await pool.stake(total)) return;
-    setBets(next);
-    setUndoStack((s) => [...s, ...added]);
-    sounds.chip();
-  };
-
-  const doubleBets = async () => {
-    if (phase !== "betting") return;
-    const total = totalOf(betsRef.current);
-    if (total <= 0) return;
-    if (total > balanceRef.current) {
-      sounds.error();
-      showToast("Insufficient balance to double", "error");
-      return;
-    }
-    const next: Bets = {};
-    const added: Placement[] = [];
-    for (const [key, amount] of Object.entries(betsRef.current) as [BetKey, number | undefined][]) {
-      if (!amount) continue;
-      next[key] = round2(amount * 2);
-      added.push({ key, amount });
-    }
-    pool.checkpoint({ bets: next, undoStack: [...undoStack, ...added] });
-    if (!await pool.stake(total)) return;
-    setBets(next);
-    setUndoStack((s) => [...s, ...added]);
-    sounds.chip();
-  };
-
-  const toggleMute = () => {
-    sounds.unlock();
-    sounds.setMuted(!sounds.muted);
-  };
-
-  const coveredSlots = useMemo(() => {
-    const set = new Set<number>();
-    for (const [key, amount] of Object.entries(bets) as [BetKey, number | undefined][]) {
-      if (amount) slotsCoveredBy(key).forEach((i) => set.add(i));
-    }
-    return set;
-  }, [bets]);
-
+  }, [sounds]);
+  const live = useMultiplayerGame<BirdsBeastsOutcome>("birds-beasts", onState);
+  const state = live.state;
+  const round = state?.round;
+  const bets = useMemo(() => selections(state?.myBets ?? []), [state?.myBets]);
   const totalBet = totalOf(bets);
-  const locked = phase !== "betting";
+  const now = live.now;
+  const phase: Phase = !round || round.phase === "betting" ? "betting"
+    : round.phase === "result" ? "result"
+      : now < round.bettingEndsAt + TIMES_UP_MS ? "closed" : "spinning";
+  const secondsLeft = round ? Math.max(0, Math.ceil((round.bettingEndsAt - now) / 1000)) : 0;
+  const outcome = round?.result;
+  const progress = round ? Math.max(0, Math.min(1,
+    (now - round.bettingEndsAt - TIMES_UP_MS) / (round.resultAt - round.bettingEndsAt - TIMES_UP_MS),
+  )) : 0;
+  const activeSlot = phase === "spinning" && outcome
+    ? Math.floor((2 * SLOT_COUNT + outcome.slot) * (1 - Math.pow(1 - progress, 3))) % SLOT_COUNT : null;
+  const result = phase === "result" && round && outcome ? record(round.roundNo, outcome, bets) : null;
+  const history = (state?.history ?? []).map(item =>
+    lastResult?.round === item.roundNo ? lastResult : record(item.roundNo, item.result),
+  );
+  const coveredSlots = useMemo(() => {
+    const slots = new Set<number>();
+    for (const key of Object.keys(bets)) if (isBetKey(key)) slotsCoveredBy(key).forEach(slot => slots.add(slot));
+    return slots;
+  }, [bets]);
+  const locked = !state || phase !== "betting" || live.busy || recovering;
+  const poolPending = state?.myBets.some(bet => bet.poolPending) ?? false;
 
-  /* ---------- splash ---------- */
-  if (!ready) {
-    return (
-      <main className="flex h-full w-full flex-1 min-h-0 flex-col items-center justify-center gap-3 px-6 text-center select-none bg-[#071a13]">
-        <div className="splash-ring" />
-        <h1 className="font-display text-gold text-2xl sm:text-3xl font-bold tracking-wide">Birds &amp; Beasts</h1>
-        <p className="text-xs sm:text-sm uppercase tracking-[0.3em] text-emerald-200/70">Loading game…</p>
-      </main>
-    );
-  }
+  const recover = async () => {
+    if (legacy.busy) return;
+    try {
+      await legacy.resume();
+      const key = "wx:browser-active:birds-beasts:main";
+      if (localStorage.getItem(key)) {
+        const saved = JSON.parse(localStorage.getItem(`${key}:snapshot`) ?? "{}");
+        if (!saved.bets || totalOf(saved.bets) <= 0) throw new Error("Saved animal stakes are missing. Contact support.");
+        if (!await legacy.resolveServer({ bets: saved.bets })) return;
+        legacy.releaseBalance();
+      }
+      if (localStorage.getItem(`${key}:request`)) throw new Error("Saved wager still needs confirmation. Retry after reconnecting.");
+      setMessage("Saved wager confirmed. Join the next open round.");
+      void live.refresh();
+    } catch (error) {
+      console.error("[birds saved wager]", error);
+      setMessage(error instanceof Error ? error.message : "Saved wager recovery failed.");
+    }
+  };
+
+  useEffect(() => {
+    if (!round || phase !== "betting" || secondsLeft > 3 || secondsLeft <= 0 || lastTick.current === secondsLeft) return;
+    lastTick.current = secondsLeft;
+    sounds.countdown();
+  }, [round, phase, secondsLeft, sounds]);
+
+  useEffect(() => {
+    if (activeSlot !== null && activeSlot !== previousSlot.current) sounds.tick();
+    previousSlot.current = activeSlot;
+  }, [activeSlot, sounds]);
+
+  const placeBet = async (key: BetKey, amount = chip) => {
+    sounds.unlock();
+    if (locked) { setMessage("Betting is closed or a request is pending. Wait for the next open round."); return; }
+    if (!Number.isFinite(amount) || amount < MIN_BET) { setMessage(`Minimum bet is Rs. ${MIN_BET}.`); return; }
+    const reply = await live.place(key, amount);
+    if ("ok" in reply) { sounds.chip(); setMessage("Bet accepted."); }
+  };
+  const cancel = async (lastOnly: boolean) => {
+    if (locked || !state) return;
+    const last = state.myBets.filter(bet => bet.status === "pending").at(-1);
+    if (lastOnly && !last) return;
+    await live.cancel(state.round.roundNo, lastOnly ? last?.id : undefined);
+  };
+  const repeat = async (source: Bets) => {
+    if (locked) return;
+    if (totalOf(source) > (state?.balance ?? 0)) { setMessage("Insufficient balance."); return; }
+    for (const [key, amount] of Object.entries(source)) {
+      if (!isBetKey(key) || !amount) continue;
+      const reply = await live.place(key, amount);
+      if ("error" in reply) { setMessage(reply.error); return; }
+    }
+    sounds.chip();
+  };
 
   return (
-    <main className="game-root relative flex h-full w-full     flex-1 min-h-0 flex-col overflow-y-auto overflow-x-hidden lg:overflow-hidden select-none bg-[#071a13] [-webkit-overflow-scrolling:touch]">
-      {/* ---------- top header bar ---------- */}
-      <header
-        className="flex h-9 sm:h-10 shrink-0 items-center justify-between border-b px-2 sm:px-3 z-30"
-        style={{ background: "rgba(4, 26, 18, 0.95)", borderColor: "rgba(255, 255, 255, 0.1)" }}
-      >
-        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-          <Link
-            href={backHref}
-            title="Back / Exit"
-            className="flex h-6.5 w-6.5 sm:h-7 sm:w-7 shrink-0 items-center justify-center rounded-lg bg-[#dc2626] hover:bg-[#b91c1c] active:bg-[#991b1b] border border-[#ef4444] text-white shadow-md active:translate-y-[1px] transition-all cursor-pointer"
-          >
-            <span className="text-xs sm:text-sm font-black">←</span>
-          </Link>
-
-          <div className="relative h-7 w-8 sm:h-8 sm:w-9 shrink-0">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/animals/eagle.png" alt="" className="absolute left-0 top-0 h-6 w-6 sm:h-7 sm:w-7 rounded-full object-cover ring-2 ring-sky-400" />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/animals/lion.png" alt="" className="absolute bottom-0 right-0 h-6 w-6 sm:h-7 sm:w-7 rounded-full object-cover ring-2 ring-rose-400" />
-          </div>
-
-          <div className="min-w-0 leading-none">
-            <h1 className="font-display text-gold whitespace-nowrap text-xs sm:text-sm md:text-base font-bold tracking-wide drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]">
-              Birds &amp; Beasts
-            </h1>
-            <span className="block whitespace-nowrap text-[8px] sm:text-[9px] font-semibold uppercase tracking-[0.2em] text-emerald-200/60">
-              Round #{round}
-            </span>
-          </div>
+    <main className="game-root relative flex h-full min-h-0 w-full flex-col overflow-y-auto bg-[#071a13] text-white lg:overflow-hidden">
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-[#041a12] px-3 py-2">
+        <div className="flex items-center gap-2">
+          <Link href={backHref} className="rounded-lg bg-red-700 px-3 py-2 text-xs font-bold">Back</Link>
+          <div><h1 className="font-display text-gold text-sm font-bold">Birds &amp; Beasts</h1>
+            <p className="text-[10px] text-emerald-200">LIVE / Round #{round?.roundNo ?? "-"}</p></div>
         </div>
-
-        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-          <div className="balance-pill !h-6.5 sm:!h-7 !text-[11px] sm:!text-xs">
-            <span className="coin !h-4.5 !w-4.5 !text-[8px] font-black">Rs.</span>
-            <span className="tabular-nums font-bold">{formatMoney(balance)}</span>
-          </div>
-
-          <button
-            type="button"
-            onClick={toggleMute}
-            className="icon-btn !h-6.5 !w-6.5 sm:!h-7 sm:!w-7 hover:border-emerald-400 hover:bg-emerald-600/40 hover:text-white transition cursor-pointer"
-            aria-label={sounds.muted ? "Unmute" : "Mute"}
-          >
-            {sounds.muted ? (
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
-                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3 3-3-1.4-1.4-3 3-3-3L10.7 9l3 3-3 3 1.4 1.4 3-3 3 3 1.4-1.4-3-3z" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
-                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05A4.5 4.5 0 0 0 16.5 12zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06A9 9 0 0 0 14 3.23z" />
-              </svg>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setRulesOpen(true)}
-            className="icon-btn !h-6.5 !w-6.5 sm:!h-7 sm:!w-7 hover:border-blue-400 hover:bg-blue-600/40 hover:text-white transition cursor-pointer"
-            aria-label="Rules"
-          >
-            <span className="font-display text-xs sm:text-sm font-bold">?</span>
-          </button>
+        <div className="flex items-center gap-2 text-xs">
+          <span className="font-bold text-yellow-200">Rs. {formatMoney(state?.balance ?? 0)}</span>
+          <button type="button" onClick={() => sounds.setMuted(!sounds.muted)} className="icon-btn" aria-label="Toggle sound">{sounds.muted ? "Off" : "On"}</button>
+          <button type="button" onClick={() => setRulesOpen(true)} className="icon-btn" aria-label="Rules">?</button>
         </div>
       </header>
-
-      {/* ---------- main interactive workspace ---------- */}
-      <div className="flex flex-none lg:flex-1 lg:min-h-0 w-full lg:overflow-hidden flex-col lg:flex-row gap-2 lg:gap-4 p-1.5 pb-24 sm:p-2 sm:pb-24 lg:pb-2">
-        {/* LEFT: WHEEL + HISTORY */}
-        <section className="relative flex flex-col items-center justify-between min-h-0 shrink-0 lg:shrink lg:flex-1 lg:max-w-[48%] xl:max-w-[46%]">
-          <div className="relative h-[min(78vw,320px)] flex-none lg:h-auto lg:flex-1 lg:min-h-[130px] lg:max-h-[calc(100%-52px)] w-full flex items-center justify-center select-none">
-            <Wheel
-              phase={phase}
-              secondsLeft={secondsLeft}
-              round={round}
-              activeSlot={activeSlot}
-              resultSlot={resultSlot}
-              result={result}
-              showStartBanner={showStartBanner}
-              coveredSlots={coveredSlots}
-            />
+      {(recovering || live.error || message) && <div role="status" className="shrink-0 bg-black/40 px-3 py-1 text-center text-xs text-yellow-200">
+        {recovering ? "Confirm your saved wager before joining the live table." : live.error || message}
+        {recovering && <button type="button" onClick={() => void recover()} className="ml-2 underline">Confirm saved wager</button>}
+      </div>}
+      {!state ? <div role="status" className="grid flex-1 place-content-center gap-3 text-center">
+        <p>Connecting to the live table...</p>
+        <button type="button" onClick={() => void live.refresh()} className="rounded bg-emerald-800 px-4 py-2">Retry connection</button>
+      </div> : <div className="flex min-h-0 flex-1 flex-col gap-2 p-2 pb-12 lg:flex-row lg:pb-2">
+        <section className="flex shrink-0 flex-col items-center lg:min-h-0 lg:flex-1">
+          <div className="relative flex h-[min(78vw,320px)] w-full items-center justify-center lg:min-h-0 lg:flex-1">
+            <Wheel phase={phase} secondsLeft={secondsLeft} round={state.round.roundNo} activeSlot={activeSlot}
+              resultSlot={result?.slot ?? null} result={result} showStartBanner={phase === "betting" && secondsLeft >= 9} coveredSlots={coveredSlots} />
           </div>
-
-          <div className="w-full shrink-0 max-w-[480px]">
-            <HistoryStrip history={history} />
-          </div>
-
-          {toast && (
-            <div
-              key={toast.id}
-              className={`toast ${toast.kind === "error" ? "toast-error" : toast.kind === "win" ? "toast-win" : ""}`}
-              role="status"
-            >
-              {toast.text}
-            </div>
-          )}
+          <div className="w-full max-w-[480px] shrink-0"><HistoryStrip history={history} /></div>
         </section>
-
-        {/* RIGHT: BETTING CONSOLE */}
-        <section className="flex flex-none lg:flex-1 lg:min-h-0 flex-col justify-between lg:overflow-hidden max-w-[620px] w-full mx-auto gap-1.5 lg:gap-0">
-          <div className="shrink-0 mb-0.5 sm:mb-1 flex items-center justify-between px-1">
-            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-200/70">
-              {phase === "betting" ? "Place your bets" : phase === "closed" ? "Time's up" : phase === "spinning" ? "Good luck!" : "Result"}
-            </span>
-            <span className="text-[10px] sm:text-[11px] font-semibold text-white/60">
-              Total bet: <span className="text-gold font-bold tabular-nums">{formatMoney(totalBet)} Rs.</span>
-            </span>
+        <section className="mx-auto flex w-full max-w-[620px] flex-col gap-2 lg:min-h-0 lg:flex-1">
+          <div className="flex shrink-0 justify-between text-xs text-emerald-200">
+            <span>{phase === "betting" ? `Place your bets / ${secondsLeft}s` : "Betting closed / wait for next round"}</span>
+            <span>Bet: Rs. {formatMoney(totalBet)}</span>
           </div>
-
-          <div className="flex-none lg:flex-1 lg:min-h-0 flex flex-col justify-center">
-            <BetBoard
-              bets={bets}
-              phase={phase}
-              winningKeys={result?.winningKeys ?? []}
-              resultAnimal={result?.animal ?? null}
-              onBet={placeBet}
-            />
-            <QueuedWager {...queue} />
+          <div className="flex flex-1 flex-col justify-center lg:min-h-0">
+            <BetBoard bets={bets} phase={phase} winningKeys={result?.winningKeys ?? []}
+              resultAnimal={result?.animal ?? null} onBet={key => void placeBet(key)} />
           </div>
-
-          <div className="shrink-0">
-            <ChipRail
-              selected={chip}
-              locked={locked}
-              canUndo={undoStack.length > 0}
-              canClear={totalBet > 0}
-              canRebet={totalOf(lastBets) > 0}
-              canDouble={totalBet > 0}
-              onSelect={(value) => {
-                sounds.unlock();
-                sounds.click();
-                setChip(value);
-              }}
-              onUndo={undoBet}
-              onClear={clearBets}
-              onRebet={rebet}
-              onDouble={doubleBets}
-            />
-          </div>
-
-          <div className="panel shrink-0 mt-1 sm:mt-1.5 grid grid-cols-3 divide-x divide-white/10 py-1 sm:py-1.5 text-center">
-            <Stat label="Total Bet" value={formatMoney(totalBet)} />
-            <Stat
-              label={pool.enabled ? "Provisional claim" : "Last Win"}
-              value={lastResult && lastResult.payout > 0 ? `+${formatMoney(lastResult.payout)}` : "—"}
-              tone={lastResult && lastResult.payout > 0 ? "win" : "default"}
-            />
-            <Stat label="Last Result" value={lastResult ? ANIMALS[lastResult.animal].name : "—"} />
+          <ChipRail selected={chip} locked={locked} canUndo={totalBet > 0} canClear={totalBet > 0}
+            canRebet={totalOf(lastBets) > 0} canDouble={totalBet > 0} onSelect={setChip}
+            onUndo={() => void cancel(true)} onClear={() => void cancel(false)}
+            onRebet={() => void repeat(lastBets)} onDouble={() => void repeat(bets)} />
+          <div className="panel grid shrink-0 grid-cols-3 gap-1 py-2 text-center text-xs">
+            <div>Bet<br />Rs. {formatMoney(totalBet)}</div>
+            <div>{poolPending ? "Provisional claim" : "Last return"}<br />Rs. {formatMoney(lastResult?.payout ?? 0)}</div>
+            <div>Last result<br />{lastResult ? ANIMALS[WHEEL[lastResult.slot]].name : "-"}</div>
           </div>
         </section>
-      </div>
-
+      </div>}
       <RulesModal open={rulesOpen} onClose={() => setRulesOpen(false)} />
     </main>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  tone = "default",
-  capitalize = false,
-}: {
-  label: string;
-  value: string;
-  tone?: "default" | "win";
-  capitalize?: boolean;
-}) {
-  return (
-    <div className="flex flex-col items-center px-1">
-      <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">{label}</span>
-      <span
-        className={`font-display truncate text-base font-bold tabular-nums ${tone === "win" ? "text-emerald-300" : "text-white"} ${capitalize ? "capitalize" : ""
-          }`}
-      >
-        {value}
-      </span>
-    </div>
   );
 }

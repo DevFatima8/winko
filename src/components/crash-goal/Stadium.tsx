@@ -1,8 +1,10 @@
+import type { Ref } from "react";
+
 /**
  * Daytime sky backdrop: bright blue sky, fluffy clouds and hot air balloons,
  * matching the reference art direction.
  */
-export function Stadium() {
+export function Stadium({ sceneryRef }: { sceneryRef?: Ref<SVGPatternElement> }) {
   return (
     <div className="absolute inset-0 overflow-hidden" aria-hidden="true">
       {/* sky */}
@@ -49,7 +51,7 @@ export function Stadium() {
             <stop offset="0%" stopColor="#c78b4c" />
             <stop offset="100%" stopColor="#8b5a28" />
           </linearGradient>
-        </defs>
+          <g id="cg-sky-art">
 
         {/* far cloud band */}
         <g opacity="0.55">
@@ -126,6 +128,14 @@ export function Stadium() {
             <ellipse cx="16" cy="-26" rx="56" ry="32" fill="url(#cg-cloud)" />
           </g>
         </g>
+          </g>
+          <pattern ref={sceneryRef} id="cg-scenery" width="1600" height="1100" patternUnits="userSpaceOnUse">
+            {[-1600, 0, 1600].map((x) => (
+              <use key={x} href="#cg-sky-art" transform={`translate(${x} 0)`} />
+            ))}
+          </pattern>
+        </defs>
+        <rect width="1200" height="700" fill="url(#cg-scenery)" />
       </svg>
     </div>
   );

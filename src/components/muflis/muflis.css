@@ -1,8 +1,9 @@
 .muflis-container {
-  height: 100%;
+  height: auto;
   width: 100%;
-  min-height: 0;
-  overflow: hidden;
+  min-height: 100%;
+  flex: 0 0 auto;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   --felt-1: #0b6b3a;
@@ -10,7 +11,7 @@
   --gold: #f4c542;
 }
 
-@keyframes cardDeal {
+@keyframes muflisCardDeal {
   0% {
     transform: translateY(-120px) rotate(-18deg) scale(0.7);
     opacity: 0;
@@ -21,7 +22,7 @@
   }
 }
 
-@keyframes flipIn {
+@keyframes muflisFlipIn {
   0% {
     transform: rotateY(90deg);
     opacity: 0.2;
@@ -80,10 +81,10 @@
 }
 
 .muflis-container .animate-deal {
-  animation: cardDeal 0.45s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  animation: muflisCardDeal 0.45s cubic-bezier(0.2, 0.8, 0.3, 1) both;
 }
 .muflis-container .animate-flip {
-  animation: flipIn 0.5s ease both;
+  animation: muflisFlipIn 0.5s ease both;
 }
 .muflis-container .animate-pop {
   animation: popIn 0.4s cubic-bezier(0.2, 0.8, 0.3, 1) both;
@@ -95,9 +96,35 @@
   animation: chipPulse 1.6s infinite;
 }
 
-.muflis-container .felt {
+.muflis-container .muflis-felt {
+  height: auto;
+  min-height: 0;
+  flex: 1 0 auto;
+  overflow: visible;
   background:
     radial-gradient(ellipse at 50% 30%, var(--felt-1) 0%, var(--felt-2) 70%, #043d20 100%);
+}
+
+.muflis-container .muflis-layout {
+  display: grid;
+  grid-template-rows: auto auto auto;
+  gap: 12px;
+  min-width: 0;
+  flex: 1 0 auto;
+}
+
+.muflis-container .muflis-table {
+  display: grid;
+  grid-template-rows: auto auto auto;
+  gap: 16px;
+  padding: 16px;
+  min-width: 0;
+  min-height: 0;
+  overflow: visible;
+}
+
+.muflis-container .muflis-controls {
+  min-width: 0;
 }
 
 .muflis-container .gold-text {

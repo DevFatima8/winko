@@ -155,6 +155,7 @@ export default function RedVsBlackGame() {
       setShowResult(true);
 
       if (bet) {
+        pool.announce();
         if (data.isWin) gameSfx.win();
         else gameSfx.lose();
         if (data.isWin) {

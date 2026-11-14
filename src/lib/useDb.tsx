@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getCurrentUser, type CurrentUser } from "./auth";
 import { activateBetPresets } from "./betPresets";
+import { presentedWalletBalance, walletRevealRevision } from "./walletReveal";
 
 /** Run an async server-backed loader on mount and whenever it is explicitly refreshed. */
 export function useDb<T>(loader: (signal: AbortSignal) => Promise<T>, deps: unknown[] = []) {
@@ -52,13 +53,15 @@ export function useSession() {
   useEffect(() => {
     let alive = true;
     let retryTimer: number | undefined;
+    const revision = walletRevealRevision();
     getCurrentUser().then((u) => {
       if (!alive) return;
-      if (u?.role === "client" && activateBetPresets(u.id, u.betPresets)) {
+      if (u?.role === "client" && activateBetPresets(u.id, u.betPresets) &&
+          !["/signup", "/login"].includes(window.location.pathname)) {
         window.location.reload();
         return;
       }
-      setUser(u);
+      setUser(u?.role === "client" ? { ...u, balance: presentedWalletBalance(u.balance, u.id, revision) } : u);
       setError(null);
     }).catch((reason: unknown) => {
       if (!alive) return;

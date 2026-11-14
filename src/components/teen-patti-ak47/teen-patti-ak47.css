@@ -411,7 +411,7 @@
 
 /* ---------- Controls ---------- */
 
-.ak47-layout .controls {
+.ak47-layout .ak47-controls {
   position: relative;
   flex-shrink: 0;
   z-index: 2;
@@ -419,7 +419,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 10px clamp(8px, 2vw, 20px) 12px;
 }
 
 @media (max-width: 640px), (max-height: 600px) {
@@ -429,7 +432,6 @@
   .ak47-layout .table-inner { flex: 0 0 auto; gap: 10px; }
   .ak47-layout .hand-label { flex-wrap: wrap; justify-content: center; }
   .ak47-layout .seg { flex-wrap: wrap; justify-content: center; }
-  .ak47-layout .chips > div { flex-wrap: wrap; }
 }
 
 .seg {
@@ -477,26 +479,65 @@
   cursor: not-allowed;
 }
 
-.chips {
+.ak47-chips {
   display: flex;
   justify-content: center;
   align-items: center;
-  flex-wrap: wrap;
-  gap: clamp(6px, 1.2vw, 12px);
-  width: 100%;
-  padding: 2px 0;
-}
-
-.chips > .chip {
-  flex: none;
-}
-
-.bet-actions {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   flex-wrap: wrap;
   gap: 8px;
+  width: 100%;
+  max-width: 440px;
+  padding: 6px;
+}
+
+.ak47-custom-bet {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  width: 100%;
+  max-width: 440px;
+}
+
+.ak47-custom-amount {
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(250, 204, 21, 0.5);
+  color: #fde68a;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ak47-custom-bet .btn-ghost {
+  min-width: 76px;
+  min-height: 44px;
+  padding: 8px 12px;
+}
+
+.ak47-bet-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  width: 100%;
+  max-width: 440px;
+}
+
+.ak47-bet-actions button {
+  min-width: 0;
+  min-height: 44px;
+  width: 100%;
+  padding: 10px 12px;
+}
+
+@media (max-width: 479px) {
+  .ak47-chips {
+    max-width: 280px;
+  }
 }
 
 .btn-gold {
@@ -564,14 +605,18 @@
 
 /* ---------- Chips ---------- */
 
-.chip {
+.ak47-chip {
   position: relative;
-  width: clamp(38px, 7.5vw, 52px);
-  aspect-ratio: 1;
+  flex: 0 0 76px;
+  width: 76px;
+  height: 76px;
+  padding: 6px;
   border-radius: 50%;
   border: 3px dashed rgba(255, 255, 255, 0.9);
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   font-family: inherit;
   box-shadow:
@@ -582,7 +627,7 @@
     opacity 0.15s ease;
 }
 
-.chip::after {
+.ak47-chip::after {
   content: "";
   position: absolute;
   inset: 7px;
@@ -590,19 +635,28 @@
   border: 1px solid rgba(255, 255, 255, 0.55);
 }
 
-.chip:hover:not(:disabled) {
+.ak47-chip:hover:not(:disabled) {
   transform: translateY(-5px);
 }
 
-.chip:disabled {
+.ak47-chip:disabled {
   opacity: 0.45;
   filter: grayscale(0.6);
   cursor: not-allowed;
 }
 
-.chip-value {
-  font-size: clamp(11px, 1.6vw, 14px);
+.ak47-chip-currency {
+  font-size: 10px;
+  line-height: 1.2;
+  color: #fff;
+}
+
+.ak47-chip-value {
+  font-size: 14px;
   font-weight: 900;
+  line-height: 1.3;
+  letter-spacing: 0;
+  white-space: nowrap;
   color: #fff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
@@ -611,27 +665,32 @@
   display: none;
 }
 
-.chip-gray {
+.ak47-chip-value-long {
+  font-size: 12px;
+}
+
+.ak47-chip-gray {
   background: radial-gradient(circle at 35% 30%, #9aa3ad, #525b66);
 }
 
-.chip-red {
+.ak47-chip-red {
   background: radial-gradient(circle at 35% 30%, #ff8585, #a3122a);
 }
 
-.chip-blue {
+.ak47-chip-blue {
   background: radial-gradient(circle at 35% 30%, #6db3ff, #144a9e);
 }
 
-.chip-green {
+.ak47-chip-green {
   background: radial-gradient(circle at 35% 30%, #5fe0a0, #0d7a4a);
 }
 
-.chip-gold {
+.ak47-chip-gold {
   background: radial-gradient(circle at 35% 30%, #ffe08a, #b8860b);
 }
 
-.chip-gold .chip-value {
+.ak47-chip-gold .ak47-chip-currency,
+.ak47-chip-gold .ak47-chip-value {
   color: #3d2b00;
   text-shadow: none;
 }

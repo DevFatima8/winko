@@ -2,6 +2,7 @@ import { randomInt } from "node:crypto";
 import type { MultiplayerTransaction } from "./multiplayer-store";
 import { isCardGame } from "./cardGameRules";
 import { isRouletteGame, isWheelGame } from "./rouletteGameRules";
+import { isThirtyWinGame } from "./winOpportunityRules";
 
 type Cycle = { _id: string; players: string[]; remaining: boolean[] };
 
@@ -26,7 +27,7 @@ export async function nextBetWin(tx: MultiplayerTransaction, game: string, winne
 
 /** Called under the game's transaction lock, only after validating an accepted wager. */
 export async function nextPlayerWin(tx: MultiplayerTransaction, game: string, userId: string) {
-  if (isCardGame(game) || isRouletteGame(game) || isWheelGame(game)) return nextBetWin(tx, game, 30);
+  if (isThirtyWinGame(game) || isCardGame(game) || isRouletteGame(game) || isWheelGame(game)) return nextBetWin(tx, game, 30);
   const winners = 10;
   const id = `${game}:ten-player-wins:v1`;
   const saved = await tx.get<Cycle>("multiplayerrooms", id);
@@ -50,11 +51,11 @@ export async function nextPlayerWin(tx: MultiplayerTransaction, game: string, us
 }
 
 export async function nextPlayerPrize<T extends string>(
-  tx: MultiplayerTransaction, game: string, userId: string, prizes: readonly T[],
+  tx: MultiplayerTransaction, game: string, userId: string, prizes: readonly T[], version = "v1",
 ): Promise<T | null> {
   if (prizes.length !== 10) throw new Error("A player prize cycle must contain ten prizes.");
   if (!await nextPlayerWin(tx, game, userId)) return null;
-  const id = `${game}:player-prizes:v1`;
+  const id = `${game}:player-prizes:${version}`;
   const saved = await tx.get<{ _id: string; remaining: T[] }>("multiplayerrooms", id);
   if (saved && (!Array.isArray(saved.remaining) || !saved.remaining.length ||
       saved.remaining.some(prize => !prizes.includes(prize)) ||

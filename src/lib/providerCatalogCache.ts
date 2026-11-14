@@ -5,6 +5,27 @@ import { PROVIDER_GAMES_VISIBLE, SITE_CATALOG_URL } from "./gameAvailability";
 
 const KEY = PROVIDER_GAMES_VISIBLE ? "wx_provider_catalog_cache" : "wx_local_catalog_cache";
 let warm: { games: ProviderCatalogGame[]; at: number } | null = null;
+let pending: Promise<ProviderCatalogGame[]> | null = null;
+let pendingController: AbortController | null = null;
+
+export function loadProviderCatalog(): Promise<ProviderCatalogGame[]> {
+  if (pending) return pending;
+  const controller = new AbortController();
+  pendingController = controller;
+  pending = fetch(SITE_CATALOG_URL, { cache: "no-store", signal: controller.signal })
+    .then(async response => {
+      const data = await response.json() as { games?: ProviderCatalogGame[]; error?: string };
+      controller.signal.throwIfAborted();
+      if (!response.ok) throw new Error(data.error ?? "Games could not be loaded.");
+      if (!Array.isArray(data.games)) throw new Error("Invalid game catalogue.");
+      void saveProviderCatalog(data.games);
+      return data.games;
+    })
+    .finally(() => {
+      if (pendingController === controller) { pending = null; pendingController = null; }
+    });
+  return pending;
+}
 
 function cacheName() {
   let name = sessionStorage.getItem(KEY);
@@ -52,6 +73,9 @@ export async function readReturnCatalog() {
 }
 
 export async function clearProviderCatalog() {
+  pendingController?.abort();
+  pendingController = null;
+  pending = null;
   warm = null;
   try {
     const name = sessionStorage.getItem(KEY);

@@ -49,6 +49,14 @@ export function aviatorApplyBet(state: State, receipt: { round: number; balance:
     : { ...state, balance: receipt.balance, queued: [...state.queued.filter(item => item.slot !== bet.slot), { slot: bet.slot, bet: bet.bet }] };
 }
 
+export function aviatorApplyCashout(state: State, receipt: { round: number; balance: number; bet: Bet }): State {
+  if (receipt.round !== state.round.id) return state;
+  return {
+    ...state, balance: receipt.balance,
+    myBets: state.myBets.map(bet => bet.id === receipt.bet.id ? receipt.bet : bet),
+  };
+}
+
 export function aviatorDisplayMultiplier(round: State["round"], projected: number) {
   if (round.status === "crashed") return round.crashPoint ?? round.multiplier;
   // Do not visually outrun the server while the crash update is in transit.
@@ -217,8 +225,8 @@ const cpClass = (m: number) =>
   m < 2
     ? "bg-[#34b4ff]/20 text-[#34b4ff] border border-[#34b4ff]/30"
     : m < 10
-    ? "bg-[#913ef8]/20 text-[#c274ff] border border-[#913ef8]/30"
-    : "bg-[#c017b4]/20 text-[#ff4dd8] border border-[#c017b4]/40 shadow-[0_0_8px_rgba(255,77,216,0.3)]";
+      ? "bg-[#913ef8]/20 text-[#c274ff] border border-[#913ef8]/30"
+      : "bg-[#c017b4]/20 text-[#ff4dd8] border border-[#c017b4]/40 shadow-[0_0_8px_rgba(255,77,216,0.3)]";
 
 const fmt2 = (n: number) =>
   (n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -258,7 +266,7 @@ export function AviatorGame({
   const [mult, setMult] = useState(1);
   const [phase, setPhase] = useState<"waiting" | "running" | "crashed">("waiting");
   const [countdown, setCountdown] = useState(0);
-  const [panels, setPanels] = useState<Panel[]>(() => Array.from({ length: 3 }, () => mk(table === "aviator" ? BET_PRESETS[0] : 100)));
+  const [panels, setPanels] = useState<Panel[]>(() => Array.from({ length: 2 }, () => mk(table === "aviator" ? BET_PRESETS[0] : 100)));
   const [tab, setTab] = useState<"all" | "prev" | "top">("all");
   const [toast, setToast] = useState<{ t: "ok" | "err"; m: string; sub?: string } | null>(null);
   const [showHist, setShowHist] = useState(false);
@@ -268,6 +276,7 @@ export function AviatorGame({
   const [activeMobileSlot, setActiveMobileSlot] = useState(0);
   const [mobileDualView, setMobileDualView] = useState(true);
   const [showMobileBetsDrawer, setShowMobileBetsDrawer] = useState(false);
+  const [retiredBusy, setRetiredBusy] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -451,30 +460,29 @@ export function AviatorGame({
       pendingBets.current.add(i);
       setPanel(i, { busy: true });
       try {
-      const current = stRef.current;
-      const roundNo = current
-        ? current.round.id + (current.round.status === "waiting" && performance.now() + (targetClockOffset.current ?? 0) < current.round.startsAt ? 0 : 1)
-        : undefined;
-      const j = await api("/api/aviator/bet", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ table, amount, slot: i, roundNo, queueIfClosed: table === "aviator", autoCashout }),
-      });
-      if (!j) return;
-      if (j.error) showToast("err", j.error);
-      else {
-        if (table === "aviator" && stRef.current) {
-          // A read started before this committed receipt must not erase the confirmed reservation.
-          acceptedRefresh.current = ++refreshSequence.current;
-          const confirmed = aviatorApplyBet(stRef.current, j);
-          stRef.current = confirmed;
-          setState(confirmed);
-          broadcastBalanceUpdate(confirmed.balance, "Aviator");
+        const current = stRef.current;
+        const roundNo = current
+          ? current.round.id + (current.round.status === "waiting" && performance.now() + (targetClockOffset.current ?? 0) < current.round.startsAt ? 0 : 1)
+          : undefined;
+        const j = await api("/api/aviator/bet", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ table, amount, slot: i, roundNo, queueIfClosed: table === "aviator", autoCashout }),
+        });
+        if (!j) return;
+        if (j.error) showToast("err", j.error);
+        else {
+          if (stRef.current) {
+            // A read started before this committed receipt must not erase the confirmed reservation.
+            acceptedRefresh.current = ++refreshSequence.current;
+            const confirmed = aviatorApplyBet(stRef.current, j);
+            stRef.current = confirmed;
+            setState(confirmed);
+            broadcastBalanceUpdate(confirmed.balance, "Aviator");
+          }
+          showToast("ok", j.queued ? "Bet placed for your next round." : "Bet placed. Flight starts after the countdown.");
         }
-        showToast("ok", j.queued ? "Bet placed for your next round." : "Bet placed. Flight starts after the countdown.");
-      }
-      if (table === "aviator") void refresh().then(() => refresh());
-      else await refresh();
+        void refresh().then(() => refresh());
       } finally {
         pendingBets.current.delete(i);
         setPanel(i, { busy: false });
@@ -484,16 +492,24 @@ export function AviatorGame({
   );
 
   const cancelBet = useCallback(
-    async (i: number) => {
+    async (i: number, expectedRound?: number) => {
+      if (pendingBets.current.has(i)) return;
+      pendingBets.current.add(i);
       setPanel(i, { busy: true });
-      const current = stRef.current;
-      const roundNo = current
-        ? current.round.id + (current.queued.some((bet) => bet.slot === i) ? 1 : 0)
-        : undefined;
-      const reply = await api(`/api/aviator/bet?table=${table}&slot=${i}${roundNo === undefined ? "" : `&roundNo=${roundNo}`}`, { method: "DELETE" });
-      if (reply?.error) showToast("err", reply.error);
-      setPanel(i, { busy: false });
-      await refresh();
+      if (i === 2) setRetiredBusy(true);
+      try {
+        const current = stRef.current;
+        const roundNo = expectedRound ?? (current
+          ? current.round.id + (current.queued.some((bet) => bet.slot === i) ? 1 : 0)
+          : undefined);
+        const reply = await api(`/api/aviator/bet?table=${table}&slot=${i}${roundNo === undefined ? "" : `&roundNo=${roundNo}`}`, { method: "DELETE" });
+        if (reply?.error) showToast("err", reply.error);
+        await refresh();
+      } finally {
+        pendingBets.current.delete(i);
+        setPanel(i, { busy: false });
+        if (i === 2) setRetiredBusy(false);
+      }
     },
     [api, table, refresh, setPanel, showToast]
   );
@@ -501,29 +517,48 @@ export function AviatorGame({
   const cashOut = useCallback(
     async (i: number) => {
       const p = panelsRef.current[i];
-      if (p.busy) return;
-      setPanel(i, { busy: true });
-      const j = await api("/api/aviator/cashout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ table, slot: i, roundNo: stRef.current?.round.id }),
-      });
-      setPanel(i, { busy: false });
-      if (!j) return;
-      if (j.error) {
-        showToast("err", j.error);
-      } else {
-        if (sound) {
-          playGameSound("cashout");
-          if (!j.poolPending) speakGameVoice("planeWin");
-        }
-        window.dispatchEvent(
-          new CustomEvent("wx:game-result", {
-            detail: { game: "Aviator", bet: Number(p.amount), win: j.win, won: j.win > 0, poolPending: j.poolPending, poolClaim: j.poolClaim },
-          })
-        );
+      const mine = stRef.current?.myBets.find(bet => bet.slot === i && bet.outcome === "pending");
+      if (!p && !mine) {
+        showToast("err", "No active bet.");
+        return;
       }
-      await refresh();
+      if (p?.busy || pendingBets.current.has(i)) return;
+      pendingBets.current.add(i);
+      setPanel(i, { busy: true });
+      if (i === 2) setRetiredBusy(true);
+      try {
+        const j = await api("/api/aviator/cashout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ table, slot: i, roundNo: stRef.current?.round.id }),
+        });
+        if (!j) return;
+        if (j.error) {
+          showToast("err", j.error);
+        } else {
+          if (j.bet && stRef.current) {
+            acceptedRefresh.current = ++refreshSequence.current;
+            const confirmed = aviatorApplyCashout(stRef.current, j);
+            stRef.current = confirmed;
+            setState(confirmed);
+            broadcastBalanceUpdate(confirmed.balance, "Aviator");
+          }
+          if (sound) {
+            playGameSound("cashout");
+            if (!j.poolPending) speakGameVoice("planeWin");
+          }
+          window.dispatchEvent(
+            new CustomEvent("wx:game-result", {
+              detail: { game: "Aviator", bet: mine?.bet ?? Number(p?.amount), win: j.win, won: j.win > 0, poolPending: j.poolPending, poolClaim: j.poolClaim },
+            })
+          );
+        }
+        void refresh().then(() => refresh());
+      } finally {
+        pendingBets.current.delete(i);
+        setPanel(i, { busy: false });
+        if (i === 2) setRetiredBusy(false);
+      }
     },
     [api, table, refresh, setPanel, showToast, sound]
   );
@@ -687,7 +722,17 @@ export function AviatorGame({
     );
   }
 
-  const slots = state.config.slots;
+  const slots = Math.min(state.config.slots, panels.length);
+  const retiredBets = table === "aviator-x" ? [
+    ...state.myBets.filter(bet => bet.slot === 2 && bet.outcome === "pending").map(bet => ({
+      bet: bet.bet, round: state.round.id,
+      canCancel: state.round.status === "waiting",
+      canCashout: state.round.status === "running" && phase === "running",
+    })),
+    ...state.queued.filter(bet => bet.slot === 2).map(bet => ({
+      bet: bet.bet, round: state.round.id + 1, canCancel: true, canCashout: false,
+    })),
+  ] : [];
 
   if (table === "aviator") {
     return (
@@ -885,11 +930,10 @@ export function AviatorGame({
               <button
                 key={k}
                 onClick={() => setTab(k)}
-                className={`flex-1 rounded-full py-1 text-xs font-bold transition cursor-pointer ${
-                  tab === k
+                className={`flex-1 rounded-full py-1 text-xs font-bold transition cursor-pointer ${tab === k
                     ? "bg-[#28a909] text-white border border-[#38c815] shadow-sm"
                     : "text-slate-400 hover:bg-slate-800 hover:text-white border border-transparent"
-                }`}
+                  }`}
               >
                 {k === "all" ? "All Bets" : k === "prev" ? "Previous" : "Top"}
               </button>
@@ -1090,11 +1134,10 @@ export function AviatorGame({
             {/* Toast overlay */}
             {toast && (
               <div
-                className={`absolute left-1/2 top-2 z-30 -translate-x-1/2 rounded-full px-3.5 py-1 text-center shadow-2xl transition-all ${
-                  toast.t === "ok"
+                className={`absolute left-1/2 top-2 z-30 -translate-x-1/2 rounded-full px-3.5 py-1 text-center shadow-2xl transition-all ${toast.t === "ok"
                     ? "bg-[#123717]/95 text-white ring-2 ring-[#427f00]"
                     : "bg-[#3a0b12]/95 text-white ring-2 ring-[#e50539]"
-                }`}
+                  }`}
               >
                 <div className="text-xs font-bold">{toast.m}</div>
                 {toast.sub && (
@@ -1115,8 +1158,22 @@ export function AviatorGame({
             className="shrink-0 p-1 sm:p-2 border-t z-20"
             style={{ background: T.panel2, borderColor: T.line }}
           >
+            {retiredBets.map(bet => (
+              <div key={bet.round} className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 p-2 text-xs text-amber-100">
+                <span>Previously accepted bet: Rs. {fmt2(bet.bet)} · Round #{bet.round}</span>
+                {bet.canCancel ? (
+                  <button disabled={retiredBusy} onClick={() => cancelBet(2, bet.round)} className="rounded bg-red-700 px-3 py-2 font-bold disabled:opacity-50">
+                    Cancel previous bet
+                  </button>
+                ) : bet.canCashout ? (
+                  <button disabled={retiredBusy} onClick={() => cashOut(2)} className="rounded bg-green-700 px-3 py-2 font-bold disabled:opacity-50">
+                    Cash out previous bet
+                  </button>
+                ) : <span>Awaiting round update</span>}
+              </div>
+            ))}
             {/* Mobile Sub-Header: Switcher & Drawer Toggle */}
-            <div className="flex lg:hidden items-center justify-between gap-1 mb-1 px-1">
+            <div className="flex flex-wrap lg:hidden items-center justify-between gap-1 mb-1 px-1">
               {slots > 1 && (
                 <div className="flex items-center gap-1">
                   {Array.from({ length: slots }, (_, i) => {
@@ -1127,11 +1184,10 @@ export function AviatorGame({
                       <button
                         key={i}
                         onClick={() => setActiveMobileSlot(i)}
-                        className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold transition ${
-                          activeMobileSlot === i
+                        className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold transition ${activeMobileSlot === i
                             ? "bg-[#28a909] text-white border border-[#38c815] shadow-sm"
                             : "bg-slate-800 text-slate-400 hover:text-white"
-                        }`}
+                          }`}
                       >
                         <span>Bet {i + 1}</span>
                         {isPending && (
@@ -1146,9 +1202,8 @@ export function AviatorGame({
                   <button
                     onClick={() => setMobileDualView(!mobileDualView)}
                     title="Toggle 2-Panel View"
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold transition ${
-                      mobileDualView ? "bg-[#28a909] text-white border border-[#38c815]" : "bg-slate-800 text-slate-400"
-                    }`}
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold transition ${mobileDualView ? "bg-[#28a909] text-white border border-[#38c815]" : "bg-slate-800 text-slate-400"
+                      }`}
                   >
                     {mobileDualView ? "◫ Dual" : "▢ Single"}
                   </button>
@@ -1171,19 +1226,12 @@ export function AviatorGame({
 
             {/* Panels Container */}
             <div
-              className={`min-w-0 gap-1 sm:gap-2.5 mx-auto w-full ${
-                slots === 3
-                  ? "flex flex-wrap items-start sm:grid sm:grid-cols-3 max-w-[1020px]"
-                  : "grid"
-              } ${
-                slots === 3
-                  ? ""
-                  : slots === 1
+              className={`grid min-w-0 gap-1 sm:gap-2.5 mx-auto w-full ${slots === 1
                   ? "grid-cols-1 max-w-[390px]"
                   : mobileDualView
-                  ? "grid-cols-2 lg:grid-cols-2 max-w-[720px] xl:max-w-[760px]"
-                  : "grid-cols-1 lg:grid-cols-2 max-w-[720px] xl:max-w-[760px]"
-              }`}
+                    ? "grid-cols-2 lg:grid-cols-2 max-w-[720px] xl:max-w-[760px]"
+                    : "grid-cols-1 lg:grid-cols-2 max-w-[720px] xl:max-w-[760px]"
+                }`}
             >
               {Array.from({ length: slots }, (_, i) => {
                 // If single view active on mobile, hide other panels
@@ -1217,15 +1265,14 @@ export function AviatorGame({
                   mine?.outcome === "win"
                     ? "#16a34a"
                     : pending || queued
-                    ? T.accent
-                    : T.line;
+                      ? T.accent
+                      : T.line;
 
                 return (
                   <div
                     key={i}
-                    className={`min-w-0 rounded-xl transition-colors ${
-                      slots === 3 ? "basis-[calc(50%-2px)] max-w-[calc(50%-2px)] p-1 sm:basis-auto sm:max-w-none sm:p-2" : "p-1.5 sm:p-2"
-                    }`}
+                    aria-label={`Bet panel ${i + 1}`}
+                    className="min-w-0 rounded-xl p-1.5 sm:p-2 transition-colors"
                     style={{ background: T.panel, border: `1px solid ${border}` }}
                   >
                     {/* Panel Sub-header: Bet / Auto Tab */}
@@ -1234,22 +1281,20 @@ export function AviatorGame({
                         <button
                           type="button"
                           onClick={() => setPanel(i, { tab: "bet" })}
-                          className={`rounded-md px-2 sm:px-2.5 py-0.5 text-[9px] sm:text-[10px] font-black transition-all cursor-pointer ${
-                            p.tab === "bet"
+                          className={`rounded-md px-2 sm:px-2.5 py-0.5 text-[9px] sm:text-[10px] font-black transition-all cursor-pointer ${p.tab === "bet"
                               ? "bg-[#16a34a] text-white border border-[#22c55e] shadow-sm"
                               : "text-slate-300 hover:text-white"
-                          }`}
+                            }`}
                         >
                           Bet
                         </button>
                         <button
                           type="button"
                           onClick={() => setPanel(i, { tab: "auto" })}
-                          className={`rounded-md px-2 sm:px-2.5 py-0.5 text-[9px] sm:text-[10px] font-black transition-all cursor-pointer ${
-                            p.tab === "auto"
+                          className={`rounded-md px-2 sm:px-2.5 py-0.5 text-[9px] sm:text-[10px] font-black transition-all cursor-pointer ${p.tab === "auto"
                               ? "bg-[#16a34a] text-white border border-[#22c55e] shadow-sm"
                               : "text-slate-300 hover:text-white"
-                          }`}
+                            }`}
                         >
                           Auto
                         </button>
@@ -1301,11 +1346,10 @@ export function AviatorGame({
                               type="button"
                               key={v}
                               onClick={() => setAmt(v)}
-                              className={`rounded-md sm:rounded-lg py-1 sm:py-1 text-[8px] sm:text-[10px] tracking-tighter sm:tracking-normal font-black transition-all cursor-pointer ${
-                                amount === v
+                              className={`rounded-md sm:rounded-lg py-1 sm:py-1 text-[8px] sm:text-[10px] tracking-tighter sm:tracking-normal font-black transition-all cursor-pointer ${amount === v
                                   ? "bg-[#16a34a] text-white border border-[#22c55e] shadow-sm"
                                   : "bg-[#1e293b] text-slate-200 border border-[#334155] hover:bg-[#16a34a] hover:text-white hover:border-[#22c55e] active:translate-y-[1px]"
-                              }`}
+                                }`}
                             >
                               {v}
                             </button>
@@ -1408,9 +1452,8 @@ export function AviatorGame({
                     {/* Status Badge */}
                     {mine && mine.outcome !== "pending" && (
                       <div
-                        className={`mt-1 rounded px-2 py-0.5 text-center text-[9px] font-bold ${
-                          mine.outcome === "win" ? "bg-[#123717] text-[#4ade80]" : "bg-[#3a0b12] text-red-300"
-                        }`}
+                        className={`mt-1 rounded px-2 py-0.5 text-center text-[9px] font-bold ${mine.outcome === "win" ? "bg-[#123717] text-[#4ade80]" : "bg-[#3a0b12] text-red-300"
+                          }`}
                       >
                         {mine.poolPending ? `Claim Rs. ${fmt2(mine.poolClaim ?? 0)} — daily payout pending` : mine.outcome === "win"
                           ? `Cashed out: +Rs. ${fmt2(mine.win)}`
@@ -1480,9 +1523,8 @@ export function AviatorGame({
                   <button
                     key={k}
                     onClick={() => setTab(k)}
-                    className={`rounded-full px-3 py-1 text-xs font-bold transition ${
-                      tab === k ? "bg-[#28a909] text-white border border-[#38c815]" : "text-[#8b8f96] hover:text-white"
-                    }`}
+                    className={`rounded-full px-3 py-1 text-xs font-bold transition ${tab === k ? "bg-[#28a909] text-white border border-[#38c815]" : "text-[#8b8f96] hover:text-white"
+                      }`}
                   >
                     {k === "all" ? "All Bets" : k === "prev" ? "My Bets" : "Top Wins"}
                   </button>
@@ -1606,16 +1648,6 @@ export function AviatorGame({
               <li>
                 <b className="text-white">Auto Bet & Auto Cash Out</b> — Use Auto Bet to repeat your stake each round,
                 and set Auto Cash Out before betting, from 1.01x to 99.98x. The server settles your saved target even if you disconnect.
-              </li>
-              <li>
-                <b className="text-white">Crash rules</b> — Crash points range from 1.00x to 99.99x. Cashout must be strictly before the crash; equal targets lose.
-                The fixed-target theoretical RTP is approximately 80% before whole-paisa rounding, not a guarantee of session returns.
-                {state.config.theoreticalRtpAt199 === 79.6 && " This model crashes strictly below 2x with 60% long-run probability. The 1.99x cashout target has approximately 79.6% RTP before paisa rounding."}
-              </li>
-              <li>
-                <b className="text-white">Seed verification</b> — A SHA-256 seed commitment is published before betting; the seed is revealed after the crash.
-                {state.fairness && <span className="mt-1 block break-all text-[10px]">Current seed hash: {state.fairness.serverSeedHash}<br />Model: {state.fairness.version} · Nonce: {state.fairness.nonce}</span>}
-                {state.history[0]?.fairness?.serverSeed && <span className="mt-1 block break-all text-[10px]">Last revealed seed: {state.history[0].fairness.serverSeed}<br />Hash: {state.history[0].fairness.serverSeedHash}<br />Public client seed: {state.history[0].fairness.clientSeed} · Nonce: {state.history[0].fairness.nonce}</span>}
               </li>
             </ol>
           </div>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
 import { fetchServerBalance, getStoredWalletBalance, subscribeWalletBalance } from "@/lib/walletSync";
+import { presentedWalletBalance, walletRevealRevision } from "@/lib/walletReveal";
 import { useI18n } from "@/lib/i18n/client";
 
 export function GameWalletBar({ slug }: { slug: string }) {
@@ -14,13 +15,14 @@ export function GameWalletBar({ slug }: { slug: string }) {
   const [copiedAccount, setCopiedAccount] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    const revision = walletRevealRevision();
     setLoading(true);
     try {
       const res = await fetch("/api/player/balance", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (data.loggedIn) {
-          setBalance(data.balance ?? 0);
+          setBalance(presentedWalletBalance(data.balance ?? 0, data.user?.id, revision));
           setUser(data.user ?? null);
         } else {
           setUser(null);
@@ -85,7 +87,7 @@ export function GameWalletBar({ slug }: { slug: string }) {
                 </span>
               ) : (
                 <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-300 ring-1 ring-amber-500/30">
-                  Demo Mode
+                  Mode
                 </span>
               )}
             </div>

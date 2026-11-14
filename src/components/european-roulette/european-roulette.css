@@ -1,0 +1,100 @@
+.er-game {
+  container: european-roulette / inline-size;
+}
+
+.er-game .er-layout {
+  flex: 1 0 auto;
+  min-width: 0;
+}
+
+.er-game .er-wheel-panel {
+  display: grid;
+  min-width: 0;
+  flex-shrink: 0;
+  place-items: center;
+  padding: 8px;
+}
+
+.er-game .er-wheel {
+  width: min(100%, 420px);
+}
+
+.er-game .er-betting-column {
+  display: flex;
+  min-width: 0;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.er-game .er-round-info,
+.er-game .er-controls {
+  min-width: 0;
+  overflow-wrap: normal;
+}
+
+.er-game .er-table-frame {
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.er-game .er-felt {
+  min-width: 0;
+}
+
+.er-game .er-table-viewport {
+  width: 100%;
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.er-game .er-grid {
+  --w: clamp(24px, calc((100cqw - 2px) / 14), 56px);
+  --h: calc(var(--w) * 1.05);
+  flex-shrink: 0;
+}
+
+@container european-roulette (min-width: 960px) {
+  .er-game .er-layout {
+    display: grid;
+    flex: 1;
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+    min-height: 420px;
+    gap: 16px;
+  }
+
+  .er-game .er-wheel-panel {
+    min-height: 0;
+    container-type: size;
+  }
+
+  .er-game .er-wheel {
+    width: min(100cqw, 100cqh, 720px);
+  }
+
+  .er-game .er-betting-column {
+    display: grid;
+    min-height: 0;
+    grid-template-rows: auto minmax(200px, 1fr) auto;
+    overflow-y: auto;
+    padding: 3px;
+  }
+
+  .er-game .er-table-frame,
+  .er-game .er-felt {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .er-game .er-table-viewport {
+    display: grid;
+    height: 100%;
+    min-height: 0;
+    container-type: size;
+    place-items: center;
+  }
+
+  .er-game .er-grid {
+    --w: clamp(28px, min(calc((100cqw - 2px) / 14), calc(100cqh / 5.25)), 56px);
+  }
+}

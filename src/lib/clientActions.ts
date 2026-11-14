@@ -16,7 +16,7 @@ export async function signupAction(_: ActionState, form: FormData): Promise<any>
     await import("./providerCatalogCache").then(cache => cache.clearProviderCatalog());
     resetPromoFlags();
     await createSession({ id: data.id, role: data.role, name: data.name });
-    return { success: "Account created successfully! Redirecting...", redirect: "/player" };
+    return { success: "Account created successfully! Redirecting...", redirect: "/" };
 }
 
 function resetPromoFlags() {

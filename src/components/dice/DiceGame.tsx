@@ -14,7 +14,6 @@ import {
   fmt,
   payoutFor,
   round2,
-  rollDice,
   targetForChance,
   winChanceFor,
   type Dir,
@@ -72,7 +71,7 @@ const toastStyles: Record<Toast["kind"], string> = {
 };
 
 export default function DiceGame({ backHref = "/player" }: { backHref?: string }) {
-  const { balance, play: submitWager, pending, error, retry } = useBrowserWager("dice", START_BALANCE);
+  const { balance, playServer: submitWager, pending, error, retry, reveal } = useBrowserWager("dice", START_BALANCE);
   const [poolPending, setPoolPending] = useState(false);
   const [betStr, setBetStr] = useLocalStorage<string>("dc.bet", "10.00");
   const [target, setTarget] = useLocalStorage<number>("dc.target", 50);
@@ -173,13 +172,11 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
     rollingRef.current = true;
     setRolling(true);
     const session = sessionRef.current;
-    const { value, win } = rollDice(d.target, d.dir);
     const ch = winChanceFor(d.target, d.dir);
     const pay = payoutFor(ch);
-    const claimAmount = win ? round2(b + round2(b * (pay - 1))) : 0;
     let accepted;
     try {
-      accepted = await submitWager(b, claimAmount);
+      accepted = await submitWager(b, { target: d.target, dir: d.dir });
       if (sessionRef.current !== session) return;
       setPoolPending(accepted.poolPending);
     } catch {
@@ -188,6 +185,16 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
       setAuto(a => ({ ...a, on: false }));
       return;
     }
+    const outcome = accepted.outcome;
+    if (!outcome || typeof outcome !== "object" || !("value" in outcome) || typeof outcome.value !== "number" ||
+      !("win" in outcome) || typeof outcome.win !== "boolean") {
+      rollingRef.current = false;
+      setRolling(false);
+      setAuto(a => ({ ...a, on: false }));
+      toast("The confirmed dice outcome is invalid. Check your wager history.", "error");
+      return;
+    }
+    const { value, win } = outcome;
 
     animationRef.current = window.setInterval(() => {
       setDisplay(round2(Math.random() * 100));
@@ -216,6 +223,7 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
       };
 
       setDisplay(value);
+      reveal();
       notifyGameResult("dice", accepted.wagerId, accepted.claim, accepted.poolPending);
       setLast(rec);
       setHistory((h) => [rec, ...h].slice(0, 40));
@@ -274,7 +282,7 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
         setReviewing(false);
       }, RESULT_REVIEW_MS);
     }, ROLL_ANIMATION_MS);
-  }, [addFloat, submitWager, pending, error, setHistory, setStats, toast]);
+  }, [addFloat, submitWager, pending, error, reveal, setHistory, setStats, toast]);
 
   /* auto loop */
   useEffect(() => {
@@ -429,9 +437,8 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
             {floats.map((f) => (
               <span
                 key={f.id}
-                className={`float-up pointer-events-none absolute -top-1 left-1/2 font-mono text-xs font-bold ${
-                  f.win ? "text-win" : "text-loss"
-                }`}
+                className={`float-up pointer-events-none absolute -top-1 left-1/2 font-mono text-xs font-bold ${f.win ? "text-win" : "text-loss"
+                  }`}
               >
                 {f.txt}
               </span>
@@ -444,13 +451,12 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
       <div className="dice-layout flex-1 min-h-fit grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_340px] my-1">
         {/* ===== dice card ===== */}
         <section
-          className={`dice-board relative rounded-2xl border bg-panel p-3 sm:p-4 transition-all duration-300 ${
-            flash === "win"
+          className={`dice-board relative rounded-2xl border bg-panel p-3 sm:p-4 transition-all duration-300 ${flash === "win"
               ? "border-win/70 shadow-[0_0_50px_-10px_rgba(47,217,117,0.35)]"
               : flash === "loss"
                 ? "border-loss/70 shadow-[0_0_50px_-10px_rgba(244,69,95,0.3)]"
                 : "border-line"
-          }`}
+            }`}
         >
           <div className="mb-1 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -473,15 +479,14 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
                 LAST ROLL
               </div>
               <div
-                className={`font-mono text-3xl font-bold leading-tight tabular-nums md:text-6xl ${
-                  rolling
+                className={`font-mono text-3xl font-bold leading-tight tabular-nums md:text-6xl ${rolling
                     ? "text-text"
                     : last
                       ? last.win
                         ? "text-win"
                         : "text-loss"
                       : "text-mut"
-                }`}
+                  }`}
               >
                 {display !== null
                   ? display.toFixed(2)
@@ -498,9 +503,8 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
                     {last.payout.toFixed(2)}
                   </div>
                   <div
-                    className={`break-words font-mono text-lg sm:text-2xl font-bold tabular-nums ${
-                      last.win ? "text-win" : "text-loss"
-                    }`}
+                    className={`break-words font-mono text-lg sm:text-2xl font-bold tabular-nums ${last.win ? "text-win" : "text-loss"
+                      }`}
                   >
                     {poolPending ? `Claim Rs. ${fmt(last.win ? round2(last.bet * last.payout) : 0)}` : last.win ? `+Rs. ${fmt(last.profit)}` : ""}
                   </div>
@@ -604,9 +608,6 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
             <h2 className="text-[10px] font-bold tracking-[0.22em] text-mut">
               PLACE A BET
             </h2>
-            <span className="rounded bg-gold/10 px-1.5 py-0.5 text-[9px] font-bold tracking-[0.18em] text-gold">
-              DEMO
-            </span>
           </div>
 
           <label className="text-[10px] font-bold tracking-[0.18em] text-mut">
@@ -663,7 +664,7 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
                 htmlFor="winchance"
                 className="text-[10px] font-bold tracking-[0.18em] text-mut"
               >
-                WIN CHANCE
+                PAYTABLE COVERAGE
               </label>
               <div className="mt-1.5 flex items-center rounded-lg border border-line bg-panel2 px-3 transition focus-within:border-win/60">
                 <input
@@ -696,11 +697,10 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
               <button
                 key={d}
                 onClick={() => toggleDir(d)}
-                className={`h-8 rounded-md text-[11px] font-bold tracking-[0.1em] transition ${
-                  dir === d
+                className={`h-8 rounded-md text-[11px] font-bold tracking-[0.1em] transition ${dir === d
                     ? "bg-win text-[#04220f]"
                     : "text-mut hover:text-text"
-                }`}
+                  }`}
               >
                 ROLL {d.toUpperCase()}
               </button>
@@ -718,14 +718,12 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
                 aria-checked={auto.on}
                 aria-label="Toggle auto play"
                 onClick={toggleAuto}
-                className={`relative h-6 w-11 rounded-full transition ${
-                  auto.on ? "bg-win" : "bg-line"
-                }`}
+                className={`relative h-6 w-11 rounded-full transition ${auto.on ? "bg-win" : "bg-line"
+                  }`}
               >
                 <span
-                  className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${
-                    auto.on ? "left-[22px]" : "left-0.5"
-                  }`}
+                  className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${auto.on ? "left-[22px]" : "left-0.5"
+                    }`}
                 />
               </button>
               <div className="flex items-center gap-1">
@@ -742,9 +740,8 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
               </div>
             </div>
             <div
-              className={`mt-1.5 space-y-1.5 transition-opacity ${
-                auto.on ? "opacity-100" : "opacity-50"
-              }`}
+              className={`mt-1.5 space-y-1.5 transition-opacity ${auto.on ? "opacity-100" : "opacity-50"
+                }`}
             >
               <div className="grid grid-cols-2 gap-2">
                 <Pill
@@ -774,13 +771,12 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
             <button
               onClick={onRollClick}
               disabled={!auto.on && (rolling || reviewing || pending || Boolean(error))}
-              className={`flex h-10 sm:h-11 w-full items-center justify-center gap-2 rounded-xl font-black transition cursor-pointer active:scale-[0.985] disabled:cursor-wait ${
-                auto.on
+              className={`flex h-10 sm:h-11 w-full items-center justify-center gap-2 rounded-xl font-black transition cursor-pointer active:scale-[0.985] disabled:cursor-wait ${auto.on
                   ? "bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600 text-white shadow-lg shadow-rose-950/50 hover:scale-[1.02]"
                   : outOfChips
                     ? "bg-[linear-gradient(180deg,#ffd36b,#e09a1f)] text-[#241503] shadow-[0_10px_30px_-10px_rgba(242,178,62,0.5)]"
                     : "bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-slate-950 shadow-lg shadow-emerald-500/40 hover:scale-[1.02]"
-              } ${rolling && !auto.on ? "opacity-80" : ""}`}
+                } ${rolling && !auto.on ? "opacity-80" : ""}`}
             >
               {auto.on ? (
                 <>
@@ -820,9 +816,8 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
             history.slice(0, 10).map((r) => (
               <span
                 key={r.id}
-                className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-bold shrink-0 ${
-                  r.win ? "bg-win/15 text-win" : "bg-loss/15 text-loss"
-                }`}
+                className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-bold shrink-0 ${r.win ? "bg-win/15 text-win" : "bg-loss/15 text-loss"
+                  }`}
               >
                 {r.value.toFixed(2)}
               </span>
@@ -902,11 +897,12 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
               lands <b className="text-win">above</b> the target.
             </li>
             <li>
-              Drag the slider (or set the win chance) to move the target
+              Drag the slider (or set the paytable coverage) to move the target
               between 1.00 and 99.00.
             </li>
             <li>
-              Payout is x99 ÷ win chance. A win pays your stake × payout.
+              Payout is 99 ÷ paytable coverage. Coverage is not the actual win probability.
+              A target hit pays stake × payout; returning only the stake is not profit.
             </li>
             <li>
               Use Auto play to run a set number of rounds, optionally stopping
@@ -971,11 +967,10 @@ function Pill({
   return (
     <button
       onClick={onClick}
-      className={`min-h-8 min-w-0 rounded-md border px-1 py-1 text-[9px] font-bold tracking-[0.06em] transition ${
-        active
+      className={`min-h-8 min-w-0 rounded-md border px-1 py-1 text-[9px] font-bold tracking-[0.06em] transition ${active
           ? "border-win/50 bg-win/15 text-win"
           : "border-line bg-panel2 text-mut hover:text-text"
-      }`}
+        }`}
     >
       {children}
     </button>
@@ -999,13 +994,12 @@ function StatTile({
         {label}
       </div>
       <div
-        className={`mt-1 font-mono text-lg font-bold tabular-nums ${
-          tone === "win"
+        className={`mt-1 font-mono text-lg font-bold tabular-nums ${tone === "win"
             ? "text-win"
             : tone === "loss"
               ? "text-loss"
               : "text-text"
-        }`}
+          }`}
       >
         {value}
       </div>

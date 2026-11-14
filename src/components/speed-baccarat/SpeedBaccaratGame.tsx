@@ -38,6 +38,8 @@ type SeatBet = { id: string; name: string; side: BetKey; amount: number; won: bo
 
 const BET_MS = 10000;
 const START_BALANCE = 1000;
+const resultRevealDelay = (result: SpeedBaccaratOutcome) =>
+  Math.max(result.player.length * 2 - 2, result.banker.length * 2 - 1) * 300;
 
 const MAIN_SPOTS: BetKey[] = ["player", "tie", "banker"];
 const SIDE_SPOTS: BetKey[] = ["playerPair", "bankerPair"];
@@ -49,7 +51,7 @@ const PHASE_COPY: Record<Phase, string> = {
 };
 
 export default function SpeedBaccaratGame() {
-  const live = useMultiplayerGame<SpeedBaccaratOutcome>("speed-baccarat");
+  const live = useMultiplayerGame<SpeedBaccaratOutcome>("speed-baccarat", undefined, resultRevealDelay);
   const personalTable = live.state?.tableMode === "personal";
   const BET_META = Object.fromEntries(Object.entries(LEGACY_BET_META).map(([key, meta]) => [
     key, personalTable && meta.payout > 1 ? { ...meta, payout: 1, note: "Pays 1 : 1 · capped at 2x gross return" } : meta,
@@ -89,6 +91,7 @@ export default function SpeedBaccaratGame() {
   const revealed = round ? Math.floor(elapsed / 300) + 1 : 0;
   const revealP = round ? Math.min(round.player.length, Math.ceil(revealed / 2)) : 0;
   const revealB = round ? Math.min(round.banker.length, Math.floor(revealed / 2)) : 0;
+  const resultRevealed = !!round && revealP === round.player.length && revealB === round.banker.length;
   const history: HistoryEntry[] = (state?.history ?? []).slice().reverse().map(({ roundNo, result }) => ({ ...result, id: roundNo }));
   const feed: FeedItem[] = history.slice(-8).reverse().map((hand) => ({ ...hand, net: 0, graded: "watched" }));
   const seats: SeatBet[] = (state?.bets ?? []).filter((bet) => bet.status !== "cancelled").map((bet) => ({
@@ -155,7 +158,7 @@ export default function SpeedBaccaratGame() {
 
   useEffect(() => {
     if (totalStake(bets) > 0) previous.current = bets;
-    if (!state || state.round.phase !== "result" || !round || !round.stakes.length || notified.current === state.round.roundNo) return;
+    if (!state || !resultRevealed || !round || !round.stakes.length || notified.current === state.round.roundNo) return;
     notified.current = state.round.roundNo;
     setStats((s) => applyRound(s, round));
     if (round.graded === "win") {
@@ -167,7 +170,7 @@ export default function SpeedBaccaratGame() {
       pushToast("Tie — main bets pushed", "info");
       sound.push();
     }
-  }, [state, bets, round, pushToast]);
+  }, [state, bets, round, pushToast, resultRevealed]);
 
   useEffect(() => {
     if (!auto || !state || state.round.phase !== "betting" || autoRound.current === state.round.roundNo || !previous.current) return;
@@ -843,7 +846,7 @@ export default function SpeedBaccaratGame() {
         </div>
 
         {/* right rail */}
-        <div className={`order-3 col-span-1 flex-col gap-2 overflow-y-auto lg:col-span-2 lg:grid lg:grid-cols-2 lg:items-start xl:col-span-1 xl:flex xl:flex-col xl:items-stretch ${mobileTab === "roadmap" ? "flex" : "hidden xl:flex"}`}>
+        <div className={`baccarat-right-rail thin-scroll order-3 min-h-0 min-w-0 flex-col gap-3 overflow-y-auto ${mobileTab === "roadmap" ? "grid grid-cols-1 items-start lg:grid-cols-2 xl:flex xl:items-stretch" : "hidden xl:flex"}`}>
           <Roadmap history={history} />
           <StatsPanel stats={stats} balance={balance} initialBalance={START_BALANCE} onReset={resetSession} />
         </div>

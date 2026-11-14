@@ -1,4 +1,4 @@
-const CACHE = "winkox-v5";
+const CACHE = "winkox-v6";
 const CORE = ["/icon-192.png", "/icon-512.png", "/brand/logo-mark.png"];
 self.addEventListener("install", (e) => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).catch((error) => console.error("[app cache]", error))); });
 self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k.startsWith("winkox-v") && k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
@@ -7,9 +7,10 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/") || req.headers.has("RSC")) return;
-  if (/\.(png|jpg|jpeg|webp|svg|ico|woff2?)$/i.test(url.pathname)) {
+  const gameThumbnail = url.pathname === "/_next/image" && (url.searchParams.get("url") || "").startsWith("/games/");
+  if (gameThumbnail || /\.(png|jpg|jpeg|webp|avif|svg|ico|woff2?)$/i.test(url.pathname)) {
     e.respondWith(caches.match(req).then((hit) => hit || fetch(req).then((res) => {
-      if (res.ok) { const copy = res.clone(); e.waitUntil(caches.open(CACHE).then((c) => c.put(req, copy))); }
+      if (res.ok) { const copy = res.clone(); e.waitUntil(caches.open(CACHE).then((c) => c.put(req, copy)).catch(error => console.warn("[app cache] Could not retain image", error))); }
       return res;
     })));
   } else if (req.mode === "navigate") {

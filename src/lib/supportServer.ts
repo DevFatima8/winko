@@ -77,7 +77,7 @@ export async function sendClientSupportMessage(textRaw: string, name?: string) {
 
     const settings = await getSettings();
     const online = supportOnline(settings.support);
-    await SupportThread.updateOne({ _id: thread._id }, { $set: { lastMessage: text, lastMessageAt: new Date(), status: "open" }, $inc: { unreadForAdmin: 1 } });
+    await SupportThread.updateOneAtomic({ _id: thread._id }, { $set: { lastMessage: text, lastMessageAt: new Date(), status: "open" }, $inc: { unreadForAdmin: 1 } });
     await notifyAdmins("New support message", `${authorName}: ${text.slice(0, 160)}`, "info", { href: "/admin/support", actorRole: identity.dbRole ?? undefined });
     const userMessageCount = await SupportMessage.countDocuments({ threadId: thread._id, from: "user" });
     if (userMessageCount === 1 && settings.support?.welcomeMessage) {
@@ -97,19 +97,34 @@ async function adminUser() {
     return user?.role === "admin" ? user : null;
 }
 
-export async function listAdminSupportThreads() {
-    const me = await adminUser();
-    if (!me) return { error: "Unauthorized", status: 401 };
-    let filter: Record<string, unknown> = {};
+async function adminSupportFilter(me: NonNullable<Awaited<ReturnType<typeof adminUser>>>) {
     if (me.level < 2) {
         const teamIds = (await User.find({ referredBy: me.id, role: { $in: ["client", "agent"] } }, "_id").lean()).map((user) => user._id);
-        filter = {
+        return {
             $and: [
                 { $or: [{ userId: { $in: teamIds } }, { assignedTo: oid(me.id) }] },
                 { $or: [{ assignedTo: null }, { assignedTo: oid(me.id) }] },
             ],
         };
     }
+    return {};
+}
+
+export async function getAdminSupportUnreadCount() {
+    const me = await adminUser();
+    if (!me) return { error: "Unauthorized", status: 401 };
+    const filter = await adminSupportFilter(me);
+    const totals = await SupportThread.aggregate<{ unread: number }>([
+        { $match: filter },
+        { $group: { _id: null, unread: { $sum: "$unreadForAdmin" } } },
+    ]);
+    return { unread: totals[0]?.unread ?? 0 };
+}
+
+export async function listAdminSupportThreads() {
+    const me = await adminUser();
+    if (!me) return { error: "Unauthorized", status: 401 };
+    const filter = await adminSupportFilter(me);
     const threads = await SupportThread.find(filter).sort({ lastMessageAt: -1 }).limit(150).lean();
     const userIds = threads.flatMap((thread) => thread.userId ? [String(thread.userId)] : []);
     const assignedIds = threads.flatMap((thread) => thread.assignedTo ? [String(thread.assignedTo)] : []);
@@ -154,11 +169,12 @@ export async function getAdminSupportMessages(threadId: string) {
     const thread = await SupportThread.findById(threadId).lean();
     if (!thread) return { error: "Not found", status: 404 };
     if (!await canAccessSupportThread(me, thread)) return { error: "Ye chat aapki team mein nahi hai.", status: 403 };
-    const messages = await SupportMessage.find({ threadId: oid(threadId) }).sort({ createdAt: 1 }).limit(300).lean();
+    const messages = (await SupportMessage.find({ threadId: oid(threadId) }).sort({ createdAt: -1 }).limit(300).lean()).reverse();
     const agentIds = [...new Set(messages.flatMap((message) => message.agentId ? [String(message.agentId)] : []))];
     const agents = agentIds.length ? await User.find({ _id: { $in: agentIds } }, "role").lean() : [];
     const agentRoles = new Map(agents.map((agent) => [String(agent._id), agent.role]));
-    await SupportThread.updateOne({ _id: oid(threadId) }, { $set: { unreadForAdmin: 0 } });
+    // A message arriving during this read must remain unread until the next fetch.
+    await SupportThread.updateOneAtomic({ _id: oid(threadId), unreadForAdmin: thread.unreadForAdmin, lastMessageAt: thread.lastMessageAt }, { $set: { unreadForAdmin: 0 } });
     return {
         messages: messages.map((message) => ({
             id: String(message._id),
@@ -185,7 +201,7 @@ export async function replyAsAdmin(threadId: string, textRaw: string) {
         if (String(claimedThread?.assignedTo ?? "") !== me.id) return { error: "Ye chat kisi aur admin ke paas hai.", status: 409 };
     }
     await SupportMessage.create({ threadId: oid(threadId), from: "agent", text, agentName: me.level >= 3 ? "Support Team" : me.name, agentId: oid(me.id) });
-    await SupportThread.updateOne({ _id: oid(threadId) }, { $set: { lastMessage: text, lastMessageAt: new Date(), unreadForAdmin: 0, status: "open" }, $inc: { unreadForUser: 1 } });
+    await SupportThread.updateOneAtomic({ _id: oid(threadId) }, { $set: { lastMessage: text, lastMessageAt: new Date(), status: "open" }, $inc: { unreadForUser: 1 } });
     return { ok: true };
 }
 

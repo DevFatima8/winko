@@ -19,6 +19,9 @@ const games = [
   "aviator",
 ];
 const code = compile("src\\components\\DailyPoolNotice.tsx");
+const opportunityRules = registry("src\\lib\\winOpportunityRules.ts");
+const slotRules = registry("src\\lib\\slotGameRules.ts");
+const opportunityCode = compile("src\\components\\WinOpportunityNotice.tsx");
 function nodes(node) {
   if (Array.isArray(node)) return node.flatMap(nodes);
   if (!node || typeof node !== "object") return [];
@@ -46,6 +49,15 @@ function scene(game, response = { status: 200, data: { enabled: false, balance: 
     };
     if (name === "@/lib/walletSync") return { broadcastBalanceUpdate: value => balances.push(value) };
     if (name === "@/lib/dailyPoolBrowserGames") return { isUnsupportedBrowserPoolGame: () => unsupported };
+    if (name === "@/lib/winOpportunityRules") return opportunityRules;
+    if (name === "@/lib/slotGameRules") return slotRules;
+    if (name === "@/lib/dailyPoolRules") return { DAILY_POOL_SETTLEMENT_RULES: ["Deferred daily pool rules: 35% allocated; 65% retained."] };
+    if (name === "@/lib/dailyPoolConsent") return { acceptDailyPool: () => {} };
+    if (name === "./WinOpportunityNotice") {
+      const notice = {};
+      new Function("require", "exports", opportunityCode)(require, notice);
+      return notice;
+    }
     throw new Error(`Unexpected entry import ${name}; entry must not grant wagering consent.`);
   };
   const exports = {};
@@ -63,9 +75,15 @@ function scene(game, response = { status: 200, data: { enabled: false, balance: 
     fn => { const id = Symbol(); timers.set(id, fn); return id; },
     id => timers.delete(id),
   );
-  const render = () => {
+  const resolveNode = node => {
+    if (Array.isArray(node)) return node.map(resolveNode);
+    if (!node || typeof node !== "object") return node;
+    if (typeof node.type === "function") return resolveNode(node.type(node.props));
+    return { ...node, props: { ...node.props, children: resolveNode(node.props?.children) } };
+  };
+  const render = (currentGame = game) => {
     cursor = 0;
-    return exports.DailyPoolNotice({ game, children: "GAME VISIBLE" });
+    return resolveNode(exports.DailyPoolNotice({ game: currentGame, children: "GAME VISIBLE" }));
   };
   return {
     render, requests, balances, listeners, timers,
@@ -80,13 +98,16 @@ function scene(game, response = { status: 200, data: { enabled: false, balance: 
 }
 
 for (const game of games) {
-  test(`${game}: game is mounted immediately without pregame rules, pool or permission overlay`, async () => {
+  test(`${game}: games open immediately while status loads in the background`, async () => {
     const s = scene(game);
     const initial = await s.mount();
-    assert.match(text(initial), /GAME VISIBLE/);
     const loaded = s.render();
+    assert.match(text(initial), /GAME VISIBLE/);
+    assert.doesNotMatch(text(initial), /Loading game status/);
+    assert.ok(!nodes(initial).some(node => node.type === "details" || node.type === "button"));
     assert.match(text(loaded), /GAME VISIBLE/);
-    assert.doesNotMatch(text(loaded), /pool|35%|65%|winning slots|table rules|Continue|Accept/i);
+    assert.doesNotMatch(text(loaded), /winning opportunities|30\/100|zero-return losses|Read before playing/);
+    assert.ok(!nodes(loaded).some(node => node.type === "details" || node.type === "button"));
     assert.ok(!nodes(loaded).some(node => node.props?.role === "dialog"));
     assert.equal(s.requests.length, 1);
     assert.equal(s.requests[0].options.method, undefined);
@@ -97,7 +118,17 @@ for (const game of games) {
   });
 }
 
-test("status failures remain visible without covering the game or accepting a wager", async () => {
+test("switching games renders immediately without accepting stale settlement configuration", async () => {
+  const s = scene("baccarat");
+  await s.mount();
+  assert.match(text(s.render()), /GAME VISIBLE/);
+  const changed = s.render("dice");
+  assert.match(text(changed), /GAME VISIBLE/);
+  assert.ok(!nodes(changed).some(node => node.type === "button"));
+  s.unmount();
+});
+
+test("status failures remain visible without replacing the game", async () => {
   const s = scene("baccarat", { error: new Error("Status connection interrupted.") });
   await s.mount();
   assert.match(text(s.render()), /GAME VISIBLE/);

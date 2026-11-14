@@ -12,7 +12,11 @@ new Function("exports", ts.transpileModule(readFileSync("src\\lib\\gameResultNot
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
 }).outputText)(noticeModule.exports);
 
-function harness() {
+function harness({ poolPending = true } = {}) {
+  const reveal = { exports: {} };
+  new Function("exports", ts.transpileModule(readFileSync("src\\lib\\walletReveal.ts", "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+  }).outputText)(reveal.exports);
   const values = new Map();
   const storage = {
     getItem: key => values.get(key) ?? null,
@@ -30,18 +34,26 @@ function harness() {
   const wagers = new Map();
   const operations = new Map();
   let owner = "alice", balance = 1000, loseResponse = null;
+  let delayedRead = null;
   const fetch = async (_url, options = {}) => {
-    if (options.method !== "POST") return {
-      ok: true, json: async () => ({ ok: true, loggedIn: true, dailyPoolEnabled: true, balance, user: { id: owner } }),
-    };
+    if (options.method !== "POST") {
+      const data = { ok: true, loggedIn: true, dailyPoolEnabled: poolPending, balance, user: { id: owner } };
+      const delay = delayedRead;
+      delayedRead = null;
+      if (delay) await delay;
+      return { ok: true, json: async () => data };
+    }
     const body = JSON.parse(options.body);
     requests.push(body);
     assert.equal(body.ownerId, owner, "never submit another account's saved wager");
     if (!operations.has(body.operationId)) {
-      if (body.action === "accept") {
+      if (body.action === "accept" || body.action === "server-play") {
         assert.ok(!wagers.has(body.wagerId));
-        balance -= body.amount;
-        wagers.set(body.wagerId, { stake: body.amount, claim: 0, awards: 0, closed: false });
+        const instant = body.action === "server-play";
+        const stake = instant ? body.stake : body.amount;
+        balance -= stake;
+        if (instant && !poolPending) balance += 20;
+        wagers.set(body.wagerId, { stake, claim: instant ? 20 : 0, awards: 0, closed: instant });
       } else {
         const wager = wagers.get(body.wagerId);
         assert.ok(wager);
@@ -59,13 +71,16 @@ function harness() {
           wager.claim = wager.closed ? 20 : 0;
           wager.outcome = { phase: wager.closed ? "result" : "playing", payout: wager.claim };
         }
+        if (!poolPending && (body.action === "resolve" || body.action === "card-action" && wager.closed)) {
+          balance += wager.claim;
+        }
       }
       operations.set(body.operationId, body);
     }
     if (loseResponse === body.action) { loseResponse = null; throw new Error("Response lost after commit"); }
     return {
       ok: true, status: 200,
-      json: async () => ({ ok: true, balance, wagerId: body.wagerId, poolPending: true, claim: wagers.get(body.wagerId)?.claim ?? 0,
+      json: async () => ({ ok: true, balance, wagerId: body.wagerId, poolPending, claim: wagers.get(body.wagerId)?.claim ?? 0,
         status: wagers.get(body.wagerId)?.closed ? "closed" : "active", outcome: wagers.get(body.wagerId)?.outcome ?? null }),
     };
   };
@@ -83,7 +98,7 @@ function harness() {
     } },
   });
   function mount() {
-    const effects = [];
+    const effects = [], cleanups = [];
     const module = { exports: {} };
     const react = {
       useRef: value => ({ current: value }),
@@ -93,6 +108,7 @@ function harness() {
     };
     new Function("require", "module", "exports", code)(specifier => {
       if (specifier === "react") return react;
+      if (specifier === "./walletReveal") return reveal.exports;
       if (specifier === "./dailyPoolConsent") return { dailyPoolConsent: () => "daily-pool-v1" };
       if (specifier === "./gameResultNotice") return noticeModule.exports;
       if (specifier === "./cardGameRules" || specifier === "./browserCardGames" || specifier === "./rouletteGameRules" || specifier === "./slotGameRules") {
@@ -107,14 +123,20 @@ function harness() {
     return {
       ...module.exports,
       recover: async () => {
-        effects.forEach(effect => effect());
+        effects.forEach(effect => cleanups.push(effect()));
         for (let count = 0; count < 30; count++) await new Promise(resolve => setImmediate(resolve));
       },
+      unmount: () => cleanups.forEach(cleanup => cleanup?.()),
     };
   }
   return {
     storage, requests, wagers, notices, mount, get balance() { return balance; },
     lose: action => { loseResponse = action; },
+    delayRead: () => {
+      let release;
+      delayedRead = new Promise(resolve => { release = resolve; });
+      return () => release();
+    },
     login: id => { owner = id; },
     restore: () => {
       for (const [key, descriptor] of Object.entries(previous)) {
@@ -196,6 +218,119 @@ function toucanSpin(pool) {
   const run = new Function(...Object.keys(deps), `${compiled}\nreturn run;`)(...Object.values(deps));
   return { run, samples, messages, auto, selections, validations, starts, lock: deps.busyLock };
 }
+
+test("instant wager receipts do not publish their return before the game's reveal callback", async () => {
+  const h = harness({ poolPending: false });
+  try {
+    const api = h.mount();
+    const wager = api.useBrowserWager("head-tail");
+    const receipt = await wager.playServer(10, { side: "head" });
+    assert.equal(receipt.balance, 1010);
+    assert.equal(api.getStoredWalletBalance(), 990);
+    assert.equal(await api.fetchServerBalance(), 990);
+    wager.reveal();
+    assert.equal(api.getStoredWalletBalance(), 1010);
+  } finally { h.restore(); }
+});
+
+test("resolved winnings remain hidden through wallet polls until the game announces its result", async () => {
+  const h = harness({ poolPending: false });
+  try {
+    const api = h.mount();
+    const pool = api.usePoolLifecycle("fortune-ox");
+    await pool.start(10);
+    assert.equal(api.getStoredWalletBalance(), 990);
+    await pool.resolveServer({});
+    assert.equal(h.balance, 1010, "server accounting remains committed and authoritative");
+    assert.equal(api.getStoredWalletBalance(), 990);
+    assert.equal(await api.fetchServerBalance(), 990, "polling cannot reveal a win early");
+    assert.equal(h.notices.length, 0);
+    pool.announce();
+    assert.equal(api.getStoredWalletBalance(), 1010);
+    pool.announce();
+    assert.equal(api.getStoredWalletBalance(), 1010);
+    assert.equal(h.notices.length, 1);
+  } finally { h.restore(); }
+});
+
+test("bonus reveals publish only each visible spin rather than the upfront total", async () => {
+  const h = harness({ poolPending: false });
+  try {
+    const api = h.mount();
+    const pool = api.usePoolLifecycle("gates-of-olympus");
+    await pool.start(10);
+    await pool.resolveServer({});
+    assert.equal(api.getStoredWalletBalance(), 990);
+    pool.revealReturn(5);
+    assert.equal(api.getStoredWalletBalance(), 995);
+    assert.equal(await api.fetchServerBalance(), 995);
+    pool.revealReturn(15);
+    assert.equal(api.getStoredWalletBalance(), 1010);
+  } finally { h.restore(); }
+});
+
+test("a wallet read started before resolution cannot roll back the revealed balance", async () => {
+  const h = harness({ poolPending: false });
+  try {
+    const api = h.mount();
+    const pool = api.usePoolLifecycle("fortune-ox");
+    await pool.start(10);
+    const releaseRead = h.delayRead();
+    const oldRead = api.fetchServerBalance();
+    await pool.resolveServer({});
+    pool.announce();
+    releaseRead();
+    assert.equal(await oldRead, 1010);
+    assert.equal(api.getStoredWalletBalance(), 1010);
+  } finally { h.restore(); }
+});
+
+test("a delayed old-account wallet read cannot restore that account's presentation owner", async () => {
+  const h = harness({ poolPending: false });
+  try {
+    const api = h.mount();
+    await api.usePoolLifecycle("fortune-ox").start(10);
+    const releaseRead = h.delayRead();
+    const oldRead = api.fetchServerBalance();
+    h.login("bob");
+    await api.fetchServerBalance();
+    releaseRead();
+    await oldRead;
+    assert.equal(await api.usePoolLifecycle("fortune-gems").start(10), true);
+    assert.equal(h.requests.at(-1).ownerId, "bob");
+  } finally { h.restore(); }
+});
+
+test("navigation during server resolution cannot leave an invisible wallet hold", async () => {
+  const h = harness({ poolPending: false });
+  try {
+    const api = h.mount();
+    const pool = api.usePoolLifecycle("fortune-ox");
+    await api.recover();
+    await pool.start(10);
+    const resolving = pool.resolveServer({});
+    api.unmount();
+    await resolving;
+    assert.equal(api.getStoredWalletBalance(), 1010);
+    assert.equal(await api.fetchServerBalance(), 1010);
+  } finally { h.restore(); }
+});
+
+test("interactive card returns wait for dealer reveal while accepted stakes remain immediate", async () => {
+  const h = harness({ poolPending: false });
+  try {
+    const api = h.mount();
+    const pool = api.usePoolLifecycle("blackjack");
+    await pool.start(10);
+    await pool.cardAction("deal");
+    assert.equal(api.getStoredWalletBalance(), 990);
+    await pool.cardAction("stand");
+    assert.equal(h.balance, 1010);
+    assert.equal(await api.fetchServerBalance(), 990);
+    pool.announce();
+    assert.equal(api.getStoredWalletBalance(), 1010);
+  } finally { h.restore(); }
+});
 
 test("interactive card moves keep the accepted wager until terminal confirmation and retry the exact move", async () => {
   const h = harness();

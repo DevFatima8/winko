@@ -17,11 +17,6 @@ const MOVES: Move[] = ["rock", "paper", "scissors"];
 const EMOJI: Record<Move, string> = { rock: "✊", paper: "✋", scissors: "✌️" };
 const LABEL: Record<Move, string> = { rock: "ROCK", paper: "PAPER", scissors: "SCISSORS" };
 
-// what beats X
-const BEATS: Record<Move, Move> = { rock: "scissors", paper: "rock", scissors: "paper" };
-const LOSES_TO: Record<Move, Move> = { rock: "paper", paper: "scissors", scissors: "rock" };
-
-const WIN_CHANCE = 0.35;
 const PAYOUT = 1.96;
 const CHIPS: number[] = [...BET_PRESETS];
 
@@ -39,7 +34,7 @@ function fmt(n: number) {
 }
 
 export default function RockPaperScissorsGame({ backHref }: { backHref?: string }) {
-  const { balance, play: submitWager, pending, error, retry } = useBrowserWager("rock-paper-scissors", 1000);
+  const { balance, playServer: submitWager, pending, error, retry, reveal } = useBrowserWager("rock-paper-scissors", 1000);
   const [poolPending, setPoolPending] = useState(false);
   const [lastClaim, setLastClaim] = useState(0);
   const [bet, setBet] = useState(50);
@@ -75,15 +70,21 @@ export default function RockPaperScissorsGame({ backHref }: { backHref?: string 
       if (bet <= 0 || bet > balance) return;
 
       const stake = bet;
-      const win = Math.random() < WIN_CHANCE;
-      const houseMove: Move = win ? BEATS[choice] : LOSES_TO[choice];
-      const payout = win ? Math.round(stake * PAYOUT * 100) / 100 : 0;
       let accepted;
       try {
-        accepted = await submitWager(stake, payout);
+        accepted = await submitWager(stake, { choice });
       } catch {
         return;
       }
+      const outcome = accepted.outcome;
+      if (!outcome || typeof outcome !== "object" || !("win" in outcome) || typeof outcome.win !== "boolean" ||
+          !("house" in outcome) || outcome.house !== "rock" && outcome.house !== "paper" && outcome.house !== "scissors") {
+        window.dispatchEvent(new CustomEvent("wx:wallet-error", { detail: { error: "The confirmed RPS outcome is invalid. Check your wager history." } }));
+        return;
+      }
+      const win = outcome.win;
+      const houseMove: Move = outcome.house;
+      const payout = accepted.claim;
       setPoolPending(accepted.poolPending);
       setLastClaim(payout);
       setPlayer(choice);
@@ -102,6 +103,7 @@ export default function RockPaperScissorsGame({ backHref }: { backHref?: string 
 
       timers.current.push(window.setTimeout(() => {
         setSettling(false);
+        reveal();
         const d = payout - stake;
         setDelta(d);
         if (win) gameSfx.win(); else gameSfx.lose();
@@ -124,7 +126,7 @@ export default function RockPaperScissorsGame({ backHref }: { backHref?: string 
         );
       }, 3900));
     },
-    [bet, balance, rolling, settling, pending, error, submitWager],
+    [bet, balance, rolling, settling, pending, error, submitWager, reveal],
   );
 
   const total = wins + losses;
@@ -245,7 +247,7 @@ export default function RockPaperScissorsGame({ backHref }: { backHref?: string 
                   key={c}
                   disabled={rolling}
                   onClick={() => setBet(Math.min(Math.floor(balance), c))}
-                  className={`h-9 w-9 sm:h-11 sm:w-11 rounded-full border-2 border-dashed text-[10px] sm:text-xs font-black text-white shadow-md transition-all duration-150 hover:scale-105 active:scale-95 disabled:opacity-40 bg-gradient-to-br ${c === 50
+                  className={`inline-flex h-9 min-w-9 shrink-0 items-center justify-center px-2 sm:h-11 sm:min-w-11 rounded-full border-2 border-dashed font-black text-white shadow-md transition-all duration-150 hover:scale-105 active:scale-95 disabled:opacity-40 bg-gradient-to-br ${c === 50
                       ? "from-sky-500 to-sky-700 border-sky-300"
                       : c === 100
                         ? "from-emerald-500 to-emerald-700 border-emerald-300"
@@ -256,7 +258,7 @@ export default function RockPaperScissorsGame({ backHref }: { backHref?: string 
                             : "from-amber-500 to-amber-700 border-amber-300"
                     }`}
                 >
-                  {c}
+                  <span className="whitespace-nowrap text-[10px] sm:text-xs">{c}</span>
                 </button>
               ))}
               <div className="flex items-center gap-1 ml-auto">

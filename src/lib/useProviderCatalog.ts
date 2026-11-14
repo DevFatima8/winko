@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import type { ProviderCatalogGame } from "./gregmornCatalog";
 import { isGameReturn } from "./gameNavigation";
-import { readReturnCatalog, saveProviderCatalog, warmProviderCatalog } from "./providerCatalogCache";
-import { SITE_CATALOG_URL } from "./gameAvailability";
+import { loadProviderCatalog, readReturnCatalog, warmProviderCatalog } from "./providerCatalogCache";
 
 export type ProviderCatalogState = {
   games: ProviderCatalogGame[];
@@ -33,15 +32,11 @@ export function useProviderCatalog(enabled = true): ProviderCatalogState {
     const refresh = () => {
       if (pending || controller.signal.aborted) return;
       pending = true;
-      void fetch(SITE_CATALOG_URL, { cache: "no-store", signal: controller.signal })
-      .then(async response => {
-        const data = await response.json() as { games?: ProviderCatalogGame[]; error?: string };
-        if (!response.ok) throw new Error(data.error ?? "Games could not be loaded.");
-        if (!Array.isArray(data.games)) throw new Error("Invalid game catalogue.");
+      void loadProviderCatalog()
+      .then(games => {
         if (!controller.signal.aborted) {
           fresh = true;
-          setState({ games: data.games, loading: false, error: "" });
-          void saveProviderCatalog(data.games);
+          setState({ games, loading: false, error: "" });
         }
       })
       .catch(reason => {

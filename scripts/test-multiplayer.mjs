@@ -16,14 +16,21 @@ function load(file, imports = {}) {
 }
 const types = load(join("src", "lib", "multiplayer-types.ts"));
 const cardRules = load(join("src", "lib", "cardGameRules.ts"));
-const rules = load(join("src", "lib", "multiplayer-rules.ts"), { "node:crypto": crypto });
+const birdConfig = load(join("src", "components", "birds-beasts", "lib", "game-config.ts"));
+const birdRounds = load(join("src", "lib", "birdsBeastsRounds.ts"), {
+  "node:crypto": crypto, "@/components/birds-beasts/lib/game-config": birdConfig,
+});
+const rules = load(join("src", "lib", "multiplayer-rules.ts"), { "node:crypto": crypto, "@/components/birds-beasts/lib/game-config": birdConfig });
 const poolRules = load(join("src", "lib", "dailyPoolRules.ts"), { "./gameCatalog": load(join("src", "lib", "gameCatalog.ts")), "./multiplayer-types": types });
 const pool = load(join("src", "lib", "dailyPool.ts"), { "./dailyPoolRules": poolRules, "node:crypto": crypto });
-const cycles = load(join("src", "lib", "playerWinCycle.ts"), { "node:crypto": crypto });
-const privateCards = load(join("src", "lib", "privateCardTables.ts"), {
-  "node:crypto": crypto, "./multiplayer-rules": rules, "./playerWinCycle": cycles,
-});
 const rouletteRules = load(join("src", "lib", "rouletteGameRules.ts"));
+const cycles = load(join("src", "lib", "playerWinCycle.ts"), {
+  "node:crypto": crypto, "./cardGameRules": cardRules, "./rouletteGameRules": rouletteRules,
+  "./winOpportunityRules": load(join("src", "lib", "winOpportunityRules.ts")),
+});
+const privateCards = load(join("src", "lib", "privateCardTables.ts"), {
+  "node:crypto": crypto, "./multiplayer-rules": rules, "./playerWinCycle": cycles, "./cardGameRules": cardRules,
+});
 const privateRoulettes = load(join("src", "lib", "privateRouletteTables.ts"), {
   "node:crypto": crypto, "./multiplayer-rules": rules,
 });
@@ -84,6 +91,8 @@ function fixture(overrides = {}, poolEnabled = false) {
     "./privateCardTables": { ...privateCards, isPrivateCardTable: () => false },
     "./rouletteGameRules": { ...rouletteRules, isLiveRouletteGame: () => false, isRouletteGame: () => false },
     "./privateRouletteTables": privateRoulettes, "./playerWinCycle": cycles,
+    "./privateDiceTables": { isPrivateDiceTable: () => false },
+    "./birdsBeastsRounds": birdRounds, "@/components/birds-beasts/lib/game-config": birdConfig,
   });
   return {
     ...backend, service: backend.createMultiplayerService(store),
@@ -96,6 +105,56 @@ let serial = 0;
 const bet = (roundNo, option = "down", amount = 100, extra = {}) => ({ action: "bet", requestId: `request_${++serial}`, roundNo, option, amount, ...extra });
 const action = (kind, roundNo, extra = {}) => ({ action: kind, requestId: `request_${++serial}`, roundNo, ...extra });
 const rejects = (promise, status) => assert.rejects(promise, error => error.status === status);
+
+test("Birds & Beasts shares one timed result, consumes one quota slot, and pays x8 without returning stake twice", async () => {
+  const f = fixture();
+  const first = await f.service.read("birds-beasts", "u1");
+  assert.equal(first.tableMode, "shared");
+  assert.equal(first.round.result, null);
+  const alice = await f.service.act("birds-beasts", "u1", bet(first.round.roundNo, "owl", 100));
+  assert.equal(alice.state.balance, 9900);
+  assert.equal(alice.state.myBets.length, 1, "The committed response contains the confirmed bet without another read");
+  await f.second.act("birds-beasts", "u2", bet(first.round.roundNo, "owl", 100));
+  f.seed("multiplayerrooms", "birds-beasts:rounds-20-target:v2", {
+    _id: "birds-beasts:rounds-20-target:v2", remaining: ["x8"], targets: [true],
+  });
+  f.at(first.round.bettingEndsAt);
+  const [a, b, guest] = await Promise.all([
+    f.service.read("birds-beasts", "u1"), f.second.read("birds-beasts", "u2"), f.service.read("birds-beasts"),
+  ]);
+  assert.deepEqual(a.round, b.round);
+  assert.deepEqual(a.round, guest.round);
+  assert.equal(a.round.result.animal, "owl");
+  const cycle = structuredClone(f.document("multiplayerrooms", "birds-beasts:rounds-20-target:v2"));
+  await rejects(f.service.act("birds-beasts", "u1", bet(first.round.roundNo + 1, "owl", 100)), 409);
+  f.at(first.round.resultAt);
+  const settled = await f.service.read("birds-beasts", "u1");
+  assert.equal(settled.balance, 10700);
+  assert.equal(settled.myBets[0].payout, 800);
+  assert.equal(f.document("users", "u2").balance, 10700);
+  assert.deepEqual(f.document("multiplayerrooms", "birds-beasts:rounds-20-target:v2"), cycle);
+  assert.equal(settled.history.length, 1);
+  await f.service.read("birds-beasts", "u1");
+  assert.equal(f.document("users", "u1").balance, 10700);
+  assert.equal(f.rows("winholds").length, 0);
+  f.at(first.round.endsAt);
+  const next = await f.second.read("birds-beasts", "u2");
+  assert.equal(next.round.phase, "betting");
+  assert.equal(next.round.roundNo, first.round.roundNo + 1);
+  assert.equal(next.history[0].result.animal, "owl");
+});
+
+test("Birds & Beasts spectator rounds share history and do not write wallets or consume multiple results", async () => {
+  const f = fixture();
+  const first = await f.service.read("birds-beasts");
+  f.at(first.round.resultAt);
+  const a = await f.service.read("birds-beasts", "u1");
+  const b = await f.second.read("birds-beasts", "u2");
+  assert.deepEqual(a.history, b.history);
+  assert.equal(f.document("multiplayerrooms", "birds-beasts:rounds-20-target:v2").remaining.length, 99);
+  assert.equal(f.rows("gameresults").length, 0);
+  assert.equal(f.document("users", "u1").balance, 10000);
+});
 
 test("every multiplayer game counts ten full seconds before the current and next round start", async () => {
   for (const game of types.MULTIPLAYER_GAMES) {
@@ -150,9 +209,9 @@ test("pending claims, including zero-claim losses, never become a paid-win or fi
 test("non-card multiplayer games record accepted stakes, close claims, and pay exactly 35% once at Pakistan midnight", async () => {
   const options = { baccarat: "player", "speed-baccarat": "player", "dream-catcher": "1", "football-studio": "HOME",
     "auto-roulette": "n:1", "lightning-roulette": "n-1", "sic-bo": "small", "blast-off": "main",
-    "nine-wickets": "boundary", "7-up-down": "down", "tai-xiu": "tai", "32-cards": "A" };
+    "nine-wickets": "boundary", "7-up-down": "down", "tai-xiu": "tai", "32-cards": "A", "birds-beasts": "owl" };
   for (const game of types.MULTIPLAYER_GAMES) {
-    if (cardRules.isCardGame(game)) continue;
+    if (cardRules.isCardGame(game) || rouletteRules.isWheelGame(game)) continue;
     const f = fixture({}, true);
     f.at(Date.parse("2026-10-24T08:00:00Z"));
     const initial = await f.service.read(game, "u1");
@@ -562,7 +621,7 @@ test("No future outcome leakage; wheel targets appear only after betting closes"
     } else {
       f.at(state.round.bettingEndsAt);
       const running = await f.service.read(game);
-      assert.equal(running.round.result !== null, ["auto-roulette", "lightning-roulette", "dream-catcher", "32-cards", "baccarat"].includes(game));
+      assert.equal(running.round.result !== null, ["auto-roulette", "lightning-roulette", "dream-catcher", "32-cards", "baccarat", "birds-beasts"].includes(game));
     }
   }
 });

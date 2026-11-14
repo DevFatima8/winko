@@ -20,7 +20,7 @@
 }
 
 /* glass / gold panels */
-.fishing-arcade-container .panel {
+.fishing-arcade-container .fishing-panel {
   background: linear-gradient(#12356a, #071a38);
   border: 3px solid #ffd54a;
   border-radius: 16px;

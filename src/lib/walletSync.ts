@@ -8,6 +8,10 @@ import { isCardGame } from "./cardGameRules";
 import { isRouletteGame, isBrowserRouletteGame, isWheelGame } from "./rouletteGameRules";
 import { isAutoResolveBrowserCardGame, isInteractiveBrowserCardGame } from "./browserCardGames";
 import { isSlotGame } from "./slotGameRules";
+import {
+  beginWalletReveal, confirmWalletReveal, finishWalletReveal, presentedWalletBalance,
+  recordWalletBalance, setWalletRevealOwner, walletRevealRevision,
+} from "./walletReveal";
 
 /** Explicit engine snapshots. Callers choose gameplay fields; wallets are never restored from these. */
 export function usePoolRoundState<T>(game: DailyPoolGame, field: string, initial: T | (() => T), slot = "main") {
@@ -245,6 +249,10 @@ export function getStoredWalletBalance(): number | null {
 
 /** Update all game storage keys in localStorage with the unified real balance */
 export function syncAllStorageKeys(balance: number): void {
+  syncDisplayedStorageKeys(presentedWalletBalance(balance));
+}
+
+function syncDisplayedStorageKeys(balance: number): void {
   if (typeof window === "undefined") return;
   const num = Math.max(0, Math.round(balance * 100) / 100);
   const numStr = String(num);
@@ -299,13 +307,32 @@ export function subscribeWalletBalance(listener: (balance: number) => void): () 
 /** Broadcast balance update event to window & layout */
 export function broadcastBalanceUpdate(newBalance: number, gameName?: string): void {
   if (typeof window === "undefined") return;
-  syncAllStorageKeys(newBalance);
+  publishWalletBalance(recordWalletBalance(newBalance), gameName);
+}
+
+function publishWalletBalance(balance: number, gameName?: string) {
+  syncDisplayedStorageKeys(balance);
   window.dispatchEvent(
     new CustomEvent("wx:balance-update", {
-      detail: { balance: newBalance, game: gameName },
+      detail: { balance, game: gameName },
     })
   );
   window.dispatchEvent(new CustomEvent("wx:session"));
+}
+
+export function holdWalletReveal(key: string) {
+  beginWalletReveal(key, getStoredWalletBalance());
+}
+
+export function confirmWalletReturn(key: string, balance: number | null, credit: number) {
+  confirmWalletReveal(key, credit);
+  if (balance !== null) broadcastBalanceUpdate(balance);
+}
+
+export function revealWalletReturn(key: string, amount?: number) {
+  const balance = finishWalletReveal(key, amount);
+  if (balance === null) return;
+  publishWalletBalance(balance);
 }
 
 /**
@@ -368,16 +395,22 @@ export async function reportGameBalanceChange(
 /** Fetch fresh user balance from backend */
 export async function fetchServerBalance(): Promise<number | null> {
   if (typeof window === "undefined") return null;
+  const revision = walletRevealRevision();
+  const readOwner = walletOwner;
   try {
     const res = await fetch("/api/player/balance", { cache: "no-store" });
     if (!res.ok) return null;
     const data = await res.json();
     if (typeof data.dailyPoolEnabled === "boolean") poolMode = data.dailyPoolEnabled;
     if (data.loggedIn && typeof data.balance === "number") {
-      walletOwner = typeof data.user?.id === "string" ? data.user.id : null;
-      syncAllStorageKeys(data.balance);
+      const nextOwner = typeof data.user?.id === "string" ? data.user.id : null;
+      if (readOwner !== walletOwner && nextOwner !== walletOwner) return getStoredWalletBalance();
+      const stale = walletOwner === nextOwner && revision !== walletRevealRevision();
+      walletOwner = nextOwner;
+      setWalletRevealOwner(walletOwner);
+      if (stale) return getStoredWalletBalance();
       broadcastBalanceUpdate(data.balance);
-      return data.balance;
+      return presentedWalletBalance(data.balance);
     }
   } catch {
     /* fetch error */
@@ -466,21 +499,31 @@ export function useBrowserWager(game: DailyPoolGame, fallbackInitial = 1000) {
   const [pending, setPending] = useState(false);
   const busy = useRef(false);
   const key = `wx:browser-wager:${game}`;
+  const [revealKey] = useState(() => `${key}:${crypto.randomUUID()}`);
+  const disposed = useRef(false);
 
-  const send = useCallback(async (body: BrowserWagerRequest): Promise<BrowserWagerReply> => {
+  const send = useCallback(async (body: BrowserWagerRequest, holdBalance = false): Promise<BrowserWagerReply> => {
     assertWagerOwner(body, await requireWalletOwner());
+    if (holdBalance) holdWalletReveal(revealKey);
     const response = await fetch("/api/player/balance", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
     });
     const reply = await response.json();
     if (!response.ok || reply.ok !== true || !Number.isFinite(reply.balance) || reply.wagerId !== body.wagerId) {
-      if (response.status >= 400 && response.status < 500) localStorage.removeItem(key);
+      if (response.status >= 400 && response.status < 500) {
+        localStorage.removeItem(key);
+        revealWalletReturn(revealKey);
+      }
       throw new Error(reply.error || "Wager confirmation failed. Retry before placing another bet.");
     }
     localStorage.removeItem(key);
-    broadcastBalanceUpdate(reply.balance, game);
+    if (holdBalance && !disposed.current) confirmWalletReturn(revealKey, reply.balance, reply.poolPending ? 0 : reply.claim);
+    else {
+      finishWalletReveal(revealKey);
+      broadcastBalanceUpdate(reply.balance, game);
+    }
     return reply;
-  }, [game, key]);
+  }, [game, key, revealKey]);
 
   const recover = useCallback(async () => {
     if (busy.current) return;
@@ -508,6 +551,11 @@ export function useBrowserWager(game: DailyPoolGame, fallbackInitial = 1000) {
     void Promise.resolve().then(() => { if (!disposed) void recover(); });
     return () => { disposed = true; };
   }, [recover]);
+  useEffect(() => {
+    disposed.current = false;
+    return () => { disposed.current = true; revealWalletReturn(revealKey); };
+  }, [revealKey]);
+  const reveal = useCallback(() => revealWalletReturn(revealKey), [revealKey]);
 
   const play = useCallback(async (stake: number, claim: number, selection?: unknown) => {
     if (busy.current) throw new Error("Wait for the current wager confirmation.");
@@ -522,7 +570,7 @@ export function useBrowserWager(game: DailyPoolGame, fallbackInitial = 1000) {
       };
       // Persist BEFORE submitting: a lost response must replay this exact outcome and identity.
       localStorage.setItem(key, JSON.stringify(body));
-      const reply = await send(body);
+      const reply = await send(body, true);
       setError(null);
       return reply;
     } catch (failure) {
@@ -535,18 +583,21 @@ export function useBrowserWager(game: DailyPoolGame, fallbackInitial = 1000) {
     }
   }, [game, key, send]);
 
-  return { balance, play, playServer: (stake: number, selection: unknown) => play(stake, 0, selection), pending, error, retry: recover };
+  return { balance, play, playServer: (stake: number, selection: unknown) => play(stake, 0, selection), reveal, pending, error, retry: recover };
 }
 
 /** Explicit accepted wagers in both accounting modes; callbacks never mutate the authoritative wallet. */
 export function usePoolLifecycle(game: DailyPoolGame, slot = "main") {
   const key = `wx:browser-active:${game}:${slot}`;
+  const [revealKey] = useState(() => `${key}:${crypto.randomUUID()}`);
   const active = useRef<string | null>(typeof window === "undefined" ? null : localStorage.getItem(key));
   const busy = useRef(false);
   const outcome = useRef<unknown>(null);
   const pendingSettlement = useRef(false);
   const resolvedWager = useRef<string | null>(null);
-  const heldBalance = useRef<number | null>(null);
+  const holdingBalance = useRef(false);
+  const disposed = useRef(false);
+  const credited = useRef(0);
   const [enabled, setEnabled] = useState(!isCardGame(game) && !isRouletteGame(game) && !isWheelGame(game) && !isSlotGame(game) && game !== "thai-hi-lo" && poolMode === true);
   const recovering = useRef(false);
   const mountedRecovery = useRef(typeof window !== "undefined" &&
@@ -559,7 +610,8 @@ export function usePoolLifecycle(game: DailyPoolGame, slot = "main") {
     if (busy.current) return false;
     busy.current = true;
     try {
-      const ownerId = await requireWalletOwner();
+      // The POST checks this owner against the authenticated session before any wallet write.
+      const ownerId = walletOwner && poolMode !== null ? walletOwner : await requireWalletOwner();
       if (poolMode === null) throw new Error("Wallet configuration is unavailable. Retry before betting.");
       setEnabled(!isCardGame(game) && !isRouletteGame(game) && !isWheelGame(game) && !isSlotGame(game) && game !== "thai-hi-lo" && poolMode);
       const pendingKey = `${key}:request`;
@@ -593,12 +645,18 @@ export function usePoolLifecycle(game: DailyPoolGame, slot = "main") {
       if (action === "accept" && planned) localStorage.setItem(`${key}:terminal`, JSON.stringify({ ...planned, ownerId }));
       if (action === "accept" && continuation) localStorage.setItem(`${key}:continuation`, JSON.stringify({ ...continuation, ownerId }));
       if (action === "complete") localStorage.setItem(`${key}:terminal`, JSON.stringify({ wagerId: body.wagerId, ownerId, claim: body.amount }));
+      if (holdBalance) {
+        holdWalletReveal(revealKey);
+        holdingBalance.current = true;
+      }
       const response = await fetch("/api/player/balance", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
       });
       const reply = await response.json();
       if (!response.ok || reply.ok !== true || !Number.isFinite(reply.balance) || reply.wagerId !== body.wagerId) {
         if (response.status >= 400 && response.status < 500) {
+          revealWalletReturn(revealKey);
+          holdingBalance.current = false;
           localStorage.removeItem(pendingKey);
           setEnabled(reply.poolPending === true);
           pendingSettlement.current = reply.poolPending === true;
@@ -634,15 +692,19 @@ export function usePoolLifecycle(game: DailyPoolGame, slot = "main") {
         active.current = body.wagerId;
         localStorage.setItem(key, body.wagerId);
       }
-      // A held balance is shown only after the game reveals the already-confirmed result.
-      if (holdBalance) heldBalance.current = reply.balance;
+      const cumulativeReturn = typeof reply.outcome?.payout === "number" ? reply.outcome.payout : reply.claim ?? 0;
+      const returned = action === "card-action" ? Math.max(0, cumulativeReturn - credited.current) : reply.claim ?? cumulativeReturn;
+      if (holdBalance && !disposed.current) confirmWalletReturn(revealKey, reply.balance, reply.poolPending ? 0 : returned);
       else {
-        heldBalance.current = null;
+        finishWalletReveal(revealKey);
+        holdingBalance.current = false;
         broadcastBalanceUpdate(reply.balance, game);
       }
+      if (action === "accept") credited.current = 0;
+      if (action === "card-action") credited.current = cumulativeReturn;
       outcome.current = reply.outcome;
       if (action === "resolve" || action === "card-action" && reply.status === "closed") resolvedWager.current = body.wagerId;
-      if (action === "complete" || action === "resolve" && game === "treasure-bowl") notifyGameResult(game, body.wagerId,
+      if (action === "complete") notifyGameResult(game, body.wagerId,
         typeof reply.claim === "number" ? reply.claim : body.amount, reply.poolPending === true);
       return true;
     } catch (error) {
@@ -651,7 +713,7 @@ export function usePoolLifecycle(game: DailyPoolGame, slot = "main") {
     } finally {
       busy.current = false;
     }
-  }, [game, key]);
+  }, [game, key, revealKey]);
 
   const resume = useCallback(async (isDisposed: () => boolean = () => false) => {
     if (recovering.current || busy.current) return false;
@@ -670,7 +732,7 @@ export function usePoolLifecycle(game: DailyPoolGame, slot = "main") {
       };
       const request = JSON.parse(localStorage.getItem(`${key}:request`) ?? "null");
       if (request && !await execute(request.action, request.amount, () => {}, request.selection)) return false;
-      if (request?.action === "resolve" && (game === "thai-hi-lo" || isSlotGame(game) && game !== "treasure-bowl" || isCardGame(game) || isBrowserRouletteGame(game))) {
+      if (request?.action === "resolve" && (game === "thai-hi-lo" || isSlotGame(game) || isCardGame(game) || isBrowserRouletteGame(game))) {
         notifyRecoveredSlot(request.wagerId);
       }
       if (request?.action === "card-action" && !active.current) notifyRecoveredSlot(request.wagerId);
@@ -683,11 +745,11 @@ export function usePoolLifecycle(game: DailyPoolGame, slot = "main") {
       }
       const terminal = JSON.parse(localStorage.getItem(`${key}:terminal`) ?? "null");
       const savedSelection = JSON.parse(localStorage.getItem(`${key}:selection`) ?? "null");
-      if (!isInteractiveBrowserCardGame(game) &&
+      if (!isInteractiveBrowserCardGame(game) && game !== "tower-betting" &&
           (game === "treasure-bowl" || !terminal && (game === "super-fruits" || game === "sweet-bonanza" || isAutoResolveBrowserCardGame(game) || savedSelection !== null)) && active.current) {
         const wagerId = active.current;
         if (!await execute("resolve", 0, () => {}, savedSelection ?? {})) return false;
-        if (game === "thai-hi-lo" || isSlotGame(game) && game !== "treasure-bowl" || isCardGame(game) || isBrowserRouletteGame(game)) {
+        if (game === "thai-hi-lo" || isSlotGame(game) || isCardGame(game) || isBrowserRouletteGame(game)) {
           notifyRecoveredSlot(wagerId);
         }
         mountedRecovery.current = false;
@@ -721,20 +783,26 @@ export function usePoolLifecycle(game: DailyPoolGame, slot = "main") {
     return () => { disposed = true; window.removeEventListener("online", online); };
   }, [resume]);
 
-  useEffect(() => () => {
-    const balance = heldBalance.current;
-    heldBalance.current = null;
-    if (balance !== null) broadcastBalanceUpdate(balance, game);
-  }, [game]);
+  useEffect(() => {
+    disposed.current = false;
+    return () => {
+      disposed.current = true;
+      if (holdingBalance.current) revealWalletReturn(revealKey);
+      holdingBalance.current = false;
+    };
+  }, [revealKey]);
 
   return {
     get enabled() { return enabled || !isCardGame(game) && !isRouletteGame(game) && !isWheelGame(game) && !isSlotGame(game) && game !== "thai-hi-lo" && poolMode === true; },
     get busy() { return busy.current || recovering.current; },
     announce: () => {
+      revealWalletReturn(revealKey);
+      holdingBalance.current = false;
       const resolved = outcome.current;
       if (resolvedWager.current && resolved && typeof resolved === "object" &&
           "payout" in resolved && typeof resolved.payout === "number") {
         notifyGameResult(game, resolvedWager.current, resolved.payout, pendingSettlement.current);
+        resolvedWager.current = null;
       }
     },
     resume: () => resume(),
@@ -771,16 +839,16 @@ export function usePoolLifecycle(game: DailyPoolGame, slot = "main") {
     award: (claim: number) => execute("award", claim, () => {}),
     resolveServer: async (selection: unknown, options: { holdBalance?: boolean } = {}) => {
       localStorage.setItem(`${key}:selection`, JSON.stringify(selection));
-      return await execute("resolve", 0, () => {}, selection, options.holdBalance === true) ? outcome.current : null;
+      return await execute("resolve", 0, () => {}, selection, options.holdBalance !== false) ? outcome.current : null;
     },
     /** Show a balance held by `resolveServer(..., { holdBalance: true })`. */
     releaseBalance: () => {
-      const balance = heldBalance.current;
-      heldBalance.current = null;
-      if (balance !== null) broadcastBalanceUpdate(balance, game);
+      revealWalletReturn(revealKey);
+      holdingBalance.current = false;
     },
+    revealReturn: (amount: number) => revealWalletReturn(revealKey, amount),
     cardAction: async (move: string, selection?: unknown) =>
-      await execute("card-action", 0, () => {}, { move, selection }) ? outcome.current : null,
+      await execute("card-action", 0, () => {}, { move, selection }, move !== "state") ? outcome.current : null,
     complete: (claim: number, legacy: () => void = () => {}) => {
       const terminal = JSON.parse(localStorage.getItem(`${key}:terminal`) ?? "null");
       if (terminal && terminal.claim !== Math.round(claim * 100) / 100) {

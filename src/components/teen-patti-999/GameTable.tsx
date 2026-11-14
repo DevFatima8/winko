@@ -290,6 +290,7 @@ export default function GameTable({
   const resolveRound = () => {
     const r = roundRef.current;
     if (!r) return;
+    pool.announce();
     const won = r.won === true;
     const net = r.net;
     if (won) {
@@ -318,10 +319,10 @@ export default function GameTable({
   const flipDealer = !!round && (phase === "reveal" || phase === "result");
 
   return (
-    <div className="relative mx-auto flex h-full w-full max-w-xl flex-col justify-between bg-slate-950 overflow-hidden px-1 sm:px-2 md:px-3 select-none">
+    <div className="t999-game relative mx-auto flex min-h-full w-full max-w-xl flex-col bg-slate-950 px-1 sm:px-2 md:px-3 select-none">
       {idleRound.countdown !== null && <p className="shrink-0 text-center text-xs text-amber-200" role="status">Next round in {idleRound.countdown}s</p>}
       {/* Top bar */}
-      <header className="flex items-center gap-2 border-b border-amber-500/20 bg-slate-900/90 px-3 py-1.5 rounded-b-xl">
+      <header className="flex shrink-0 items-center gap-2 border-b border-amber-500/20 bg-slate-900/90 px-3 py-1.5 rounded-b-xl">
         <button
           onClick={onExit}
           className="rounded-lg bg-slate-800 px-2 py-1 text-xs font-bold text-slate-200"
@@ -356,12 +357,12 @@ export default function GameTable({
       </header>
 
       {/* Felt table */}
-      <main className="flex min-h-0 flex-1 flex-col justify-between overflow-hidden">
-        <div className="felt relative my-1 sm:my-2 flex min-h-0 flex-1 flex-col justify-between overflow-hidden rounded-xl sm:rounded-2xl p-2 sm:p-3">
+      <main className="t999-table-scroll flex flex-col">
+        <div className="t999-felt relative my-1 sm:my-2 rounded-xl sm:rounded-2xl p-2 sm:p-3">
           <div className="felt-watermark">TEEN PATTI 999</div>
 
           {/* Dealer */}
-          <div className="relative flex flex-col items-center">
+          <div className="relative flex shrink-0 flex-col items-center">
             <div className="flex items-center gap-2">
               <div className="avatar">🤵</div>
               <div>
@@ -396,7 +397,7 @@ export default function GameTable({
           </div>
 
           {/* Pot + message */}
-          <div className="relative my-3 flex flex-col items-center gap-1 text-center">
+          <div className="relative my-3 flex shrink-0 flex-col items-center gap-1 text-center">
             <div className="rounded-2xl border border-amber-300/50 bg-black/45 px-5 py-1.5 shadow-inner">
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-200">
                 Total Pot
@@ -418,7 +419,7 @@ export default function GameTable({
           </div>
 
           {/* Player */}
-          <div className="relative flex flex-col items-center">
+          <div className="relative flex shrink-0 flex-col items-center">
             <div key={`p-${roundId}`} className="flex -space-x-4">
               {[0, 1, 2].map((i) => (
                 <PlayingCard
@@ -455,7 +456,7 @@ export default function GameTable({
         </div>
 
         {/* Controls */}
-        <div className="border-t border-amber-500/20 bg-slate-900/95 px-2 sm:px-3 pb-2 pt-1.5 rounded-t-xl">
+        <div className="t999-controls shrink-0 border-t border-amber-500/20 bg-slate-900/95 px-2 sm:px-3 pb-2 pt-1.5 rounded-t-xl">
           {phase === "idle" && (
             <div>
               <div className="mb-2 flex items-center justify-between gap-2 rounded-xl bg-slate-800/80 p-2">
@@ -493,12 +494,12 @@ export default function GameTable({
                       key={a}
                       onClick={() => setSideBetAmount(a)}
                       className={cn(
-                        "chip h-9 w-9 text-[11px]",
+                        "t999-chip min-h-9 min-w-9 px-2 text-[11px]",
                         chipClass(a),
                         sideBetAmount === a && "selected"
                       )}
                     >
-                      {a}
+                      <span>{a}</span>
                     </button>
                   ))}
                   <input

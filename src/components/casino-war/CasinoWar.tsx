@@ -33,6 +33,8 @@ export default function CasinoWar() {
   const [savedPhase] = usePoolRoundState<Phase>("casino-war", "phase", "betting");
   const [phase, setPhase] = useState<Phase>(savedPhase);
   const [raise, setRaise] = useState(0);
+  const [placing, setPlacing] = useState(false);
+  const placingRef = useRef(false);
 
   const [wagerPlayer, setPlayer] = useState<Card | null>(null);
   const [wagerDealer, setDealer] = useState<Card | null>(null);
@@ -55,7 +57,7 @@ export default function CasinoWar() {
   const roundBusy = useRef(false);
   const idleRound = useIdleCardRound({
     idle: phase === "betting", finished: phase === "result", busy: pool.busy,
-    paused: bets.ante + bets.tie > 0,
+    paused: placing || bets.ante + bets.tie > 0,
     frames: () => {
       const cards = dealRound();
       const final = cards.result === "tie" ? warRound() : cards;
@@ -135,7 +137,7 @@ export default function CasinoWar() {
   }
 
   async function placeChip(spot: Spot) {
-    if (!canBet || roundBusy.current) return;
+    if (!canBet || roundBusy.current || placingRef.current || pool.busy) return;
     gameSfx.chip();
     if (selected > balance) {
       flash("NOT ENOUGH BALANCE");
@@ -143,27 +145,43 @@ export default function CasinoWar() {
     }
     const fresh = phase === "result";
     const base = fresh ? { ante: 0, tie: 0 } : bets;
-    pool.checkpoint({ bets: { ...base, [spot]: base[spot] + selected }, phase: "betting", history: [...(fresh ? [] : history), { spot, amt: selected }] });
-    if (!await pool.stake(selected)) return;
-    if (fresh) resetTable();
-    setBets({ ...base, [spot]: base[spot] + selected });
-    setHistory((h) => [...(fresh ? [] : h), { spot, amt: selected }]);
+    if (!fresh && base.ante + base.tie === 0 && !idleRound.claim()) return;
+    placingRef.current = true;
+    setPlacing(true);
+    setMessage({ text: "CONFIRMING BET...", tone: "info" });
+    try {
+      pool.checkpoint({ bets: { ...base, [spot]: base[spot] + selected }, phase: "betting", history: [...(fresh ? [] : history), { spot, amt: selected }] });
+      if (!await pool.stake(selected)) {
+        idleRound.release();
+        flash("BET NOT CONFIRMED - CHECK WALLET STATUS");
+        return;
+      }
+      if (fresh) resetTable();
+      setBets({ ...base, [spot]: base[spot] + selected });
+      setHistory((h) => [...(fresh ? [] : h), { spot, amt: selected }]);
+      flash("BET ACCEPTED - PRESS DEAL");
+    } finally {
+      placingRef.current = false;
+      setPlacing(false);
+    }
   }
 
   async function undo() {
-    if (phase !== "betting" || idleRound.watching || roundBusy.current || history.length === 0) return;
+    if (phase !== "betting" || idleRound.watching || roundBusy.current || placingRef.current || pool.busy || history.length === 0) return;
     const last = history[history.length - 1];
     pool.checkpoint({ bets: { ...bets, [last.spot]: bets[last.spot] - last.amt }, history: history.slice(0, -1) });
     if (!await pool.reduce(last.amt)) return;
     setHistory(history.slice(0, -1));
     setBets((b) => ({ ...b, [last.spot]: b[last.spot] - last.amt }));
+    if (bets.ante + bets.tie === last.amt) idleRound.release();
   }
 
   async function clearBets() {
-    if (idleRound.watching || roundBusy.current) return;
+    if (idleRound.watching || roundBusy.current || placingRef.current || pool.busy) return;
     if (phase === "result") {
       setBets({ ante: 0, tie: 0 });
       setHistory([]);
+      idleRound.release();
       resetTable();
       return;
     }
@@ -171,10 +189,11 @@ export default function CasinoWar() {
     if (bets.ante + bets.tie > 0 && !await pool.refund()) return;
     setBets({ ante: 0, tie: 0 });
     setHistory([]);
+    idleRound.release();
   }
 
   async function rebet() {
-    if (!canBet) return;
+    if (!canBet || placingRef.current || pool.busy) return;
     const { ante, tie } = lastBet.current;
     const refund = phase === "betting" ? bets.ante + bets.tie : 0;
     if (ante <= 0) return;
@@ -182,19 +201,35 @@ export default function CasinoWar() {
       flash("NOT ENOUGH BALANCE TO REBET");
       return;
     }
-    if (phase === "result") resetTable();
-    if (refund > 0 && !await pool.refund()) return;
-    pool.checkpoint({ bets: { ante, tie }, phase: "betting" });
-    if (!await pool.start(ante + tie)) return;
-    setBets({ ante, tie });
-    setHistory([
-      ...(ante ? [{ spot: "ante" as Spot, amt: ante }] : []),
-      ...(tie ? [{ spot: "tie" as Spot, amt: tie }] : []),
-    ]);
+    if (phase === "betting" && refund === 0 && !idleRound.claim()) return;
+    placingRef.current = true;
+    setPlacing(true);
+    try {
+      if (refund > 0 && !await pool.refund()) return;
+      if (phase === "result") resetTable();
+      setBets({ ante: 0, tie: 0 });
+      setHistory([]);
+      flash("CONFIRMING BET...");
+      pool.checkpoint({ bets: { ante, tie }, phase: "betting" });
+      if (!await pool.start(ante + tie)) {
+        idleRound.release();
+        flash("BET NOT CONFIRMED - CHECK WALLET STATUS");
+        return;
+      }
+      setBets({ ante, tie });
+      setHistory([
+        ...(ante ? [{ spot: "ante" as Spot, amt: ante }] : []),
+        ...(tie ? [{ spot: "tie" as Spot, amt: tie }] : []),
+      ]);
+      flash("BET ACCEPTED - PRESS DEAL");
+    } finally {
+      placingRef.current = false;
+      setPlacing(false);
+    }
   }
 
   async function deal() {
-    if (pool.busy || idleRound.watching || roundBusy.current) return;
+    if (pool.busy || placingRef.current || idleRound.watching || roundBusy.current) return;
     if (phase !== "betting" || bets.ante <= 0) {
       if (phase === "betting") flash("PLACE AN ANTE BET FIRST");
       return;
@@ -220,6 +255,7 @@ export default function CasinoWar() {
     await sleep(650);
     setShowP(true);
     await sleep(900);
+    pool.releaseBalance();
     roundBusy.current = false;
 
     if (data.result === "win") {

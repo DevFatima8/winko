@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
+import { GAME_THUMBNAIL_SIZES, isGameArtworkReady, subscribeGameArtwork } from "@/lib/gameArtwork";
+import { GAME_THUMBNAILS } from "@/lib/gameCatalog";
 
 export function GameThumbnail({ src, alt, className, loading }: {
   src: string;
@@ -10,19 +12,21 @@ export function GameThumbnail({ src, alt, className, loading }: {
   loading?: "eager" | "lazy";
 }) {
   const [result, setResult] = useState<{ src: string; failed: boolean } | null>(null);
+  const warmed = useSyncExternalStore(subscribeGameArtwork, () => isGameArtworkReady(src), () => false);
   const cachedImage = useCallback((image: HTMLImageElement | null) => {
     if (image?.complete) {
       const failed = image.naturalWidth === 0;
       setResult(previous => previous?.src === src && previous.failed === failed ? previous : { src, failed });
     }
   }, [src]);
-  const pending = result?.src !== src;
-  const failed = !pending && result.failed;
+  const pending = result?.src !== src && !warmed;
+  const failed = result?.src === src && result.failed;
+  const thumbnail = GAME_THUMBNAILS[src];
 
   return (
     <>
-      {src.startsWith("/games/") ? <Image ref={cachedImage} src={src} alt={alt} loading={loading} width={1024} height={700}
-        sizes="(max-width: 639px) 45vw, (max-width: 1023px) 30vw, 220px" className={className}
+      {src.startsWith("/games/") ? <Image ref={cachedImage} src={thumbnail ?? src} unoptimized={Boolean(thumbnail)} alt={alt} loading={warmed ? "eager" : loading} width={1024} height={700}
+        sizes={GAME_THUMBNAIL_SIZES} className={className}
         onLoad={() => setResult({ src, failed: false })}
         onError={() => setResult({ src, failed: true })} /> :
       <img ref={cachedImage} src={src} alt={alt} loading={loading} decoding="async" className={className}

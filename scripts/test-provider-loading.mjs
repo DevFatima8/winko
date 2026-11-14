@@ -214,10 +214,13 @@ function hookHarness(cache = {}) {
   let state, effect, cleanup, dependencies;
   const timers = new Map();
   const window = new EventTarget();
+  window.setTimeout = setTimeout;
+  window.clearTimeout = clearTimeout;
   window.setInterval = (callback, delay) => { assert.equal(delay, 60_000); timers.set(callback, delay); return callback; };
   window.clearInterval = callback => timers.delete(callback);
   const document = new EventTarget();
   document.hidden = false;
+  const catalog = load("src\\lib\\providerCatalogCache.ts", {}, { window, document });
   const hook = load("src\\lib\\useProviderCatalog.ts", {
     react: {
       useState: initial => {
@@ -232,7 +235,7 @@ function hookHarness(cache = {}) {
       },
     },
     "./gameNavigation": { isGameReturn: () => cache.returning === true },
-    "./providerCatalogCache": { warmProviderCatalog: () => cache.warm ?? null, readReturnCatalog: async () => cache.saved ?? null, saveProviderCatalog: async () => {} },
+    "./providerCatalogCache": { loadProviderCatalog: catalog.loadProviderCatalog, warmProviderCatalog: () => cache.warm ?? null, readReturnCatalog: async () => cache.saved ?? null },
   }, { window, document });
   return {
     render: enabled => {
@@ -323,7 +326,7 @@ test("catalog hook keeps the same result across renders and disables duplicate c
     assert.equal(requests[0].url, "/api/gregmorn/catalog");
     assert.equal(requests[0].options.cache, "no-store", "personalized results must not enter browser cache");
     hook.unmount();
-    assert.equal(requests[0].options.signal.aborted, true);
+    assert.equal(requests[0].options.signal.aborted, false, "unmount does not abort a shared catalogue request owned by the cache");
   } finally { hook.unmount(); child.unmount(); globalThis.fetch = previous; }
 });
 

@@ -58,6 +58,13 @@ body {
     transform 0.08s ease,
     filter 0.15s ease;
 }
+.t999-game .btn {
+  display: block;
+  min-width: 0;
+  height: auto;
+  padding-inline: 8px;
+  white-space: normal;
+}
 .btn:active:not(:disabled) {
   transform: translateY(2px) scale(0.98);
 }
@@ -129,7 +136,7 @@ body {
 }
 
 /* ---------- poker chips ---------- */
-.chip {
+.t999-chip {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -144,8 +151,33 @@ body {
     inset 0 4px 6px rgba(255, 255, 255, 0.25);
   transition: transform 0.12s ease;
 }
-.chip:active {
+.t999-chip:active {
   transform: scale(0.94);
+}
+.t999-game {
+  height: auto;
+  min-height: 100%;
+  flex-shrink: 0;
+  overflow: visible;
+}
+.t999-game .t999-felt {
+  display: grid;
+  grid-template-rows: auto auto auto;
+  gap: 12px;
+  min-height: max-content;
+  overflow: visible;
+}
+.t999-game .t999-controls {
+  margin-top: 8px;
+  min-width: 0;
+}
+.t999-game .t999-chip {
+  width: auto;
+  flex-shrink: 0;
+}
+.t999-game .t999-chip span {
+  white-space: nowrap;
+  font-size: 11px;
 }
 .chip-10 {
   background: #e11d48;
@@ -165,14 +197,14 @@ body {
 .chip-5000 {
   background: #ea580c;
 }
-.chip.selected {
+.t999-chip.selected {
   outline: 3px solid #fbbf24;
   outline-offset: 1px;
   transform: scale(1.1);
 }
 
 /* ---------- casino felt table ---------- */
-.felt {
+.t999-felt {
   background: radial-gradient(
     ellipse at 50% 25%,
     #23a55f 0%,

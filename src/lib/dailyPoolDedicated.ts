@@ -48,7 +48,7 @@ function resultDocument(id: string, gid: string, userId: string, amount: number,
 }
 
 /** The result, stake debit, claim and replay response commit together or not at all. */
-export async function acceptDedicatedInstant(slug: Exclude<Slug, "mines">, userId: string, amount: number, requestId: string, fingerprint: string, outcome: Instant | ((tx: MultiplayerTransaction) => Promise<Instant>)) {
+export async function acceptDedicatedInstant(slug: Exclude<Slug, "mines">, userId: string, amount: number, requestId: string, fingerprint: string, outcome: Instant | ((tx: MultiplayerTransaction) => Promise<Instant | { error: string }>)) {
   if (!/^[A-Za-z0-9_-]{16,128}$/.test(requestId)) return { error: "A valid wager request ID is required." };
   return dedicatedTransaction(slug, async tx => {
     const key = requestKey(slug, userId, requestId);
@@ -63,6 +63,7 @@ export async function acceptDedicatedInstant(slug: Exclude<Slug, "mines">, userI
     const account = await wallet(tx, userId, slug, amount);
     if ("error" in account) return account;
     const instant = typeof outcome === "function" ? await outcome(tx) : outcome;
+    if ("error" in instant) return instant;
     const now = new Date(await tx.now());
     const result = resultDocument(randomUUID(), await gameId(tx, slug, now), userId, amount, now, instant.data);
     const sourceId = instant.plinko ? randomUUID() : undefined;

@@ -69,7 +69,7 @@ export async function serverSlotOutcome(
       break;
     }
   }
-  if (!readBrowserSlotOutcome(game, outcome, stake) || (outcome.payout > 0) !== won) {
+  if (!readBrowserSlotOutcome(game, outcome, stake) || (won ? outcome.payout <= stake : outcome.payout !== 0)) {
     throw new Error("The slot engine could not prepare a supported capped result.");
   }
   return { claim: outcome.payout, outcome };

@@ -27,12 +27,13 @@ export function SupportInbox({ initialThread }: { initialThread?: string }) {
     }
   }, []);
   const loadMsgs = useCallback(async () => {
-    if (!active) return;
+    if (!active || document.hidden) return;
     try {
       const r = await fetch(`/api/admin/support?thread=${encodeURIComponent(active)}`, { cache: "no-store" });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "Messages load nahi huay.");
       setMsgs(j.messages); setErr(null);
+      window.dispatchEvent(new CustomEvent("wx:support-read"));
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Messages load nahi huay.");
       setMsgs([]);
@@ -44,7 +45,11 @@ export function SupportInbox({ initialThread }: { initialThread?: string }) {
   useEffect(() => {
     const refresh = () => { void loadThreads(); void loadMsgs(); };
     window.addEventListener("wx:support-update", refresh);
-    return () => window.removeEventListener("wx:support-update", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("wx:support-update", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [loadMsgs, loadThreads]);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs.length]);
 

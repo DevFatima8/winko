@@ -1,4 +1,5 @@
 "use client";
+import "./european-roulette.css";
 import { gameSfx } from "@/lib/gameSfx";
 
 import Link from "next/link";
@@ -76,11 +77,6 @@ function Table({
   winNum: number | null;
   disabled: boolean;
 }) {
-  const vars = {
-    "--w": "clamp(24px, calc((100vw - 44px) / 15), 44px)",
-    "--h": "calc(var(--w) * 1.05)",
-  } as CSSProperties;
-
   const border = "1.5px solid rgba(255,255,255,0.75)";
   const hl = (n: number) => hover.includes(n);
 
@@ -119,7 +115,7 @@ function Table({
             height: "92%",
             background: NUM_BG[colorOf(n)],
             clipPath: "polygon(50% 0, 100% 50%, 50% 100%, 0 50%)",
-            fontSize: "calc(var(--w) * 0.34)",
+            fontSize: "max(12px, calc(var(--w) * 0.34))",
             fontFamily: "Georgia, serif",
           }}
         >
@@ -134,7 +130,7 @@ function Table({
       key={id}
       {...cellProps(id)}
       className="flex cursor-pointer items-center justify-center font-bold tracking-wide text-white transition-colors hover:bg-white/15"
-      style={{ gridColumn: col, gridRow: row, border, fontSize: "calc(var(--w) * 0.27)", fontFamily: "Georgia, serif" }}
+      style={{ gridColumn: col, gridRow: row, border, fontSize: "max(10px, calc(var(--w) * 0.27))", fontFamily: "Georgia, serif" }}
     >
       {content}
     </button>
@@ -147,10 +143,10 @@ function Table({
   );
 
   return (
-    <div className="overflow-x-auto pb-2">
+    <div className="er-table-viewport overflow-x-auto pb-2" aria-label="Roulette betting table">
       <div
-        className="relative mx-auto"
-        style={{ ...vars, width: "calc(var(--w) * 14)", height: "calc(var(--h) * 5)" }}
+        className="er-grid relative mx-auto"
+        style={{ width: "calc(var(--w) * 14)", height: "calc(var(--h) * 5)" }}
       >
         <div
           className="absolute inset-0 grid"
@@ -238,7 +234,7 @@ export default function RouletteGame({ backHref = "/player" }: { backHref?: stri
   const pool = usePoolLifecycle("european-roulette");
   const [actions, setActions] = useState<Action[]>([]);
   const [lastActions, setLastActions] = useState<Action[]>([]);
-  const [chip, setChip] =   useState<number>(BET_PRESETS[0]);
+  const [chip, setChip] = useState<number>(BET_PRESETS[0]);
   const [spinning, setSpinning] = useState(false);
   const [history, setHistory] = useState<number[]>([]);
   const [result, setResult] = useState<Result | null>(null);
@@ -249,7 +245,7 @@ export default function RouletteGame({ backHref = "/player" }: { backHref?: stri
   const pendingRound = useRef<Action[] | null>(null);
   const acceptedRound = useRef(false);
   const mounted = useRef(false);
-  const spinRef = useRef<() => Promise<void>>(async () => {});
+  const spinRef = useRef<() => Promise<void>>(async () => { });
   const bankRef = useRef(bank);
   const queueRef = useRef(actions);
   useEffect(() => {
@@ -354,7 +350,7 @@ export default function RouletteGame({ backHref = "/player" }: { backHref?: stri
         setSpinning(false); roundLock.current = false; return;
       }
       pendingRound.current = snapshot;
-      if (!acceptedRound.current && !await pool.start(stake, () => {}, selection)) { setSpinning(false); roundLock.current = false; return; }
+      if (!acceptedRound.current && !await pool.start(stake, () => { }, selection)) { setSpinning(false); roundLock.current = false; return; }
       acceptedRound.current = true;
       const resolved = await pool.resolveServer(selection) as BrowserRouletteNumberOutcome | null;
       if (!resolved) { setMessage("Result confirmation pending — retrying the same wager."); setSpinning(false); roundLock.current = false; return; }
@@ -394,13 +390,13 @@ export default function RouletteGame({ backHref = "/player" }: { backHref?: stri
 
   return (
     <div
-      className="relative flex h-full w-full flex-col justify-between overflow-hidden px-2 sm:px-4 py-1.5 select-none text-white"
+      className="er-game relative flex h-full min-h-0 w-full flex-col overflow-y-auto overflow-x-hidden px-2 sm:px-4 py-1.5 select-none text-white"
       style={{ background: "radial-gradient(ellipse at 50% 0%, #0f3d27 0%, #07150e 55%, #020805 100%)" }}
     >
-      <div className="flex flex-1 min-h-0 flex-col justify-between overflow-hidden gap-1.5 w-full max-w-6xl mx-auto">
+      <div className="er-shell flex flex-1 min-h-0 flex-col gap-1.5 w-full mx-auto">
         {/* Header */}
-        <header className="flex shrink-0 items-center justify-between gap-2 rounded-xl border border-yellow-700/40 bg-black/40 px-3 py-1.5">
-          <div className="flex items-center gap-2">
+        <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-yellow-700/40 bg-black/40 px-3 py-1.5">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Link
               href={backHref}
               className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-bold text-slate-300 hover:bg-white/15 hover:text-white transition-colors"
@@ -428,13 +424,12 @@ export default function RouletteGame({ backHref = "/player" }: { backHref?: stri
             </div>
           </div>
         </header>
-        <p className="text-center text-[10px] text-emerald-200/80">Server results · 10 winning slots per 100 distinct players · total gross return capped at 2x stake (stake included). Standard bet returns apply before the total cap. All-number coverage is not allowed.</p>
 
         {/* Main Wheel + Table area */}
-        <main className="flex-1 min-h-0 flex flex-col justify-between overflow-hidden gap-1.5 py-1">
+        <main className="er-layout flex flex-col gap-2 py-1">
           {/* Wheel + info */}
-          <section className="grid gap-2 grid-cols-[minmax(0,210px)_minmax(0,1fr)] sm:grid-cols-[minmax(0,260px)_minmax(0,1fr)] md:grid-cols-[300px_minmax(0,1fr)] items-center">
-            <div className="relative mx-auto aspect-square w-[min(54vw,210px)] sm:w-[min(48vw,260px)] md:w-[300px] md:max-w-[300px]">
+          <section className="er-wheel-panel">
+            <div className="er-wheel relative mx-auto aspect-square">
               <Wheel ref={wheelRef} />
               {result && (
                 <div
@@ -445,8 +440,10 @@ export default function RouletteGame({ backHref = "/player" }: { backHref?: stri
                 </div>
               )}
             </div>
+          </section>
 
-            <div className="flex flex-col justify-between gap-1 rounded-xl border border-yellow-700/40 bg-black/40 p-2">
+          <div className="er-betting-column">
+            <div className="er-round-info flex shrink-0 flex-col justify-between gap-1 rounded-xl border border-yellow-700/40 bg-black/40 p-2">
               <div className="grid grid-cols-2 gap-1.5 text-center">
                 {[
                   ["Total bet", money(total)],
@@ -462,13 +459,12 @@ export default function RouletteGame({ backHref = "/player" }: { backHref?: stri
               </div>
 
               <div
-                className={`flex min-h-[34px] items-center justify-center rounded-lg border px-3 py-1 text-center text-xs sm:text-sm font-bold uppercase tracking-wider ${
-                  result
+                className={`flex min-h-[34px] items-center justify-center rounded-lg border px-3 py-1 text-center text-xs sm:text-sm font-bold uppercase tracking-wider ${result
                     ? won
                       ? "border-yellow-400 bg-yellow-500/15 text-yellow-300"
                       : "border-white/15 bg-white/5 text-slate-200"
                     : "border-white/10 bg-black/30 text-emerald-100"
-                }`}
+                  }`}
                 style={{ fontFamily: "Georgia, serif" }}
               >
                 {spinning ? (
@@ -513,93 +509,91 @@ export default function RouletteGame({ backHref = "/player" }: { backHref?: stri
                 </div>
               </div>
             </div>
-          </section>
 
-          {/* Table */}
-          <section
-            className="rounded-xl p-1 sm:p-2 max-w-full overflow-x-auto thin-scroll flex items-center justify-center"
-            style={{
-              background: "linear-gradient(145deg,#5a2d0c,#2a1305)",
-              boxShadow: "0 0 0 2px #c9972f, 0 10px 30px rgba(0,0,0,0.6)",
-            }}
-          >
-            <div
-              className="rounded-lg p-1 sm:p-2 w-full flex items-center justify-center"
+            {/* Table */}
+            <section
+              className="er-table-frame rounded-xl p-1 sm:p-2"
               style={{
-                background: "radial-gradient(ellipse at 50% 40%, #138a4a 0%, #0b6035 60%, #084a29 100%)",
-                boxShadow: "inset 0 0 25px rgba(0,0,0,0.5)",
+                background: "linear-gradient(145deg,#5a2d0c,#2a1305)",
+                boxShadow: "0 0 0 2px #c9972f, 0 10px 30px rgba(0,0,0,0.6)",
               }}
             >
-              <Table
-                bets={bets}
-                hover={hover}
-                setHover={setHover}
-                onBet={placeBet}
-                onRemove={removeBet}
-                winNum={result ? result.number : null}
-                disabled={spinning}
-              />
-            </div>
-          </section>
+              <div
+                className="er-felt rounded-lg p-1 sm:p-2 w-full"
+                style={{
+                  background: "radial-gradient(ellipse at 50% 40%, #138a4a 0%, #0b6035 60%, #084a29 100%)",
+                  boxShadow: "inset 0 0 25px rgba(0,0,0,0.5)",
+                }}
+              >
+                <Table
+                  bets={bets}
+                  hover={hover}
+                  setHover={setHover}
+                  onBet={placeBet}
+                  onRemove={removeBet}
+                  winNum={result ? result.number : null}
+                  disabled={spinning}
+                />
+              </div>
+            </section>
 
-          {/* Controls */}
-          <section className="flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-yellow-700/40 bg-black/40 p-2">
-            <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-1.5">
-              {CHIPS.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setChip(c)}
+            {/* Controls */}
+            <section className="er-controls flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-yellow-700/40 bg-black/40 p-2">
+              <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-1.5">
+                {CHIPS.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setChip(c)}
+                    disabled={false}
+                    className={`cursor-pointer transition-all duration-150 hover:-translate-y-1 hover:brightness-110 active:scale-95 ${chip === c ? "-translate-y-1 ring-2 ring-yellow-400 rounded-full" : "opacity-90"
+                      }`}
+                    aria-label={`Chip ${c}`}
+                  >
+                    <Chip value={c} size="36px" selected={chip === c} />
+                  </button>
+                ))}
+                <input
+                  type="number"
+                  min={10}
+                  inputMode="numeric"
+                  value={chip || ""}
                   disabled={false}
-                  className={`cursor-pointer transition-all duration-150 hover:-translate-y-1 hover:brightness-110 active:scale-95 ${
-                    chip === c ? "-translate-y-1 ring-2 ring-yellow-400 rounded-full" : "opacity-90"
-                  }`}
-                  aria-label={`Chip ${c}`}
-                >
-                  <Chip value={c} size="36px" selected={chip === c} />
-                </button>
-              ))}
-              <input
-                type="number"
-                min={10}
-                inputMode="numeric"
-                value={chip || ""}
-                disabled={false}
-                onChange={(e) => setChip(Math.max(0, Math.floor(Number(e.target.value)) || 0))}
-                aria-label="Custom chip amount"
-                placeholder="Rs."
-                className="w-20 rounded-lg border border-yellow-600/50 bg-black/50 px-2 py-1.5 text-xs font-bold text-yellow-300 outline-none"
-              />
-            </div>
+                  onChange={(e) => setChip(Math.max(0, Math.floor(Number(e.target.value)) || 0))}
+                  aria-label="Custom chip amount"
+                  placeholder="Rs."
+                  className="w-20 rounded-lg border border-yellow-600/50 bg-black/50 px-2 py-1.5 text-xs font-bold text-yellow-300 outline-none"
+                />
+              </div>
 
-            <div className="flex flex-wrap items-center justify-center gap-1.5">
-              <button
-                onClick={undo}
-                disabled={total === 0}
-                className="cursor-pointer rounded-lg px-2.5 py-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all duration-150 active:scale-95 hover:scale-[1.02] bg-gradient-to-b from-amber-600 to-orange-700 text-white shadow-sm shadow-amber-950/40 hover:from-amber-500 hover:to-orange-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
-              >
-                Undo
-              </button>
-              <button
-                onClick={clear}
-                disabled={total === 0}
-                className="cursor-pointer rounded-lg px-2.5 py-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all duration-150 active:scale-95 hover:scale-[1.02] bg-gradient-to-b from-rose-600 via-rose-700 to-red-800 text-white shadow-sm shadow-rose-950/40 hover:from-rose-500 hover:to-red-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
-              >
-                Clear
-              </button>
-              <button
-                onClick={double}
-                disabled={total === 0}
-                className="cursor-pointer rounded-lg px-2.5 py-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all duration-150 active:scale-95 hover:scale-[1.02] bg-gradient-to-b from-blue-600 via-blue-700 to-indigo-800 text-white shadow-sm shadow-blue-950/40 hover:from-blue-500 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
-              >
-                Double
-              </button>
-              <button
-                onClick={rebet}
-                disabled={lastActions.length === 0}
-                className="cursor-pointer rounded-lg px-2.5 py-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all duration-150 active:scale-95 hover:scale-[1.02] bg-gradient-to-b from-purple-600 via-purple-700 to-violet-800 text-white shadow-sm shadow-purple-950/40 hover:from-purple-500 hover:to-violet-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
-              >
-                Rebet
-              </button>
+              <div className="flex flex-wrap items-center justify-center gap-1.5">
+                <button
+                  onClick={undo}
+                  disabled={total === 0}
+                  className="cursor-pointer rounded-lg px-2.5 py-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all duration-150 active:scale-95 hover:scale-[1.02] bg-gradient-to-b from-amber-600 to-orange-700 text-white shadow-sm shadow-amber-950/40 hover:from-amber-500 hover:to-orange-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
+                >
+                  Undo
+                </button>
+                <button
+                  onClick={clear}
+                  disabled={total === 0}
+                  className="cursor-pointer rounded-lg px-2.5 py-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all duration-150 active:scale-95 hover:scale-[1.02] bg-gradient-to-b from-rose-600 via-rose-700 to-red-800 text-white shadow-sm shadow-rose-950/40 hover:from-rose-500 hover:to-red-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
+                >
+                  Clear
+                </button>
+                <button
+                  onClick={double}
+                  disabled={total === 0}
+                  className="cursor-pointer rounded-lg px-2.5 py-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all duration-150 active:scale-95 hover:scale-[1.02] bg-gradient-to-b from-blue-600 via-blue-700 to-indigo-800 text-white shadow-sm shadow-blue-950/40 hover:from-blue-500 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
+                >
+                  Double
+                </button>
+                <button
+                  onClick={rebet}
+                  disabled={lastActions.length === 0}
+                  className="cursor-pointer rounded-lg px-2.5 py-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all duration-150 active:scale-95 hover:scale-[1.02] bg-gradient-to-b from-purple-600 via-purple-700 to-violet-800 text-white shadow-sm shadow-purple-950/40 hover:from-purple-500 hover:to-violet-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
+                >
+                  Rebet
+                </button>
 
                 <button
                   onClick={spin}
@@ -608,8 +602,9 @@ export default function RouletteGame({ backHref = "/player" }: { backHref?: stri
                 >
                   {spinning ? "Spinning" : "Spin"}
                 </button>
-            </div>
-          </section>
+              </div>
+            </section>
+          </div>
         </main>
       </div>
     </div>

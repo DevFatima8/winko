@@ -57,6 +57,11 @@ export default function HotlineGame() {
   const [selectedColor, setSelectedColor] = useState<Color | null>(null);
   const [betAmount, setBetAmount] = useState(100);
   const [balance] = useGameBalance("hotline", START_BALANCE);
+  const betError = !Number.isFinite(betAmount) || betAmount < 10
+    ? "Minimum bet is Rs. 10."
+    : Math.round(betAmount * 100) / 100 !== betAmount
+      ? "Use at most two decimal places."
+      : betAmount > balance ? "Insufficient balance for this amount." : "";
   const pool = usePoolLifecycle("hotline");
   const acceptedResult = useRef<{ color: Color; won: boolean; multiplier: number; amount: number } | null>(null);
   const accepting = useRef(false);
@@ -132,7 +137,7 @@ export default function HotlineGame() {
 
   const handleBet = useCallback(
     async (color: Color) => {
-      if (accepting.current || isRunning || betAmount < 10 || balance < betAmount) return;
+      if (accepting.current || isRunning || betError) return;
       accepting.current = true;
       setConfirming(true);
       try {
@@ -159,17 +164,12 @@ export default function HotlineGame() {
         setConfirming(false);
       }
     },
-    [isRunning, betAmount, balance, highRiskMode]
+    [isRunning, betAmount, betError, highRiskMode]
   );
-
-  const handleBetAmountChange = (delta: number) => {
-    if (controlsLocked) return;
-    setBetAmount((prev) => Math.max(10, Math.min(balance, prev + delta)));
-  };
 
   const setExactBet = (amount: number) => {
     if (controlsLocked) return;
-    setBetAmount(Math.max(10, Math.min(balance, amount)));
+    setBetAmount(amount);
   };
 
   return (
@@ -323,7 +323,7 @@ export default function HotlineGame() {
         {/* RED OPTION */}
         <button
           onClick={() => handleBet("red")}
-          disabled={controlsLocked || balance < betAmount}
+          disabled={controlsLocked || !!betError}
           className={`group relative overflow-hidden rounded-xl sm:rounded-2xl p-2.5 sm:p-4 border-2 text-left flex flex-col justify-between transition-all ${selectedColor === "red" && isRunning
               ? "ring-4 ring-[#ff007f] scale-[1.02] border-[#ff007f]"
               : "border-red-500/40 hover:border-red-400"
@@ -347,7 +347,7 @@ export default function HotlineGame() {
         {/* BLACK OPTION */}
         <button
           onClick={() => handleBet("black")}
-          disabled={controlsLocked || balance < betAmount}
+          disabled={controlsLocked || !!betError}
           className={`group relative overflow-hidden rounded-xl sm:rounded-2xl p-2.5 sm:p-4 border-2 text-left flex flex-col justify-between transition-all ${selectedColor === "black" && isRunning
               ? "ring-4 ring-cyan-400 scale-[1.02] border-cyan-400"
               : "border-slate-700 hover:border-slate-500"
@@ -371,7 +371,7 @@ export default function HotlineGame() {
         {/* FIRE OPTION */}
         <button
           onClick={() => handleBet("fire")}
-          disabled={controlsLocked || balance < betAmount}
+          disabled={controlsLocked || !!betError}
           className={`group relative overflow-hidden rounded-xl sm:rounded-2xl p-2.5 sm:p-4 border-2 text-left flex flex-col justify-between transition-all ${selectedColor === "fire" && isRunning
               ? "ring-4 ring-yellow-400 scale-[1.02] border-yellow-400"
               : "border-yellow-500/50 hover:border-yellow-400"
@@ -393,59 +393,22 @@ export default function HotlineGame() {
         </button>
       </div>
 
-      {/* Stake Adjuster & High-Risk Toggle Bar */}
+      {/* Bet Amount & High-Risk Toggle Bar */}
       <div className="flex flex-wrap items-center justify-between gap-2 p-2 sm:p-3 rounded-2xl bg-[#030612] border border-white/10 shrink-0">
-        {/* Bet Chips & Adjusters */}
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[10px] sm:text-xs font-bold text-slate-400 mr-1">STAKE:</span>
-          <button
-            onClick={() => handleBetAmountChange(-50)}
-            disabled={controlsLocked}
-            className="px-2 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-900/60 text-[11px] font-bold border border-rose-500/40 text-rose-300 transition active:scale-95"
-          >
-            -50
-          </button>
-          <button
-            onClick={() => handleBetAmountChange(-10)}
-            disabled={controlsLocked}
-            className="px-2 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-900/60 text-[11px] font-bold border border-rose-500/40 text-rose-300 transition active:scale-95"
-          >
-            -10
-          </button>
           <input
             type="number"
             min={10}
-            inputMode="numeric"
+            step="0.01"
+            inputMode="decimal"
             aria-label="Custom bet amount"
+            aria-invalid={!!betError}
+            aria-describedby={betError ? "hotline-bet-error" : undefined}
             disabled={controlsLocked}
             value={betAmount || ""}
-            onChange={(e) => setBetAmount(Math.max(0, Math.floor(Number(e.target.value)) || 0))}
-            onBlur={() => setExactBet(betAmount)}
+            onChange={(e) => setExactBet(Number(e.target.value))}
             className="w-20 px-2 py-1 rounded-lg bg-[#0a1126] border border-[#00f2ff]/40 text-xs sm:text-sm font-mono font-black text-white text-center outline-none"
           />
-          <button
-            onClick={() => handleBetAmountChange(10)}
-            disabled={controlsLocked}
-            className="px-2 py-1 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/60 text-[11px] font-bold border border-emerald-500/40 text-emerald-300 transition active:scale-95"
-          >
-            +10
-          </button>
-          <button
-            onClick={() => handleBetAmountChange(50)}
-            disabled={controlsLocked}
-            className="px-2 py-1 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/60 text-[11px] font-bold border border-emerald-500/40 text-emerald-300 transition active:scale-95"
-          >
-            +50
-          </button>
-          <button
-            onClick={() => handleBetAmountChange(200)}
-            disabled={controlsLocked}
-            className="px-2 py-1 rounded-lg bg-teal-950/60 hover:bg-teal-900/60 text-[11px] font-bold border border-teal-500/40 text-teal-300 transition active:scale-95"
-          >
-            +200
-          </button>
-
-          <div className="h-5 w-px bg-white/10 mx-0.5" />
 
           {BET_PRESETS.map((p) => (
             <button
@@ -457,24 +420,8 @@ export default function HotlineGame() {
               {p}
             </button>
           ))}
-
-          <div className="h-5 w-px bg-white/10 mx-0.5" />
-
-          <button
-            onClick={() => setExactBet(Math.floor(betAmount * 2))}
-            disabled={controlsLocked}
-            className="px-2 py-1 rounded-lg bg-indigo-950/60 hover:bg-indigo-900/60 text-[11px] font-bold border border-indigo-500/40 text-indigo-300 transition active:scale-95"
-          >
-            2X
-          </button>
-          <button
-            onClick={() => setExactBet(Math.floor(betAmount / 2))}
-            disabled={controlsLocked}
-            className="px-2 py-1 rounded-lg bg-amber-950/60 hover:bg-amber-900/60 text-[11px] font-bold border border-amber-500/40 text-amber-300 transition active:scale-95"
-          >
-            ½
-          </button>
         </div>
+        {betError && <p id="hotline-bet-error" role="alert" className="mt-1 text-xs text-rose-300">{betError}</p>}
 
         {/* High Risk Toggle */}
         <div className="flex items-center gap-2">

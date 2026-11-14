@@ -6,7 +6,7 @@ import { createLegacyScene } from "./multiplayer-legacy-harness.mjs";
 
 const players = Array.from({ length: 200 }, (_, i) => `fruit-player-${i}`);
 const lines = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 4, 8], [2, 4, 6]];
-const cycle = (s, game) => s.data.multiplayerrooms.find(row => row._id === `${game}:ten-player-wins:v1`);
+const cycle = (s, game) => s.data.multiplayerrooms.find(row => row._id === `${game}:bet-wins-30-of-100:v1`);
 const scene = (ids, pooled) => {
   const s = createLegacyScene(ids, { poolEnabled: pooled });
   for (const game of ["super-fruits", "sweet-bonanza"]) {
@@ -26,7 +26,7 @@ const resolve = (s, user, game, wagerId, pooled) => s.store.transact(game, tx =>
 
 for (const pooled of [false, true]) {
   for (const game of ["super-fruits", "sweet-bonanza"]) {
-    test(`${game}, pooled=${pooled}: two independent 100-player cycles have exactly ten wins`, async () => {
+    test(`${game}, pooled=${pooled}: two completed 100-round cycles have exactly 30 profitable wins`, async () => {
       const s = scene(players, pooled);
       for (let offset = 0; offset < 200; offset += 100) {
         const replies = await Promise.all(players.slice(offset, offset + 100).map(async user => {
@@ -61,14 +61,15 @@ for (const pooled of [false, true]) {
           }
           return reply;
         }));
-        assert.equal(replies.filter(reply => reply.claim > 0).length, 10);
+        assert.equal(replies.filter(reply => reply.claim > 10.15).length, 30);
+        assert.equal(replies.filter(reply => reply.claim === 0).length, 70);
         if (game === "super-fruits") {
           const fruits = replies.map(reply => reply.outcome.winFruit);
-          assert.equal(fruits.filter(fruit => fruit === "cherry").length, 5);
-          assert.equal(fruits.filter(fruit => fruit === "lemon").length, 3);
-          assert.equal(fruits.filter(fruit => fruit === "orange").length, 2);
+          assert.equal(fruits.filter(fruit => fruit === "cherry").length, 15);
+          assert.equal(fruits.filter(fruit => fruit === "lemon").length, 9);
+          assert.equal(fruits.filter(fruit => fruit === "orange").length, 6);
         }
-        assert.deepEqual(cycle(s, game).players, []);
+        assert.equal(cycle(s, game).remaining.length, 100);
       }
       assert.equal(s.data.gameresults.length, 200);
       assert.equal(s.data.dailypoolentries.length, 0);
@@ -93,8 +94,9 @@ for (const game of ["super-fruits", "sweet-bonanza"]) {
     assert.deepEqual(s.data, after);
     const repeatId = randomUUID();
     await accept(s, "alice", game, repeatId, false);
-    assert.equal((await resolve(s, "alice", game, repeatId, false)).claim, 0);
-    assert.equal(cycle(s, game).players.length, 1);
+    const repeat = await resolve(s, "alice", game, repeatId, false);
+    assert.ok(repeat.claim === 0 || repeat.claim > 10);
+    assert.equal(cycle(s, game).remaining.length, 98);
     assert.equal(cycle(s, game === "super-fruits" ? "sweet-bonanza" : "super-fruits"), undefined);
   });
 
@@ -117,7 +119,7 @@ for (const game of ["super-fruits", "sweet-bonanza"]) {
     const after = structuredClone(s.data);
     assert.deepEqual((await play()).outcome, reply.outcome);
     assert.deepEqual(s.data, after);
-    assert.equal(cycle(s, game).players.length, 2);
+    assert.equal(cycle(s, game).remaining.length, 98);
   });
 
   test(`${game}: previously accepted client outcomes can still finish`, async () => {

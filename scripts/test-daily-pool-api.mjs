@@ -278,6 +278,8 @@ test("the game opens directly without a daily-pool permission dialog", async () 
     "@/lib/walletSync": { broadcastBalanceUpdate: () => {} },
     "@/lib/dailyPoolBrowserGames": { isUnsupportedBrowserPoolGame: () => false },
     "@/lib/cardGameRules": load("src\\lib\\cardGameRules.ts"),
+    "@/lib/winOpportunityRules": load("src\\lib\\winOpportunityRules.ts"),
+    "./WinOpportunityNotice": { WinOpportunityNotice: ({ children }) => children },
   });
   const render = () => { cursor = 0; return notice.DailyPoolNotice({ game: "aviator", children: "GAME STILL MOUNTED" }); };
   globalThis.fetch = async () => Response.json({ enabled: true, entries: [], balance: 1000 });

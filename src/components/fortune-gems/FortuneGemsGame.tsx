@@ -153,6 +153,7 @@ export default function FortuneGemsGame({ backHref = "/player" }: { backHref?: s
     sfx.stop();
     stopped.current += 1;
     if (stopped.current < 4) return; // 3 reels + multiplier reel
+    pool.announce();
     const { wins: w, total } = pendingWin.current;
     setSpinning(false);
     if (pool.enabled) showToast(`Daily payout pending — provisional claim ${total}`);

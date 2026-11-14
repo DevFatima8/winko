@@ -17,6 +17,49 @@ function load(file, imports) {
   return loaded.exports;
 }
 const flightRules = load("src\\lib\\aviatorRules.ts");
+
+test("Aviator X renders only two independent betting panels even when the server supports three slots", () => {
+  const state = {
+    config: { slots: 3, minBet: 10, maxCashout: 99.98 },
+    balance: 21279683.41, round: { id: 42, status: "waiting" },
+    history: [], bets: [], myBets: [], queued: [], myHistory: [], top: [],
+    totals: { count: 0, amount: 0, cashed: 0 },
+  };
+  const values = [];
+  let cursor = 0;
+  const { AviatorGame } = load("src\\components\\AviatorGame.tsx", {
+    react: {
+      useState(initial) {
+        const index = cursor++;
+        if (!(index in values)) values[index] = index === 0 ? state : typeof initial === "function" ? initial() : initial;
+        return [values[index], value => { values[index] = typeof value === "function" ? value(values[index]) : value; }];
+      },
+      useRef: current => ({ current }),
+      useCallback: callback => callback,
+      useEffect() {},
+    },
+    "react/jsx-runtime": jsx, "next/link": { default: "a" },
+    "@/lib/client": {}, "@/lib/gameAudio": {}, "@/lib/gameSfx": {},
+    "@/lib/walletSync": {}, "@/lib/betPresets": { BET_PRESETS: [10, 20, 50, 100, 200] },
+    "@/lib/aviatorRules": flightRules, "./AviatorScenicView": {}, "@/lib/aviatorScenery": {},
+  });
+  const nodes = tree => {
+    if (!tree || typeof tree !== "object") return [];
+    if (Array.isArray(tree)) return tree.flatMap(nodes);
+    return [tree, ...nodes(tree.props?.children)];
+  };
+  const render = () => { cursor = 0; return nodes(AviatorGame({ table: "aviator-x" })); };
+  const panels = tree => tree.filter(node => node.props?.["aria-label"]?.startsWith("Bet panel "));
+  let tree = render();
+  assert.equal(panels(tree).length, 2);
+  assert.equal(tree.filter(node => node.props?.["data-action"] === "bet").length, 2);
+  assert.deepEqual(tree.filter(node => node.type === "span" && Array.isArray(node.props.children) && node.props.children[0] === "Bet ").map(node => node.props.children[1]), [1, 2]);
+  const second = panels(tree)[1];
+  nodes(second).find(node => node.type === "button" && node.props.children === 200).props.onClick();
+  tree = render();
+  assert.deepEqual(panels(tree).map(panel => nodes(panel).find(node => node.type === "input").props.value), ["100.00", "200.00"]);
+});
+
 function scene(overrides = {}, presets = [10, 15, 20, 25, 50]) {
   const values = [], calls = [];
   let cursor = 0, tree;

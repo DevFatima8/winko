@@ -345,6 +345,7 @@ export default function FortuneToucanGame({ backHref = "/player" }: { backHref?:
       setLocked(result.grid.map((c) => c !== "blank"));
     }
 
+    pool.announce();
     setHasResult(true);
     if (pool.enabled) showToast(`Daily payout pending — provisional claim ${formatMoney(result.totalWin)}`);
     setWins(result.wins);

@@ -572,10 +572,6 @@ export default function CasinoGame() {
           </div>
         </aside>
       </main>
-
-      <footer className="hidden sm:block mx-auto w-full max-w-[1240px] px-4 pb-1 pt-0.5 text-center text-[10px] tracking-wide text-[#ffe9b0]/35 shrink-0">
-        18+ &middot; Demo balance only &middot; Play responsibly
-      </footer>
     </div>
   );
 }

@@ -143,19 +143,31 @@ test("a mismatched source record aborts the entire payout transaction before any
   assert.equal(s.users.get("alice").balance, 935);
 });
 
-test("Plinko source and accepted result are durable together and settlement updates payout", async () => {
+test("legacy Plinko source and replay keep their saved rows and claim after the paytable update", async () => {
   const s = scene();
-  const outcome = { ...instant(20), plinko: { risk: "low", rows: 8, path: Array(8).fill(0), bucket: 0, multiplier: .2 } };
-  const response = await s.dedicated.acceptDedicatedInstant("plinko", "alice", 100, "plinko-request-01", "[100,low,8]", outcome);
+  const legacy = { risk: "low", rows: 8, path: Array(8).fill(0), bucket: 0, multiplier: .2 };
+  const outcome = { ...instant(20), response: { path: legacy.path, bucket: 0, multiplier: .2 }, plinko: legacy };
+  const response = await s.dedicated.acceptDedicatedInstant("plinko", "alice", 100, "plinko-request-01", JSON.stringify([100, "low", 8]), outcome);
   const source = s.data.plinkobets[0];
   assert.equal(response.id, source._id);
   assert.equal(source.poolClaim, 20);
   assert.equal(source.payout, 0);
   assert.equal(source.resultId, s.data.gameresults[0]._id);
+  const replay = await s.plinko.drop("alice", 100, "low", 8, "plinko-request-01");
+  assert.equal(replay.id, response.id);
+  assert.equal(replay.multiplier, .2);
+  assert.deepEqual(replay.path, legacy.path);
+  assert.equal(replay.poolClaim, 20);
+  assert.match((await s.plinko.drop("alice", 100, "low", 8, "new-plinko-request")).error, /12 rows/);
+  assert.equal(s.users.get("alice").balance, 900);
+  assert.equal(s.data.plinkobets.length, 1);
   s.at(tomorrow);
   await settle(s, "plinko");
   assert.equal(s.data.plinkobets[0].payout, 20, "Plinko pays the server-decided 0.2x claim itself");
   assert.equal(s.data.plinkobets[0].poolPending, false);
+  const settledReplay = await s.plinko.drop("alice", 100, "low", 8, "plinko-request-01");
+  assert.equal(settledReplay.multiplier, .2);
+  assert.equal(settledReplay.payout, 20);
 });
 
 test("failed instant creation rolls wallet, result, source, pool and idempotency key back", async () => {

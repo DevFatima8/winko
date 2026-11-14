@@ -10,6 +10,114 @@ const source = ts.transpileModule(readFileSync("src/lib/betPresets.ts", "utf8"),
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
 }).outputText;
 
+test("Three Card Poker displays each actual denomination instead of repeating the fallback five", () => {
+  const code = ts.transpileModule(readFileSync("src\\components\\three-card-poker\\ChipButton.tsx", "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  const exports = {};
+  new Function("require", "exports", code)(name => {
+    assert.equal(name, "react/jsx-runtime");
+    return jsxRuntime;
+  }, exports);
+  for (const value of [10, 20, 10000, 50000]) {
+    const element = exports.ChipButton({ value, selected: false, onClick() {} });
+    assert.ok(renderToStaticMarkup(element).includes(`>${value}</span>`), `Chip ${value} must display its own value`);
+    assert.ok(renderToStaticMarkup(exports.MiniChip({ value })).includes(`>${value}</span>`));
+  }
+});
+
+test("Hotline presets and typed amounts submit exactly, without stake adjusters or balance clamping", async () => {
+  const states = [], refs = [], calls = [];
+  let stateIndex = 0, refIndex = 0, walletBalance = 1000, release;
+  const code = ts.transpileModule(readFileSync("src\\components\\hotline\\HotlineGame.tsx", "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  const exports = {};
+  const pool = {
+    start: async amount => {
+      calls.push(amount);
+      if (release === "defer") return new Promise(resolve => { release = resolve; });
+      return false;
+    },
+  };
+  new Function("require", "exports", code)(name => {
+    if (name === "react/jsx-runtime") return jsxRuntime;
+    if (name === "@/lib/betPresets") return { BET_PRESETS: [10, 20, 50, 100, 200] };
+    if (name === "@/lib/gameAudio") return { playGameSound() {}, speakGameVoice() {} };
+    if (name === "@/lib/walletSync") return {
+      useGameBalance: () => [walletBalance],
+      usePoolLifecycle: () => pool,
+    };
+    assert.equal(name, "react");
+    return {
+      useState(initial) {
+        const index = stateIndex++;
+        if (!(index in states)) states[index] = initial;
+        return [states[index], value => { states[index] = typeof value === "function" ? value(states[index]) : value; }];
+      },
+      useRef(initial) {
+        const index = refIndex++;
+        return refs[index] ??= { current: initial };
+      },
+      useEffect() {},
+      useCallback: fn => fn,
+    };
+  }, exports);
+  const text = node => Array.isArray(node) ? node.map(text).join("") : node && typeof node === "object" ? text(node.props?.children) : node == null || typeof node === "boolean" ? "" : String(node);
+  const render = () => {
+    stateIndex = 0;
+    refIndex = 0;
+    const nodes = [];
+    const visit = node => {
+      if (Array.isArray(node)) return node.forEach(visit);
+      if (!node || typeof node !== "object") return;
+      nodes.push(node);
+      visit(node.props?.children);
+    };
+    visit(exports.default());
+    return nodes;
+  };
+  const input = () => render().find(node => node.props?.["aria-label"] === "Custom bet amount");
+  const preset = amount => render().find(node => node.type === "button" && node.props.children === amount);
+  const bet = color => render().find(node => node.type === "button" && text(node).includes(`BET ${color}`));
+  assert.ok(!render().some(node => node.type === "button" && ["-50", "-10", "+10", "+50", "+200", "2X", "½"].includes(text(node).trim())));
+  assert.ok(!render().some(node => node.type === "span" && text(node) === "STAKE:"));
+  for (const [amount, color] of [[20, "RED"], [200, "BLACK"], [50, "FIRE"]]) {
+    preset(amount).props.onClick();
+    assert.equal(input().props.value, amount);
+    await bet(color).props.onClick();
+    assert.equal(calls.at(-1), amount);
+  }
+  input().props.onChange({ target: { value: "125.75" } });
+  input().props.onBlur?.();
+  await bet("RED").props.onClick();
+  assert.equal(calls.at(-1), 125.75);
+  const acceptedCount = calls.length;
+  walletBalance = 75;
+  preset(200).props.onClick();
+  input().props.onBlur?.();
+  assert.equal(input().props.value, 200);
+  assert.equal(bet("RED").props.disabled, true);
+  assert.ok(render().some(node => node.props?.role === "alert" && /Insufficient balance/.test(text(node))));
+  for (const value of ["", "5", "20.005", "200"]) {
+    input().props.onChange({ target: { value } });
+    assert.equal(bet("RED").props.disabled, true);
+    await bet("RED").props.onClick();
+  }
+  assert.equal(calls.length, acceptedCount);
+  preset(20).props.onClick();
+  release = "defer";
+  const pending = bet("RED").props.onClick();
+  assert.equal(input().props.disabled, true);
+  assert.equal(preset(50).props.disabled, true);
+  assert.equal(bet("BLACK").props.disabled, true);
+  preset(50).props.onClick();
+  assert.equal(input().props.value, 20);
+  release(false);
+  await pending;
+  assert.equal(input().props.disabled, false);
+});
+
 test("Dragon Tiger chips update Set amount, custom typing clears leading zeroes, and Rebet is hidden only there", () => {
   const text = readFileSync("src\\components\\CardTable.tsx", "utf8");
   const start = text.indexOf('<div className="flex flex-wrap items-center gap-1.5">', text.indexOf("{/* chips + actions */}"));
@@ -120,6 +228,7 @@ test("separate bet settings page retains existing amounts and saves without relo
   const { api, values } = createStore();
   const state = [];
   let index = 0;
+  let managePlayer = false;
   const code = ts.transpileModule(readFileSync("src\\app\\player\\profile\\bet-amounts\\Client.tsx", "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
@@ -145,7 +254,7 @@ test("separate bet settings page retains existing amounts and saves without relo
       result.push(node);
       visit(node.props?.children);
     };
-    visit(loaded.exports.BetPresetSettings({ userId: "settings-player", initial: [10000, 20, 50, 100, 200] }));
+    visit(loaded.exports.BetPresetSettings({ userId: "settings-player", initial: [10000, 20, 50, 100, 200], managePlayer }));
     return result;
   };
   const inputs = () => nodes().filter(node => node.type === "input");
@@ -164,6 +273,16 @@ test("separate bet settings page retains existing amounts and saves without relo
     assert.match(renderToStaticMarkup(loaded.exports.BetPresetSettings({ userId: "settings-player" })), /these settings do not change them/);
     inputs()[0].props.onChange({ target: { value: "5" } });
     assert.equal(nodes().find(node => node.type === "button").props.disabled, true);
+    managePlayer = true;
+    inputs()[0].props.onChange({ target: { value: "1000" } });
+    const before = [...values];
+    globalThis.fetch = async (url, init) => {
+      assert.equal(url, "/api/admin/bet-presets");
+      assert.deepEqual(JSON.parse(init.body), { userId: "settings-player", betPresets: [1000, 20, 50, 100, 200] });
+      return Response.json({ betPresets: [1000, 20, 50, 100, 200] });
+    };
+    await nodes().find(node => node.type === "button").props.onClick();
+    assert.deepEqual([...values], before, "admin saves must not activate a player's presets in the staff browser");
   } finally {
     globalThis.fetch = oldFetch;
   }

@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
-import { getAdminSupportMessages, listAdminSupportThreads, replyAsAdmin, updateAdminSupportThread } from "@/lib/supportServer";
+import { getAdminSupportMessages, getAdminSupportUnreadCount, listAdminSupportThreads, replyAsAdmin, updateAdminSupportThread } from "@/lib/supportServer";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
     try {
-        const threadId = new URL(request.url).searchParams.get("thread");
-        const result = threadId ? await getAdminSupportMessages(threadId) : await listAdminSupportThreads();
+        const params = new URL(request.url).searchParams;
+        const threadId = params.get("thread");
+        const result = threadId ? await getAdminSupportMessages(threadId) : params.get("unread") === "1" ? await getAdminSupportUnreadCount() : await listAdminSupportThreads();
         const status = "status" in result && typeof result.status === "number" ? result.status : 200;
         return NextResponse.json(result, { status, headers: { "Cache-Control": "no-store" } });
     } catch (error) {

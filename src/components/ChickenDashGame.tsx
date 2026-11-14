@@ -2,7 +2,8 @@
 
 import { localApi } from "@/lib/client";
 import { playGameSound, speakGameVoice } from "@/lib/gameAudio";
-import { broadcastBalanceUpdate } from "@/lib/walletSync";
+import { broadcastBalanceUpdate, confirmWalletReturn, fetchServerBalance, getStoredWalletBalance, holdWalletReveal, revealWalletReturn } from "@/lib/walletSync";
+import { presentedWalletBalance, walletRevealRevision } from "@/lib/walletReveal";
 import { BET_PRESETS } from "@/lib/betPresets";
 
 import Link from "next/link";
@@ -36,7 +37,7 @@ type Vis = {
   lanes: number; ladder: number[]; pos: number; cx: number;
   hop: { fromX: number; toX: number; start: number; dur: number; dash?: boolean; done?: () => void } | null;
   passed: boolean[]; traffic: Car[][]; nextSpawn: number[]; dir: (1 | -1)[];
-  killer: { lane: number; y: number; type: CarType; color: string; hit: boolean; done?: () => void } | null;
+  killer: { lane: number; y: number; type: CarType; color: string; hit: boolean; onHit?: () => void; done?: () => void } | null;
   dead: boolean; ghostT: number; fx: Fx[]; camX: number; camInit: boolean; lastT: number;
   status: "idle" | "active" | "cashed" | "dead" | "finished";
   finishedAt: number | null;
@@ -120,7 +121,16 @@ function update(v: Vis, dt: number, now: number, view: View) {
   if (v.killer) {
     const k = v.killer;
     k.y += 760 * s;
-    if (!k.hit && k.y + 36 >= ROW_Y) { k.hit = true; v.dead = true; burst(v, v.cx, ROW_Y, "feather", 16); }
+    if (!k.hit) {
+      const impactY = ROW_Y + (1 - CAR_DIMS[k.type][1] / 2) * H / view.h;
+      if (k.y >= impactY) {
+        k.y = impactY;
+        k.hit = true;
+        v.dead = true;
+        burst(v, v.cx, ROW_Y, "feather", 16);
+        k.onHit?.();
+      }
+    }
     if (k.y > H + 140) { const d = k.done; v.killer = null; d?.(); }
   }
   if (v.dead) v.ghostT += s;
@@ -357,7 +367,7 @@ export function drawChicken(ctx: CanvasRenderingContext2D, x: number, y: number,
   if (dead) {
     // feathers flying off
     // (fx particles handled separately; here draw the squashed chicken with X eyes)
-    ctx.save(); ctx.rotate(-0.25);
+    ctx.save(); ctx.scale(1.1, 0.45); ctx.rotate(-0.25);
     ctx.fillStyle = "rgba(0,0,0,.22)"; ctx.beginPath(); ctx.ellipse(0, 26, 34, 7, 0, 0, Math.PI * 2); ctx.fill();
     // legs kicked up
     ctx.strokeStyle = "#ff8a00"; ctx.lineWidth = 3.4; ctx.lineCap = "round";
@@ -479,15 +489,16 @@ function draw(ctx: CanvasRenderingContext2D, v: Vis, view: View, now: number) {
   for (let l = 1; l <= v.lanes; l++) drawTile(ctx, laneX(l), rowY, fmtMult(v.ladder[l - 1]).slice(1) + "x", v.passed[l], l === next, now, v.bagVisible && v.bagLane === l);
   if (v.bagVisible && v.bagLane) drawBag(ctx, laneX(v.bagLane), rowY - 16, now / 300);
   // traffic (cartoon cars, top-down-ish but rounded and glossy)
-  for (let l = 1; l <= v.lanes; l++) for (const c of v.traffic[l]) drawCar(ctx, c, laneX(l), c.y * h / H);
+  if (!v.dead) for (let l = 1; l <= v.lanes; l++) for (const c of v.traffic[l]) drawCar(ctx, c, laneX(l), c.y * h / H);
   if (v.van) drawVan(ctx, laneX(v.van.lane), v.van.y * h / H);
   // dash speed streaks
   if (v.hop?.dash) { ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.lineWidth = 3; for (let i = 0; i < 6; i++) { const yy = rowY - 26 + i * 9; ctx.beginPath(); ctx.moveTo(v.cx - 26 - i * 12, yy); ctx.lineTo(v.cx - 64 - i * 20, yy); ctx.stroke(); } }
   // hero chicken
   const t = v.hop ? Math.min(1, (now - v.hop.start) / v.hop.dur) : 0;
   drawChicken(ctx, v.cx, rowY, 1, v.dead, v.ghostT, v.hop ? Math.sin(Math.PI * t) : 0, now, !!v.hop);
+  if (v.dead) for (let l = 1; l <= v.lanes; l++) for (const c of v.traffic[l]) drawCar(ctx, c, laneX(l), c.y * h / H);
   // blue speech-bubble multiplier chip (reference)
-  if (v.status === "active" || v.status === "cashed" || v.status === "finished") {
+  if (!v.dead && (v.status === "active" || v.status === "cashed" || v.status === "finished")) {
     const lbl = fmtMult(v.pos > 0 ? v.ladder[v.pos - 1] : 1);
     ctx.font = "900 20px system-ui"; const tw = Math.max(64, ctx.measureText(lbl).width + 22);
     const bx = v.cx, by = rowY + 34, bh = 34;
@@ -499,7 +510,6 @@ function draw(ctx: CanvasRenderingContext2D, v: Vis, view: View, now: number) {
     ctx.fillStyle = "#ffffff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText(lbl, bx, by + bh / 2 - 1);
   }
-  if (v.killer) drawCar(ctx, { type: v.killer.type, color: v.killer.color, dir: 1 }, laneX(v.killer.lane), v.killer.y * h / H);
   // fx (feathers/coins/sparks)
   for (const f of v.fx) {
     if (f.kind === "coin") continue;
@@ -509,6 +519,8 @@ function draw(ctx: CanvasRenderingContext2D, v: Vis, view: View, now: number) {
     ctx.restore();
   }
   for (const f of v.floats) { ctx.globalAlpha = Math.max(0, f.life); ctx.font = "900 20px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineWidth = 4; ctx.strokeStyle = "rgba(0,0,0,.6)"; ctx.strokeText(f.text, f.x, rowY + f.y - ROW_Y); ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, rowY + f.y - ROW_Y); ctx.globalAlpha = 1; }
+  // Keep the impact car above the flattened chicken and the rest of the scene.
+  if (v.killer) drawCar(ctx, { type: v.killer.type, color: v.killer.color, dir: 1 }, laneX(v.killer.lane), v.killer.y * h / H);
   ctx.restore();
 }
 
@@ -532,13 +544,18 @@ export function ChickenDashGame({ backHref = "/player" }: { backHref?: string })
   const loadedRef = useRef(false);
   const stRef = useRef<State | null>(null);
   const setBusyBoth = (b: boolean) => { busyRef.current = b; setBusy(b); };
+  const [revealKey] = useState(() => `chicken-dash:${crypto.randomUUID()}`);
+  useEffect(() => () => revealWalletReturn(revealKey), [revealKey]);
 
   const refresh = useCallback(async () => {
+    const revision = walletRevealRevision();
     const r = await localApi("/api/chickendash/state", { cache: "no-store" });
     if (!r.ok) return;
     const s: State = await r.json();
+    if (revision !== walletRevealRevision()) return;
+    broadcastBalanceUpdate(s.balance, "Chicken Dash");
+    s.balance = presentedWalletBalance(s.balance);
     stRef.current = s; setSt(s);
-    if (typeof s.balance === "number") broadcastBalanceUpdate(s.balance, "Chicken Dash");
     if (!loadedRef.current) {
       loadedRef.current = true;
       if (s.game?.status === "active" && s.game.bet > 0) {
@@ -611,17 +628,27 @@ export function ChickenDashGame({ backHref = "/player" }: { backHref?: string })
     const v = visRef.current;
     if (!v || busyRef.current || v.status !== "active" || v.hop) return;
     setBusyBoth(true); setMsg(null);
-    const j = await post("/api/chickendash/step");
-    if (j.error) { setMsg({ t: "err", m: j.error }); setBusyBoth(false); return; }
+    holdWalletReveal(revealKey);
+    let j;
+    try { j = await post("/api/chickendash/step"); }
+    catch {
+      revealWalletReturn(revealKey);
+      setMsg({ t: "err", m: "Connection interrupted. Check the refreshed round before continuing." });
+      setBusyBoth(false); void refresh(); return;
+    }
+    if (j.error) { revealWalletReturn(revealKey); setMsg({ t: "err", m: j.error }); setBusyBoth(false); return; }
     const g: G = j.game; setGame(g);
+    confirmWalletReturn(revealKey, null, j.event === "finished" && !g.poolPending ? g.win ?? 0 : 0);
+    if (j.event === "finished") void fetchServerBalance();
     const target = g.position;
     if (j.event === "dead") {
-      playGameSound("crash"); speakGameVoice("chickenCrash");
       v.traffic[target] = v.traffic[target].filter((c) => c.y >= ROW_Y + 60);
       hopTo(v, target, false, () => {
         v.passed[target] = false;
         v.killer = {
-          lane: target, y: -140, type: pick(CAR_TYPES), color: pick(CAR_COLORS), hit: false, done: () => {
+          lane: target, y: -140, type: pick(CAR_TYPES), color: pick(CAR_COLORS), hit: false,
+          onHit: () => { playGameSound("crash"); speakGameVoice("chickenCrash"); },
+          done: () => {
             v.status = "dead"; setPhase("idle"); setBusyBoth(false);
             setMsg({ t: "err", m: g.poolPending ? "Round ended — daily pool payout pending" : "" }); refresh();
             window.dispatchEvent(new CustomEvent("wx:game-result", { detail: { game: "Chicken Dash", bet: g.bet, win: 0, won: false, poolPending: g.poolPending, poolClaim: 0 } }));
@@ -638,13 +665,16 @@ export function ChickenDashGame({ backHref = "/player" }: { backHref?: string })
       if (j.event === "finished") {
         playGameSound("coin"); if (!g.poolPending) speakGameVoice("chickenWin");
         hopTo(v, target + 1, false, () => {
+          revealWalletReturn(revealKey);
+          const balance = getStoredWalletBalance();
+          if (balance !== null) setSt(state => state ? { ...state, balance } : state);
           v.status = "finished"; v.finishedAt = performance.now(); burst(v, v.cx, ROW_Y, "coin", 22); setPhase("idle"); setBusyBoth(false);
           setMsg({ t: "ok", m: g.poolPending ? `Highway crossed! Claim ${money(g.poolClaim ?? 0)} — daily payout pending` : `Highway cross! ${money(g.win)} jeete!` }); refresh();
           window.dispatchEvent(new CustomEvent("wx:game-result", { detail: { game: "Chicken Dash", bet: g.bet, win: g.win ?? 0, won: (g.win ?? 0) > 0, poolPending: g.poolPending, poolClaim: g.poolClaim } }));
         });
       } else setBusyBoth(false);
     });
-  }, [refresh]);
+  }, [refresh, revealKey]);
   const stepRef = useRef(step); stepRef.current = step;
 
   const cashout = async () => {

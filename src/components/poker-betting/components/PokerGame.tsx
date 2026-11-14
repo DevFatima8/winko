@@ -161,6 +161,7 @@ export default function PokerGame() {
           return;
         }
         const mult = round.playerWins ? PAYOUTS[round.playerScore.category] : 0;
+        pool.announce();
         const won = round.playerWins ? bet + bet * mult : 0;
         setPayout(won);
         if (round.playerWins) {

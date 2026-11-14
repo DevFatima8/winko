@@ -1,14 +1,11 @@
-import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { LOCAL_GAMES_CONNECTED, LOCAL_GAMES_UNAVAILABLE } from "@/lib/gameAvailability";
 import { getServerSessionUser } from "@/lib/serverAuth";
-import { mysqlMultiplayerStore } from "@/lib/multiplayer-store";
-import { dailyPoolLock } from "@/lib/dailyPoolRules";
-import { resolveBirdsBeastsRound } from "@/lib/birdsBeastsRounds";
+import { multiplayer } from "@/lib/multiplayer";
 
 export const dynamic = "force-dynamic";
 
-/** Idle rounds share the paid round schedule, but never settle stakes or credit a wallet. */
+/** Legacy spectators read the same live result; request IDs never create extra table rounds. */
 export async function POST(req: Request) {
   if (!LOCAL_GAMES_CONNECTED) return NextResponse.json({ error: LOCAL_GAMES_UNAVAILABLE }, { status: 403 });
   const me = await getServerSessionUser();
@@ -24,18 +21,12 @@ export async function POST(req: Request) {
       ("bets" in body && (!body.bets || typeof body.bets !== "object" || Object.keys(body.bets).length))) {
     return NextResponse.json({ error: "Only an identified idle round is accepted here." }, { status: 400 });
   }
-  const id = createHash("sha256").update(`birds-beasts:idle:${me.id}:${body.roundId}`).digest("hex");
   try {
-    const outcome = await mysqlMultiplayerStore.transact(dailyPoolLock("birds-beasts"), async tx => {
-      const saved = await tx.get<{ outcome: { slot: number; animal: string; outcome: string } }>("multiplayerrequests", id);
-      if (saved) return saved.outcome;
-      const { outcome } = await resolveBirdsBeastsRound(tx, {});
-      await tx.put("multiplayerrequests", id, { _id: id, outcome });
-      return outcome;
-    });
-    return NextResponse.json(outcome);
+    const state = await multiplayer.read("birds-beasts");
+    if (!state.round.result) return NextResponse.json({ error: "Betting is open. Wait for the shared result." }, { status: 409 });
+    return NextResponse.json({ ...state.round.result, roundNo: state.round.roundNo });
   } catch (error) {
     console.error("[birds-beasts idle round]", error);
-    return NextResponse.json({ error: "Round result unavailable. Retry with the same round ID." }, { status: 500 });
+    return NextResponse.json({ error: "Live round result unavailable. Reconnect and retry." }, { status: 503 });
   }
 }

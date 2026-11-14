@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createLegacyScene } from "./multiplayer-legacy-harness.mjs";
 
-const cycleId = "limbo:player-cycle:v1";
+const cycleId = "limbo:bet-wins-30-of-100:v1";
 const players = Array.from({ length: 300 }, (_, i) => `player${String(i).padStart(3, "0")}`);
 function scene(pooled, ids = players) {
   const s = createLegacyScene(ids, { poolEnabled: pooled });
@@ -18,45 +18,38 @@ const targets = [1.01, 1.5, 2, 5, 37.5, 100];
 
 for (const pooled of [false, true]) {
   const mode = pooled ? "pooled" : "legacy";
-  test(`${mode}: every block of 100 different players has exactly 20 winning players`, async () => {
+  test(`${mode}: every block of 100 wagers has exactly 30 target-hit opportunities`, async () => {
     const s = scene(pooled);
     for (let block = 0; block < 3; block++) {
-      const winners = new Set();
+      let winners = 0;
       for (let i = block * 100; i < (block + 1) * 100; i++) {
         const target = targets[i % targets.length];
-        // Each player bets repeatedly in the block; only their first bet draws from the cycle.
-        // The 100th player's first bet closes the block, so they bet once here.
-        for (let repeat = 0; repeat < (i % 100 === 99 ? 1 : 3); repeat++) {
-          const result = await play(s, players[i], 10, target);
-          assert.equal(result.ok, true, result.error);
-          assert.equal(result.won, result.result >= target);
-          assert.ok(result.result >= 1 && result.result <= 100);
-          if (repeat > 0) assert.equal(result.won, false);
-          if (!pooled) assert.equal(result.payout > 0, result.won);
-          if (result.won) winners.add(players[i]);
-        }
+        const result = await play(s, players[i % 3], 10, target);
+        assert.equal(result.ok, true, result.error);
+        assert.equal(result.won, result.result >= target);
+        assert.ok(result.result >= 1 && result.result <= 100);
+        if (!pooled) assert.equal(result.payout > 0, result.won);
+        winners += Number(result.won);
       }
-      assert.equal(winners.size, 20);
-      assert.deepEqual(cycle(s).players, []);
+      assert.equal(winners, 30);
       assert.equal(cycle(s).remaining.length, 100);
     }
-    assert.equal(s.data.gameresults.length, 3 * (99 * 3 + 1));
+    assert.equal(s.data.gameresults.length, 300);
   });
 
   test(`${mode}: concurrent bets from 100 different players share one block`, async () => {
     const s = scene(pooled);
     const results = await Promise.all(players.slice(0, 100).map(user => play(s, user)));
-    assert.equal(results.filter(result => result.won).length, 20);
-    assert.deepEqual(cycle(s).players, []);
+    assert.equal(results.filter(result => result.won).length, 30);
+    assert.equal(cycle(s).remaining.length, 100);
   });
 
-  test(`${mode}: repeated bets by the same players do not use up the 100-player block`, async () => {
+  test(`${mode}: repeated bets by the same player complete a 100-round cycle`, async () => {
     const s = scene(pooled, ["alice", "bob"]);
     let wins = 0;
-    for (let i = 0; i < 50; i++) if ((await play(s, i % 2 ? "alice" : "bob")).won) wins++;
-    assert.ok(wins <= 2);
-    assert.deepEqual([...cycle(s).players].sort(), ["alice", "bob"]);
-    assert.equal(cycle(s).remaining.length, 98);
+    for (let i = 0; i < 100; i++) if ((await play(s, "alice")).won) wins++;
+    assert.equal(wins, 30);
+    assert.equal(cycle(s).remaining.length, 100);
   });
 
   test(`${mode}: a duplicate request replays once and invalid bets never draw a slot`, async () => {
@@ -70,29 +63,27 @@ for (const pooled of [false, true]) {
     assert.ok((await s.limbo.play("bob", 10, 2, "bad")).error);
     s.data.users.find(user => user._id === "bob").balance = 0;
     assert.match((await play(s, "bob")).error, /Insufficient/);
-    assert.deepEqual(cycle(s).players, ["alice"]);
+    assert.equal(cycle(s).remaining.length, 99);
     assert.equal(s.data.gameresults.length, 1);
   });
 
   test(`${mode}: a failed transaction rolls back the player cycle and the wallet`, async () => {
     const s = scene(pooled, ["alice", "bob"]);
-    s.data.multiplayerrooms.push({ _id: cycleId, players: Array.from({ length: 98 }, (_, i) => `old${i}`), remaining: ["win", "lose"] });
+    s.data.multiplayerrooms.push({ _id: cycleId, remaining: [true] });
     const before = structuredClone(s.data);
     s.failNext("gameresults");
     await assert.rejects(play(s, "alice"), /Injected/);
     assert.deepEqual(s.data, before);
     assert.equal((await play(s, "alice")).won, true);
-    assert.deepEqual(cycle(s).remaining, ["lose"]);
-    assert.equal((await play(s, "alice")).won, false);
-    assert.deepEqual(cycle(s).remaining, ["lose"]);
+    assert.equal(cycle(s).remaining.length, 100);
   });
 
   test(`${mode}: a malformed persisted cycle fails without accepting a bet`, async () => {
     for (const bad of [
-      { players: [], remaining: ["jackpot"] },
-      { players: ["a", "a"], remaining: Array(98).fill("lose") },
-      { players: [], remaining: Array(100).fill("win") },
-      { remaining: Array(100).fill("lose") },
+      { remaining: ["jackpot"] },
+      { remaining: [] },
+      { remaining: Array(100).fill(true) },
+      { remaining: Array(100).fill(false) },
     ]) {
       const s = scene(pooled, ["alice"]);
       s.data.multiplayerrooms.push({ _id: cycleId, ...bad });
@@ -116,7 +107,7 @@ const budgetId = "limbo:instant-budget:v1";
 for (const pooled of [false, true]) {
   test(`pool flag ${pooled}: a Rs. 50,000 first winning bet cannot pay a million or create extra holds`, async () => {
     const s = scene(pooled, ["alice"]);
-    s.data.multiplayerrooms.push({ _id: cycleId, players: Array.from({ length: 99 }, (_, i) => `old${i}`), remaining: ["win"] });
+    s.data.multiplayerrooms.push({ _id: cycleId, remaining: [true] });
     const result = await play(s, "alice", 50000, 100);
     assert.equal(result.won, true);
     assert.equal(result.payout, 17500);
@@ -127,10 +118,10 @@ for (const pooled of [false, true]) {
   });
 }
 
-test("concurrent mixed wagers never pay above 35% and leave exactly 20 winners", async () => {
+test("concurrent mixed wagers never pay above 35% and assign exactly 30 target hits", async () => {
   const s = scene(false, players.slice(0, 100));
   const results = await Promise.all(players.slice(0, 100).map((user, i) => play(s, user, i % 2 ? 50000 : 11, 100)));
-  assert.equal(results.filter(result => result.won).length, 20);
+  assert.equal(results.filter(result => result.won).length, 30);
   let stakeCents = 0, paidCents = 0;
   for (const row of s.data.gameresults) {
     stakeCents += Math.round(row.betAmount * 100);
@@ -142,8 +133,9 @@ test("concurrent mixed wagers never pay above 35% and leave exactly 20 winners",
 
 test("budget carries forward, replay does not fund it again, and transaction failure restores it", async () => {
   const s = scene(false, ["alice", "bob"]);
-  s.data.multiplayerrooms.push({ _id: cycleId, players: Array.from({ length: 98 }, (_, i) => `old${i}`), remaining: ["lose", "win"] });
+  s.data.multiplayerrooms.push({ _id: cycleId, remaining: [false] });
   await play(s, "alice", 50000, 100, "limbo-budget-loss-0001");
+  cycle(s).remaining = [true];
   const before = structuredClone(s.data);
   s.failNext("gameresults");
   await assert.rejects(play(s, "bob", 10, 100, "limbo-budget-win-0001"), /Injected/);

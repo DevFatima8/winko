@@ -34,14 +34,15 @@ const rummy = loader()("src\\components\\rummy\\engine.ts");
 const users = Array.from({ length: 100 }, (_, i) => `interactive-card-${i}`);
 
 function table(game, players = users) {
-  const s = createLegacyScene(players, { poolEnabled: true });
+  const enabled = game !== "tower-betting";
+  const s = createLegacyScene(players, { poolEnabled: enabled });
   s.data.games.push({ _id: game, slug: game, isActive: true });
   const { actInteractiveCard } = loader(s)("src\\lib\\browserCardInteractive.ts");
   const accept = (userId, wagerId, amount) => s.store.transact(`daily-pool:${game}`, tx => s.browser.browserPoolLifecycle(tx, userId, {
     game, wagerId, operationId: randomUUID(), amount, action: "accept",
-  }, true));
+  }, enabled));
   const act = (userId, wagerId, move, selection, operationId = randomUUID()) => s.store.transact(`daily-pool:${game}`, tx =>
-    actInteractiveCard(tx, userId, { game, wagerId, operationId, move, selection }, true));
+    actInteractiveCard(tx, userId, { game, wagerId, operationId, move, selection }, enabled));
   return { s, accept, act, balance: userId => s.users.get(userId).balance };
 }
 
@@ -50,6 +51,10 @@ function table(game, players = users) {
  * Each returns the final reply; the money assertions are made against the wallet itself.
  */
 const games = {
+  "tower-betting": { stake: 10, selection: { difficulty: "easy" }, async play(act) {
+    const picked = await act("pick", { col: 0 });
+    return picked.status === "closed" ? picked : await act("cashout");
+  } },
   blackjack: { stake: 10, selection: undefined, async play(act, dealt) {
     return dealt.status === "closed" ? dealt : await act("stand");
   } },
@@ -103,6 +108,30 @@ for (const [game, spec] of Object.entries(games)) {
     assert.equal(winners, 30, game);
   });
 }
+
+test("new pooled Tower wagers preserve 30 opportunities without prepaying provisional claims", async () => {
+  const game = "tower-betting";
+  const t = table(game, ["alice"]);
+  let profitableClaims = 0;
+  for (let round = 0; round < 100; round++) {
+    const wagerId = randomUUID();
+    await t.s.store.transact(game, tx => t.s.browser.browserPoolLifecycle(tx, "alice", {
+      game, wagerId, operationId: randomUUID(), amount: 10, action: "accept",
+      poolVersion: t.s.poolRules.DAILY_POOL_VERSION,
+    }, true));
+    const act = (move, selection) => t.act("alice", wagerId, move, selection);
+    const dealt = await act("deal", { difficulty: "easy" });
+    const final = await games[game].play(act, dealt);
+    assert.equal(final.poolPending, true, "accepted pool contract survives later mode changes");
+    assert.equal(final.balance, 1000 - (round + 1) * 10);
+    assert.equal(final.claim, final.outcome.payout);
+    if (final.claim > 10) profitableClaims++;
+    const entry = t.s.data.dailypoolentries.at(-1);
+    assert.equal(entry.claimCents, Math.round(final.claim * 100));
+    assert.equal(entry.payoutCents, 0);
+  }
+  assert.equal(profitableClaims, 30);
+});
 
 test("Rummy repeat players count every new hand, while winning-hand forfeits still lose", async () => {
   const t = table("rummy", ["alice"]);

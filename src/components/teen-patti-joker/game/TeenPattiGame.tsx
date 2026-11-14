@@ -267,12 +267,6 @@ export default function TeenPattiGame() {
         className="relative z-20 flex items-center justify-between border-b border-amber-200/10 bg-black/50 px-2 py-1.5 backdrop-blur-md rounded-b-xl"
       >
         <div className="flex items-center gap-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/images/joker-emblem.png"
-            alt="Joker emblem"
-            className="h-8 w-8 rounded-full object-cover ring-1 ring-amber-300/50 [mix-blend-mode:screen]"
-          />
           <div className="leading-tight">
             <div className="text-[8px] font-bold uppercase tracking-wider text-amber-200/60">Teen Patti</div>
             <div className="bg-gradient-to-b from-amber-100 via-amber-300 to-amber-600 bg-clip-text font-cinzel text-base font-black tracking-wider text-transparent">

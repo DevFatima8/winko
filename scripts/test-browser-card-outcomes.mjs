@@ -17,11 +17,12 @@ const load = path => {
 const poker = load("src\\components\\poker\\lib\\poker.ts");
 const cardRules = load("src\\lib\\cardGameRules.ts");
 const rouletteRules = load("src\\lib\\rouletteGameRules.ts");
+const opportunityRules = load("src\\lib\\winOpportunityRules.ts");
 const cycleModule = { exports: {} };
 new Function("require", "exports", ts.transpileModule(readFileSync("src\\lib\\playerWinCycle.ts", "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
 }).outputText)(name => name === "node:crypto" ? { randomInt } :
-  name === "./rouletteGameRules" ? rouletteRules : cardRules, cycleModule.exports);
+  name === "./rouletteGameRules" ? rouletteRules : name === "./winOpportunityRules" ? opportunityRules : cardRules, cycleModule.exports);
 
 test("all card, roulette and wheel titles have 30 opportunities per 100 rounds, including repeat players", async () => {
   const rows = new Map();
@@ -30,7 +31,7 @@ test("all card, roulette and wheel titles have 30 opportunities per 100 rounds, 
     put: async (_table, id, value) => { rows.set(id, structuredClone(value)); },
   };
   for (const game of [...cardRules.CARD_GAMES, ...rouletteRules.ROULETTE_GAMES, ...rouletteRules.WHEEL_GAMES, "plinko", "fortune-ox", "thai-hi-lo"]) {
-    const expected = cardRules.isCardGame(game) || rouletteRules.isRouletteGame(game) || rouletteRules.isWheelGame(game) ? 30 : 10;
+    const expected = opportunityRules.isThirtyWinGame(game) || cardRules.isCardGame(game) || rouletteRules.isRouletteGame(game) || rouletteRules.isWheelGame(game) ? 30 : 10;
     const oldId = `${game}:ten-player-wins:v1`;
     if (expected === 30) rows.set(oldId, { _id: oldId, players: ["old"], remaining: Array(99).fill(false) });
     const old = structuredClone(rows.get(oldId));

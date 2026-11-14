@@ -11,13 +11,13 @@ function scene(file, names) {
   }).outputText;
   const loaded = { exports: {} };
   new Function("require", "module", "exports", source)((name) => {
-    assert.ok(["@/lib/client", "@/lib/gameAudio", "@/lib/walletSync", "@/lib/betPresets", "./ChickenDashGame", "next/link", "react", "react/jsx-runtime"].includes(name), `Unexpected import: ${name}`);
+    assert.ok(["@/lib/client", "@/lib/gameAudio", "@/lib/walletSync", "@/lib/walletReveal", "@/lib/betPresets", "./ChickenDashGame", "next/link", "react", "react/jsx-runtime"].includes(name), `Unexpected import: ${name}`);
     return {};
   }, loaded, loaded.exports);
   return loaded.exports.trafficTest;
 }
 
-const dash = scene("ChickenDashGame.tsx", ["newVis", "update", "CAR_DIMS", "H", "ROW_Y"]);
+const dash = scene("ChickenDashGame.tsx", ["newVis", "update", "draw", "CAR_DIMS", "H", "ROW_Y"]);
 const road = scene("ChickenRoadGame.tsx", ["newVis", "blockLane", "update", "CAR_SPEC", "H", "MANHOLE_Y", "roadChickenPose", "roadChickenScale", "roadCarScale", "parkedStopY", "displayedMultiplier", "drawRoadChicken"]);
 const views = [
   { w: 900, h: 440, scale: 1, dpr: 1 },
@@ -163,6 +163,61 @@ test("Chicken Dash approaching traffic cannot overshoot and fully passed traffic
   dash.update(v, 2000, 2000, view);
   assertBehind(approaching.y, 64, dash.ROW_Y, view.h, view.scale, dash.H, 70);
   assert.ok(departed.y > 330);
+});
+
+test("Chicken Dash collision voice and flattened state begin together at the vehicle front bumper", () => {
+  for (const view of views) for (const [type, [, height]] of Object.entries(dash.CAR_DIMS)) {
+    const v = dash.newVis([1.01, 1.06]);
+    v.nextSpawn.fill(Infinity);
+    let impactCalls = 0;
+    const impactY = dash.ROW_Y + (1 - height / 2) * dash.H / view.h;
+    v.killer = { lane: 1, y: impactY - 5, type, color: "#123456", hit: false, onHit: () => impactCalls++ };
+    dash.update(v, 1, 1, view);
+    assert.equal(v.killer.hit, false, `${type} must not report impact before its bumper arrives`);
+    assert.equal(v.dead, false);
+    assert.equal(impactCalls, 0);
+    dash.update(v, 50, 51, view);
+    assert.equal(v.killer.hit, true, `${type} reports impact when its front reaches the flattened chick`);
+    assert.equal(v.killer.y, impactY, "Clamp to the contact frame so the car cannot jump past the chick");
+    assert.equal(v.dead, true);
+    assert.equal(impactCalls, 1);
+    dash.update(v, 16, 67, view);
+    assert.equal(impactCalls, 1, "The impact voice plays once");
+    assert.ok(v.killer.y > impactY, "After contact the car continues over the flattened chick");
+  }
+});
+
+test("Chicken Dash renders the impact car above the flattened chicken and all later scene effects", () => {
+  const fillStyles = [], state = { fillStyle: "" };
+  const ctx = new Proxy(state, {
+    get(target, key) {
+      if (key === "createLinearGradient" || key === "createRadialGradient") return () => ({ addColorStop() {} });
+      if (key === "measureText") return () => ({ width: 0 });
+      if (key === "fill") return () => fillStyles.push(target.fillStyle);
+      if (!(key in target)) return () => {};
+      return target[key];
+    },
+    set(target, key, value) { target[key] = value; return true; },
+  });
+  const v = dash.newVis([1.01]);
+  v.status = "dead";
+  v.dead = true;
+  v.traffic[1] = [{ type: "sedan", color: "#654321", y: 180, speed: 0, dir: 1 }];
+  v.killer = { lane: 1, y: 180, type: "sedan", color: "#123456", hit: true };
+  v.fx.push({ x: 0, y: 0, vx: 0, vy: 0, life: 1, kind: "feather", rot: 0 });
+  dash.draw(ctx, v, views[0], 10);
+  const chick = fillStyles.lastIndexOf("#fffdf7"), car = fillStyles.lastIndexOf("#123456");
+  assert.ok(chick >= 0);
+  assert.ok(fillStyles.lastIndexOf("#654321") > chick, "Regular traffic also passes above the flattened chicken");
+  assert.ok(car > chick, "The car body must be painted after the flattened chicken");
+  assert.equal(fillStyles.at(-1), "#ff5252", "No scene layer should obscure the passing impact vehicle");
+});
+
+test("Chicken Dash schedules crash sound and voice on collision rather than on the server response", () => {
+  const source = readFileSync(join("src", "components", "ChickenDashGame.tsx"), "utf8");
+  const deadBranch = source.slice(source.indexOf('if (j.event === "dead")'), source.indexOf('const dash = j.event === "dash"'));
+  assert.match(deadBranch, /onHit:\s*\(\)\s*=>\s*\{\s*playGameSound\("crash"\);\s*speakGameVoice\("chickenCrash"\);/);
+  assert.doesNotMatch(deadBranch.split("onHit:")[0], /playGameSound\("crash"\)|speakGameVoice\("chickenCrash"\)/);
 });
 
 test("Chicken Road parks upstream/overlapping cars behind barriers and clears departed cars naturally", () => {

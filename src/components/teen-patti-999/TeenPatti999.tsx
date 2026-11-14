@@ -221,8 +221,6 @@ export default function TeenPatti999() {
         </p>
 
         <p className="mt-4 rounded-xl bg-slate-900/70 p-3 text-center text-[11px] leading-relaxed text-slate-500">
-          18+ • This game uses virtual chips only — no real money, no gambling. For
-          entertainment purposes only. Play responsibly.
         </p>
       </Modal>
     </>

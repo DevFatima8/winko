@@ -39,7 +39,7 @@ export const PlayingCard: React.FC<PlayingCardProps> = ({
 }) => {
   const sizeClasses = {
     sm: 'w-10 h-14 text-xs',
-    md: 'w-14 h-20 text-sm',
+    md: 'w-7 h-9 sm:w-9 sm:h-12 text-[10px]',
     lg: 'w-20 h-28 text-base',
   }[size];
 

@@ -1,7 +1,7 @@
 export const MULTIPLAYER_GAMES = [
   "baccarat", "speed-baccarat", "dream-catcher", "football-studio",
   "auto-roulette", "lightning-roulette", "sic-bo", "blast-off",
-  "nine-wickets", "7-up-down", "tai-xiu", "32-cards",
+  "nine-wickets", "7-up-down", "tai-xiu", "32-cards", "birds-beasts",
 ] as const;
 
 export type MultiplayerGame = typeof MULTIPLAYER_GAMES[number];
@@ -52,7 +52,7 @@ export type MultiplayerAction = {
   autoCashout?: number;
   betId?: string;
 };
-export type MultiplayerReply = { ok: true; roundNo: number; queued?: boolean } | { error: string };
+export type MultiplayerReply = { ok: true; roundNo: number; queued?: boolean; state?: MultiplayerState } | { error: string };
 
 export function poolRoundMessage(bets: readonly Pick<MultiplayerBet, "poolPending" | "poolClaim">[]) {
   if (!bets.some(bet => bet.poolPending)) return null;

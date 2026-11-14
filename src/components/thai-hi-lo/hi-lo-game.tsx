@@ -252,14 +252,14 @@ export default function HiLoGame() {
     try {
       if (wager > 0) {
         const selection = { bet };
-        if (!await pool.start(wager, () => {}, selection)) {
+        if (!await pool.start(wager, () => { }, selection)) {
           live.release();
           setPhase("idle");
           return;
         }
         const reply = await pool.resolveServer(selection);
         if (!isHiLoOutcome(reply) || reply.won !== isWin(bet, reply.dice) ||
-            reply.payout !== (reply.won ? Math.round(wager * 200) / 100 : 0)) {
+          reply.payout !== (reply.won ? Math.round(wager * 200) / 100 : 0)) {
           if (reply !== null) window.dispatchEvent(new CustomEvent("wx:wallet-error", {
             detail: { error: "Thai Hi-Lo result could not be verified. Please reopen the game." },
           }));
@@ -569,9 +569,6 @@ export default function HiLoGame() {
         </div>
       )}
 
-      <footer className="hilo-footer">
-        Play responsibly. 18+.
-      </footer>
     </main>
   );
 }

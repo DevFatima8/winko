@@ -124,6 +124,7 @@ export default function MuflisGame({ backHref = "/player" }: { backHref?: string
         return;
       }
       if (!mounted.current) return;
+      pool.announce();
       setEndDismissed(false);
       setPhase("revealed");
 
@@ -160,10 +161,10 @@ export default function MuflisGame({ backHref = "/player" }: { backHref?: string
   const totalGames = wins + losses;
 
   return (
-    <div className="muflis-container relative h-full w-full overflow-hidden select-none">
-      <main className="felt h-full w-full text-white flex flex-col justify-between overflow-hidden">
+    <div className="muflis-container relative w-full select-none">
+      <main className="muflis-felt w-full text-white flex flex-col">
         {live.controls}
-        <div className="mx-auto flex h-full w-full max-w-5xl flex-col px-2 sm:px-4 py-1.5 sm:py-2.5 justify-between overflow-hidden">
+        <div className="muflis-layout mx-auto w-full max-w-5xl px-2 sm:px-4 py-1.5 sm:py-2.5">
           {/* Header */}
           <header className="flex items-center justify-between gap-2 shrink-0">
             <div className="flex items-center gap-2">
@@ -193,7 +194,7 @@ export default function MuflisGame({ backHref = "/player" }: { backHref?: string
           </header>
 
           {/* Table */}
-          <section className="relative my-1 flex-1 min-h-0 rounded-2xl border-2 border-yellow-600/30 bg-black/20 p-2 sm:p-3 shadow-inner flex flex-col justify-between overflow-hidden">
+          <section className="muflis-table relative rounded-2xl border-2 border-yellow-600/30 bg-black/20 shadow-inner">
             {/* Floating win/loss */}
             {floatText && (
               <div
@@ -238,7 +239,7 @@ export default function MuflisGame({ backHref = "/player" }: { backHref?: string
           </section>
 
           {/* Controls */}
-          <section className="shrink-0 pt-1">
+          <section className="muflis-controls pt-1">
             {/* Chips */}
             <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
               {CHIPS.map((chip) => (
@@ -325,7 +326,7 @@ function HandRow({
 }) {
   const showPlaceholders = phase === "betting" || !hand;
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex shrink-0 flex-col items-center gap-2">
       <div className="flex items-center gap-2">
         <span
           className={`text-xs sm:text-sm font-bold uppercase tracking-widest ${

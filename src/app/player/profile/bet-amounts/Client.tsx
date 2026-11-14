@@ -5,7 +5,7 @@ import { useState } from "react";
 import { DEFAULT_BET_PRESETS, MAX_BET_PRESET, normalizeBetPresets, saveBetPresets } from "@/lib/betPresets";
 import { usePage } from "@/lib/useDb";
 
-export function BetPresetSettings({ userId, initial }: { userId: string; initial?: number[] }) {
+export function BetPresetSettings({ userId, initial, managePlayer = false }: { userId: string; initial?: number[]; managePlayer?: boolean }) {
   const [amounts, setAmounts] = useState<string[]>(() => (normalizeBetPresets(initial) ?? [...DEFAULT_BET_PRESETS]).map(String));
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
@@ -18,14 +18,14 @@ export function BetPresetSettings({ userId, initial }: { userId: string; initial
     setMessage("");
     setError("");
     try {
-      const response = await fetch("/api/player/bet-presets", {
+      const response = await fetch(managePlayer ? "/api/admin/bet-presets" : "/api/player/bet-presets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ betPresets }),
+        body: JSON.stringify({ betPresets, ...(managePlayer ? { userId } : {}) }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Bet amounts save nahi ho sakin.");
-      saveBetPresets(userId, result.betPresets);
+      if (!managePlayer) saveBetPresets(userId, result.betPresets);
       setMessage("Bet amounts saved.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Bet amounts save nahi ho sakin.");
@@ -36,7 +36,7 @@ export function BetPresetSettings({ userId, initial }: { userId: string; initial
   return (
     <section className="wx-card space-y-3 rounded-xl p-4">
       <h1 className="text-sm font-bold text-white">Customize bet amounts</h1>
-      <p className="text-xs text-slate-400">Your saved quick-bet amounts. API games currently use provider bet options; these settings do not change them.</p>
+      <p className="text-xs text-slate-400">{managePlayer ? "Set this player's five quick-bet amounts. The player will receive them on their next account refresh. " : "Your saved quick-bet amounts. "}API games currently use provider bet options; these settings do not change them.</p>
       <p className="text-xs text-slate-400">Enter five different amounts from 10 to Rs. {MAX_BET_PRESET.toLocaleString()}.</p>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         {amounts.map((amount, index) => (

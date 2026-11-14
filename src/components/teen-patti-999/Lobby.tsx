@@ -41,8 +41,8 @@ export default function Lobby({
     Math.max(
       137,
       t.players +
-        Math.round(Math.sin((tick + t.id.length * 7) * 1.7) * 400) +
-        (tick % 11) * 37
+      Math.round(Math.sin((tick + t.id.length * 7) * 1.7) * 400) +
+      (tick % 11) * 37
     ).toLocaleString("en-PK");
 
   return (
@@ -154,11 +154,6 @@ export default function Lobby({
         </div>
       </section>
 
-      {/* Footer disclaimer */}
-      <footer className="mx-3 mt-6 rounded-2xl bg-slate-900/70 p-4 text-center text-[11px] leading-relaxed text-slate-400">
-        18+ • Virtual chips only — no real money, no deposits, no withdrawals •
-        For entertainment purposes only • Play responsibly
-      </footer>
 
       {/* Bottom nav */}
       <nav className="sticky bottom-0 z-10 mx-auto mt-3 flex w-full max-w-lg justify-around rounded-xl border border-amber-500/20 bg-slate-900/95 py-2 backdrop-blur shadow-lg">

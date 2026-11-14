@@ -10,7 +10,7 @@ const games = ["treasure-bowl", "super-fruits", "sweet-bonanza", "hotline",
   "fortune-ox", "fortune-gems", "fortune-toucan", "gates-of-olympus", "diao-chan"];
 const selection = game => game === "hotline" ? { color: "fire", highRisk: true }
   : game === "fortune-gems" ? { extra: false, baseBet: 100000 } : {};
-const cycleId = game => game === "hotline" ? "hotline:bet-wins-30-of-100:v1" : `${game}:ten-player-wins:v1`;
+const cycleId = game => `${game}:bet-wins-30-of-100:v1`;
 
 test("all ten slot titles are covered, without changing unrelated card or payment policies", () => {
   const loaded = { exports: {} };
@@ -68,7 +68,7 @@ test("Hotline repeat-player bets get exactly 30 random wins per 100, across colo
 
 for (const enabled of [false, true]) {
   for (const game of games) {
-    test(`${game}, pool flag=${enabled}: exactly ${game === "hotline" ? 30 : 10} positive returns in each of two 100-wager cycles; never 4x`, async () => {
+    test(`${game}, pool flag=${enabled}: exactly 30 profitable wins in each of two 100-wager cycles; never 4x`, async () => {
       const s = scene(players, enabled);
       for (let block = 0; block < 2; block++) {
         const replies = await Promise.all(players.slice(block * 100, (block + 1) * 100).map(async user => {
@@ -96,10 +96,10 @@ for (const enabled of [false, true]) {
           }
           return reply;
         }));
-        assert.equal(replies.filter(reply => reply.claim > 0).length, game === "hotline" ? 30 : 10);
+        assert.equal(replies.filter(reply => reply.claim > 100000).length, 30);
+        assert.equal(replies.filter(reply => reply.claim === 0).length, 70);
         const saved = s.data.multiplayerrooms.find(row => row._id === cycleId(game));
-        if (game === "hotline") assert.equal(saved.remaining.length, 100);
-        else assert.deepEqual(saved.players, []);
+        assert.equal(saved.remaining.length, 100);
       }
       assert.equal(s.data.dailypoolentries.length, 0);
       assert.equal(s.data.gameresults.length, 200);
@@ -128,17 +128,12 @@ for (const game of games) {
     await assert.rejects(resolve(s, game, "alice", wagerId), /Injected/);
     assert.deepEqual(s.data, before);
     await resolve(s, game, "alice", wagerId);
-    const cycle = structuredClone(s.data.multiplayerrooms);
     const repeatId = randomUUID();
     await accept(s, game, "alice", repeatId);
     const repeated = await resolve(s, game, "alice", repeatId);
-    if (game === "hotline") {
-      assert.equal(repeated.claim, repeated.outcome.won ? 200000 : 0);
-      assert.equal(s.data.multiplayerrooms.find(row => row._id === cycleId(game)).remaining.length, 98);
-    } else {
-      assert.equal(repeated.claim, 0);
-      assert.deepEqual(s.data.multiplayerrooms, cycle);
-    }
+    if (game === "hotline") assert.equal(repeated.claim, repeated.outcome.won ? 200000 : 0);
+    assert.ok(repeated.claim === 0 || repeated.claim > 100000);
+    assert.equal(s.data.multiplayerrooms.find(row => row._id === cycleId(game)).remaining.length, 98);
     await assert.rejects(s.store.transact(game, tx => s.browser.playBrowserWager(tx, "bob", {
       game, wagerId: randomUUID(), stake: 100000, claim: 400000,
     }, true)), /server engine/);
@@ -196,7 +191,7 @@ test("Hotline uses only the confirmed result, persists selection and blocks doub
   const calls = [], values = {};
   const result = { color: "fire", won: true, multiplier: 2, amount: 200000, payout: 200000 };
   const deps = {
-    accepting: { current: false }, isRunning: false, betAmount: 100000, balance: 1000000, highRiskMode: true,
+    accepting: { current: false }, isRunning: false, betAmount: 100000, betError: "", balance: 1000000, highRiskMode: true,
     pool: {
       start: async (...args) => { calls.push(["start", ...args]); return accepted; },
       resolveServer: async input => { calls.push(["resolve", input]); return result; },

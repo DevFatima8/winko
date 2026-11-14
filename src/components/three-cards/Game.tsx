@@ -45,6 +45,7 @@ export default function Home() {
   const [wagerOffsets, setOffsets] = useState([0, 0, 0]);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const pickBusy = useRef(false);
+  const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const idleRound = useIdleCardRound({
     idle: phase === "idle", finished: phase === "reveal", busy: pool.busy,
     frames: () => {
@@ -72,7 +73,10 @@ export default function Home() {
   const faceUp = idleRound.preview?.faceUp ?? wagerFaceUp;
   const offsets = idleRound.preview?.offsets ?? wagerOffsets;
 
-  useEffect(() => () => { if (timer.current) clearInterval(timer.current); }, []);
+  useEffect(() => () => {
+    if (timer.current) clearInterval(timer.current);
+    if (revealTimer.current) clearTimeout(revealTimer.current);
+  }, []);
 
   const play = async () => {
     if (phase !== "idle") return;
@@ -124,6 +128,7 @@ export default function Home() {
     setCards(confirmed.cards);
     setPicked(confirmed.picked);
     setFaceUp(true);
+    revealTimer.current = setTimeout(() => pool.announce(), 500);
     setPhase("reveal");
     setEndDismissed(false);
     if (win) {
@@ -141,10 +146,10 @@ export default function Home() {
   const busy = phase === "shuffling" || phase === "picking" || idleRound.watching;
 
   return (
-    <main className="h-full w-full overflow-hidden bg-gradient-to-b from-[#0b1a2e] via-[#10233f] to-[#050c18] text-white flex flex-col justify-between items-center px-1 sm:px-2 md:px-3 py-1 select-none">
+    <main className="three-cards-game min-h-full w-full bg-gradient-to-b from-[#0b1a2e] via-[#10233f] to-[#050c18] text-white flex flex-col items-center px-1 sm:px-2 md:px-3 py-1 select-none">
       {idleRound.countdown !== null && <p className="shrink-0 text-center text-xs text-amber-200" role="status">Next round in {idleRound.countdown}s</p>}
       {/* Header */}
-      <header className="w-full max-w-4xl flex shrink-0 items-center justify-between px-2 sm:px-4 py-1 sm:py-2 border-b border-yellow-500/30">
+      <header className="w-full max-w-4xl flex flex-wrap gap-2 shrink-0 items-center justify-between px-2 sm:px-4 py-1 sm:py-2 border-b border-yellow-500/30">
         <h1 className="text-base sm:text-2xl font-black tracking-wider bg-gradient-to-r from-yellow-300 via-yellow-500 to-orange-500 bg-clip-text text-transparent">
           WIN THREE CARDS
         </h1>
@@ -165,13 +170,13 @@ export default function Home() {
       </div>
 
       {/* Table */}
-      <section className="relative flex-1 min-h-0 w-full max-w-3xl my-1 flex flex-col justify-between items-center rounded-2xl sm:rounded-[40px] bg-[radial-gradient(ellipse_at_center,#1f8a4c_0%,#0f5b30_60%,#083d20_100%)] border-4 sm:border-8 border-[#6b3a12] shadow-[0_0_40px_rgba(0,0,0,0.8),inset_0_0_30px_rgba(0,0,0,0.6)] py-2 sm:py-4 px-2 sm:px-4 overflow-hidden">
+      <section className="relative shrink-0 w-full max-w-3xl my-1 flex flex-col gap-2 items-center rounded-2xl sm:rounded-[40px] bg-[radial-gradient(ellipse_at_center,#1f8a4c_0%,#0f5b30_60%,#083d20_100%)] border-4 sm:border-8 border-[#6b3a12] shadow-[0_0_40px_rgba(0,0,0,0.8),inset_0_0_30px_rgba(0,0,0,0.6)] py-2 sm:py-4 px-2 sm:px-4">
         <div className="absolute inset-1.5 sm:inset-3 rounded-xl sm:rounded-[36px] border border-yellow-400/30 pointer-events-none" />
         <p className="text-center text-yellow-300/80 text-[10px] sm:text-xs tracking-[0.3em] shrink-0">PAYS {MULTIPLIER}x</p>
         <p className={`text-center font-extrabold text-sm sm:text-xl my-1 shrink-0 ${lastWin ? "text-yellow-300 animate-pulse" : phase === "reveal" ? "text-rose-300" : "text-white"}`}>
           {message}
         </p>
-        <div className="flex justify-center items-center gap-2 sm:gap-6 md:gap-10 my-auto">
+        <div className="flex shrink-0 justify-center items-center gap-2 sm:gap-6 md:gap-10 my-auto">
           {cards.map((c, i) => (
             <button
               key={i}
@@ -204,35 +209,38 @@ export default function Home() {
       </section>
 
       {/* Controls */}
-      <section className="w-full max-w-3xl shrink-0 px-2 py-1 sm:py-2 flex flex-col items-center gap-1.5 sm:gap-2">
-        <div className="flex gap-2 flex-wrap justify-center">
+      <section aria-label="Betting controls" className="w-full max-w-3xl shrink-0 px-2 py-1 sm:py-2 flex flex-col items-center gap-2">
+        <div className="w-full max-w-[280px] sm:max-w-[416px] flex gap-2 flex-wrap justify-center p-1">
           {CHIPS.map((v) => (
             <button
               key={v}
               disabled={busy}
               onClick={() => setBet(v)}
-              className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full font-black text-xs sm:text-sm border-2 sm:border-4 border-dashed shadow-md transition active:scale-95 ${bet === v ? "scale-105 ring-2 ring-yellow-300 shadow-[0_0_12px_rgba(253,224,71,0.6)]" : ""} ${v === 50 ? "bg-emerald-600 border-emerald-200" : v === 100 ? "bg-rose-600 border-rose-200" : v === 200 ? "bg-blue-600 border-blue-200" : v === 500 ? "bg-purple-700 border-purple-200" : "bg-black border-yellow-400"
+              aria-label={`Set bet to Rs. ${v}`}
+              aria-pressed={bet === v}
+              className={`w-[72px] h-[72px] shrink-0 rounded-full border-2 sm:border-4 border-dashed shadow-md transition active:scale-95 ${bet === v ? "scale-105 ring-2 ring-yellow-300 shadow-[0_0_12px_rgba(253,224,71,0.6)]" : ""} ${v === 50 ? "bg-emerald-600 border-emerald-200" : v === 100 ? "bg-rose-600 border-rose-200" : v === 200 ? "bg-blue-600 border-blue-200" : v === 500 ? "bg-purple-700 border-purple-200" : "bg-black border-yellow-400"
                 } disabled:opacity-50`}
             >
-              {v}
+              <span className={`font-black leading-none tabular-nums ${String(v).length > 6 ? "text-xs" : "text-sm"}`}>{v}</span>
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-1.5">
-          <button disabled={busy} onClick={() => setBet((b) => Math.max(10, Math.floor(b / 2)))} className="px-2.5 py-1 bg-white/10 rounded-lg text-xs font-bold hover:bg-white/20 active:scale-95 disabled:opacity-50">½</button>
+        <div className="grid w-full max-w-[416px] grid-cols-[44px_minmax(0,1fr)_44px] gap-2">
+          <button aria-label="Halve bet" disabled={busy} onClick={() => setBet((b) => Math.max(10, Math.floor(b / 2)))} className="h-11 min-w-0 bg-white/10 rounded-lg text-sm font-bold hover:bg-white/20 active:scale-95 disabled:opacity-50">½</button>
           <input
             type="number"
+            aria-label="Bet amount"
             value={bet}
             disabled={busy}
             onChange={(e) => setBet(Math.max(0, Math.floor(Number(e.target.value))))}
-            className="w-24 sm:w-28 text-center bg-black/50 border border-yellow-500/50 rounded-lg py-1 font-bold text-sm text-yellow-300 outline-none"
+            className="h-11 min-w-0 w-full px-2 text-center bg-black/50 border border-yellow-500/50 rounded-lg font-bold text-sm text-yellow-300 outline-none"
           />
-          <button disabled={busy} onClick={() => setBet((b) => Math.min(balance, b * 2))} className="px-2.5 py-1 bg-white/10 rounded-lg text-xs font-bold hover:bg-white/20 active:scale-95 disabled:opacity-50">2x</button>
+          <button aria-label="Double bet" disabled={busy} onClick={() => setBet((b) => Math.min(balance, b * 2))} className="h-11 min-w-0 bg-white/10 rounded-lg text-sm font-bold hover:bg-white/20 active:scale-95 disabled:opacity-50">2x</button>
         </div>
         <button
           onClick={play}
           disabled={busy}
-          className="w-56 sm:w-64 py-2 sm:py-2.5 rounded-full text-base sm:text-lg font-black tracking-widest bg-gradient-to-r from-amber-400 via-yellow-500 to-orange-500 text-slate-950 border border-yellow-200/60 shadow-[0_0_20px_rgba(245,158,11,0.6)] active:scale-95 disabled:opacity-50 transition hover:brightness-110"
+          className="w-full max-w-[416px] min-h-11 py-2 sm:py-2.5 rounded-full text-base sm:text-lg font-black tracking-widest bg-gradient-to-r from-amber-400 via-yellow-500 to-orange-500 text-slate-950 border border-yellow-200/60 shadow-[0_0_20px_rgba(245,158,11,0.6)] active:scale-95 disabled:opacity-50 transition hover:brightness-110"
         >
           {phase === "reveal" ? "PLAY AGAIN" : "PLAY"}
         </button>

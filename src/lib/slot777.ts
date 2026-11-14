@@ -41,12 +41,12 @@ export function evaluate(reels: Sym[]) {
   if (cherries === 1) return PAYTABLE.find((p) => p.combo === "cherry1")!;
   return null;
 }
-type SpinCategory = "orange" | "lemon" | "cherry3" | "cherry2" | "cherry1";
+type SpinCategory = "orange" | "lemon" | "cherry3" | "cherry2";
 const PRIZES: readonly SpinCategory[] = [
-  "orange", "lemon", "lemon", "cherry3", "cherry3", "cherry3", "cherry2", "cherry2", "cherry1", "cherry1",
+  "orange", "lemon", "lemon", "cherry3", "cherry3", "cherry3", "cherry2", "cherry2", "cherry2", "cherry2",
 ];
 const CATEGORY_COMBOS: Record<SpinCategory, string> = {
-  orange: "orange,orange,orange", lemon: "lemon,lemon,lemon", cherry3: "cherry,cherry,cherry", cherry2: "cherry2", cherry1: "cherry1",
+  orange: "orange,orange,orange", lemon: "lemon,lemon,lemon", cherry3: "cherry,cherry,cherry", cherry2: "cherry2",
 };
 export const WIN_CAP = Math.min(2, DAILY_POOL_WIN_CAP["lucky-777"]!);
 const NON_CHERRIES = SYMBOLS.filter(symbol => symbol !== "cherry");
@@ -82,27 +82,26 @@ function shuffle<T>(values: T[]) {
   return values;
 }
 
-// Only a distinct admitted player consumes a slot; acceptance and both cycles commit together.
+// Paid rounds and their prize draws commit together; historic prize documents are retained.
 async function nextSpin(tx: MultiplayerTransaction, userId: string) {
-  const category = await nextPlayerPrize(tx, "lucky-777", userId, PRIZES);
+  const category = await nextPlayerPrize(tx, "lucky-777", userId, PRIZES, "profitable-v2");
   let reels: Sym[];
   if (category === null) reels = otherReels();
   else if (category === "orange" || category === "lemon") reels = [category, category, category];
   else if (category === "cherry3") reels = ["cherry", "cherry", "cherry"];
   else {
-    const count = category === "cherry2" ? 2 : 1;
     reels = shuffle(Array.from({ length: 3 }, (_, index): Sym =>
-      index < count ? "cherry" : NON_CHERRIES[randomInt(NON_CHERRIES.length)]));
+      index < 2 ? "cherry" : NON_CHERRIES[randomInt(NON_CHERRIES.length)]));
   }
   const match = evaluate(reels);
   const hit = match ? { ...match, mult: cappedMultiplier(match.mult) } : null;
   return { reels, hit, data: `${reels.join(" | ")}${hit ? ` → ${hit.label} ×${hit.mult}` : ""}` };
 }
 
-/** Capped gross return per equal stake across 100 distinct admitted players, excluding repeat losses. */
+/** Gross RTP for equal paid stakes, before the existing house deduction. */
 export function theoreticalRtp() {
   return PRIZES.reduce((total, category) =>
-    total + cappedMultiplier(PAYTABLE.find(entry => entry.combo === CATEGORY_COMBOS[category])!.mult), 0) / 100;
+    total + cappedMultiplier(PAYTABLE.find(entry => entry.combo === CATEGORY_COMBOS[category])!.mult), 0) / PRIZES.length * 0.3;
 }
 
 let cachedGameId: ObjectId | null = null;
@@ -142,6 +141,7 @@ export async function spin(userId: string, amount: number, requestId = "") {
     const { reels, hit, data } = await nextSpin(tx, userId);
     const gross = hit ? amount * cappedMultiplier(hit.mult) : 0;
     const payout = payoutAfterHouseShare(gross);
+    if (hit && payout <= amount) throw new Error("Lucky 777 could not prepare a profitable capped win.");
     const now = new Date(await tx.now());
     const gid = await gameId();
     const id = randomUUID();

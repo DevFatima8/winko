@@ -3,7 +3,12 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import ts from "typescript";
 
-function harness() {
+const catalog = {};
+new Function("exports", ts.transpileModule(readFileSync("src\\lib\\gameCatalog.ts", "utf8"), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS },
+}).outputText)(catalog);
+
+function harness(warmed = false) {
   let result = null;
   const code = ts.transpileModule(readFileSync("src\\components\\lobby\\GameThumbnail.tsx", "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
@@ -12,9 +17,12 @@ function harness() {
   const loaded = { exports: {} };
   new Function("require", "module", "exports", code)(name => {
     if (name === "next/image") return { default: "optimized-image" };
+    if (name === "@/lib/gameCatalog") return catalog;
+    if (name === "@/lib/gameArtwork") return { GAME_THUMBNAIL_SIZES: "(max-width: 639px) 45vw, (max-width: 1023px) 30vw, 220px", isGameArtworkReady: () => warmed, subscribeGameArtwork: () => () => {} };
     if (name === "react") return {
       useState: () => [result, value => { result = typeof value === "function" ? value(result) : value; }],
       useCallback: fn => fn,
+      useSyncExternalStore: (_, snapshot) => snapshot(),
     };
     assert.equal(name, "react/jsx-runtime");
     return { jsx, jsxs: jsx };
@@ -42,13 +50,21 @@ test("cached images immediately clear their loader", () => {
   assert.equal(render()[1], false);
 });
 
-test("matching public artwork uses responsive optimized images instead of full-size remote downloads", () => {
+test("predecoded artwork activates offscreen cards immediately without flashing a loader", () => {
+  const [image, loader] = harness(true)("/games/06_Mines_1024x700.jpg");
+  assert.equal(image.props.loading, "eager");
+  assert.equal(loader, false);
+});
+
+test("local artwork uses pre-sized WebP without a cold image-optimizer request", () => {
   const image = harness()("/games/01_Aviator_1024x700.jpg")[0];
   assert.equal(image.type, "optimized-image");
   assert.equal(image.props.width, 1024);
   assert.equal(image.props.height, 700);
   assert.ok(image.props.sizes.includes("45vw"));
   assert.equal(image.props.loading, "lazy");
+  assert.equal(image.props.src, "/games/thumbnails/aviator.webp");
+  assert.equal(image.props.unoptimized, true);
 });
 
 test("failed images show an explicit message instead of an endless loader", () => {

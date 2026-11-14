@@ -423,7 +423,7 @@ async function loadData(request: Request) {
             const teamIds = users.map((user) => user._id);
             const [transactions, results, storedLogins, paymentAccounts, threads] = await Promise.all([
                 Transaction.find(me.level < 2 ? { userId: { $in: teamIds } } : {}).lean(),
-                GameResult.find(me.level < 2 ? { userId: { $in: teamIds } } : {}).sort({ createdAt: -1 }).lean(),
+                GameResult.find({ ...(me.level < 2 ? { userId: { $in: teamIds } } : {}), outcome: { $ne: "pending" } }).sort({ createdAt: -1 }).lean(),
                 LoginEvent.find({
                     createdAt: { $gte: weekStart, $lt: end },
                     role: { $in: ["client", "agent"] },
@@ -544,7 +544,7 @@ async function loadData(request: Request) {
             if (!canOperate) return NextResponse.json({ error: "User not found." }, { status: 404 });
             const [transactions, results, team, commissions, settings, referrer] = await Promise.all([
                 Transaction.find({ userId: user._id }).sort({ createdAt: -1 }).limit(50).lean(),
-                GameResult.find({ userId: user._id }).sort({ createdAt: -1 }).limit(30).lean(),
+                GameResult.find({ userId: user._id, outcome: { $ne: "pending" } }).sort({ createdAt: -1 }).limit(30).lean(),
                 User.find({ referredBy: user._id }).sort({ createdAt: -1 }).lean(),
                 Commission.find({ beneficiaryId: user._id }).sort({ createdAt: -1 }).limit(30).lean(),
                 getSettings(),
@@ -749,7 +749,7 @@ async function loadData(request: Request) {
                 Game.find().lean(),
                 getSiteGameCatalog(),
                 GameResult.aggregate<GameResultStat>([
-                    ...(teamIds ? [{ $match: scope }] : []),
+                    { $match: { ...scope, outcome: { $ne: "pending" } } },
                     { $group: {
                         _id: "$gameId",
                         total: { $sum: 1 },
@@ -769,7 +769,7 @@ async function loadData(request: Request) {
             const selected = summaries.find((game) => game.key === requested);
             if (!selected) return NextResponse.json({ error: "Game nahi mili." }, { status: 404 });
             const refs: (string | null)[] = selected.refs.flatMap((ref) => ref ? [ref] : [null, ""]);
-            const rows = await GameResult.find({ ...scope, gameId: { $in: refs } }).sort({ createdAt: -1 }).limit(500).lean();
+            const rows = await GameResult.find({ ...scope, gameId: { $in: refs }, outcome: { $ne: "pending" } }).sort({ createdAt: -1 }).limit(500).lean();
             const userIds = [...new Set(rows.flatMap((row) => row.userId ? [String(row.userId)] : []))];
             const users = userIds.length ? await User.find({ _id: { $in: userIds } }, "name phone").lean() : [];
             const userMap = new Map(users.map((user) => [String(user._id), { name: user.name, phone: user.phone }]));

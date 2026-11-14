@@ -5,13 +5,30 @@ import { getSettings } from "@/lib/platform";
 import { getWinHoldSummary } from "@/lib/winHold";
 import { gameResultGameMap } from "@/lib/gameResultGames";
 
-export async function GET() {
+export async function GET(request: Request) {
     try {
         const me = await getServerSessionUser();
         if (!me || me.role !== "client") return NextResponse.json({ error: "Login required." }, { status: 401 });
+        const slug = new URL(request.url).searchParams.get("game");
+        if (slug !== null) {
+            if (!/^[a-z0-9-]{1,80}$/.test(slug)) return NextResponse.json({ error: "Invalid game." }, { status: 400 });
+            const game = await Game.findOne({ slug }, "_id").lean();
+            if (!game) return NextResponse.json({ error: "Game not found." }, { status: 404 });
+            const limit = [30, 40, 50][Array.from(slug).reduce((sum, char) => sum + char.charCodeAt(0), 0) % 3];
+            const results = await GameResult.find({
+                userId: me.id, gameId: { $in: [String(game._id), slug] }, outcome: { $ne: "pending" },
+            }).sort({ createdAt: -1 }).limit(limit).lean();
+            return NextResponse.json({
+                limit, plays: results.map(result => ({
+                    id: String(result._id), round: result.roundNo, bet: result.betAmount,
+                    payout: result.winAmount, outcome: result.outcome, at: result.createdAt,
+                    poolPending: result.poolPending === true, claim: result.poolClaim ?? 0,
+                })),
+            }, { headers: { "Cache-Control": "no-store" } });
+        }
         const [transactions, results, [totals], settings, holds] = await Promise.all([
             Transaction.find({ userId: me.id }).sort({ createdAt: -1 }).limit(100).lean(),
-            GameResult.find({ userId: me.id }).sort({ createdAt: -1 }).limit(100).lean(),
+            GameResult.find({ userId: me.id, outcome: { $ne: "pending" } }).sort({ createdAt: -1 }).limit(100).lean(),
             GameResult.aggregate<{ _id: null; rounds: number; bets: number; wins: number }>([
                 { $match: { userId: me.id, outcome: { $ne: "pending" }, poolPending: { $ne: true } } },
                 { $group: { _id: null, rounds: { $sum: 1 }, bets: { $sum: "$betAmount" }, wins: { $sum: "$winAmount" } } },

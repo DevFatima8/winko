@@ -11,6 +11,9 @@ import { isPrivateCardTable, privateCardPrize, privateCardOutcome, privateCardGr
 import { isRouletteGame, isLiveRouletteGame, isWheelGame } from "./rouletteGameRules";
 import { privateRouletteOutcome, rouletteClaims, validRouletteAllocation } from "./privateRouletteTables";
 import { nextPlayerWin } from "./playerWinCycle";
+import { isPrivateDiceTable, privateDiceOutcome, validDiceAllocation } from "./privateDiceTables";
+import { resolveBirdsBeastsRound } from "./birdsBeastsRounds";
+import { isBetKey, type Bets } from "@/components/birds-beasts/lib/game-config";
 
 type Wallet = { _id: string; name: string; role: string; balance: number; isActive: boolean; blockedGames?: string[]; vipBetPoints?: number; updatedAt?: string };
 type CatalogGame = { _id: string; slug: string; isActive: boolean };
@@ -27,6 +30,7 @@ type Room = {
   cardOption?: string;
   queuedCardOption?: string;
   cardOutcomeReady?: boolean;
+  birdsOutcomeReady?: boolean;
 };
 type Receipt = { _id: string; fingerprint: string; reply: MultiplayerReply };
 export class MultiplayerError extends Error {
@@ -68,7 +72,7 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
       const catalog = games[0];
       if (!catalog) throw new MultiplayerError("Game is not available.", 404);
       const shared = await tx.get<Room>("multiplayerrooms", game, true);
-      const personalGame = isPrivateCardTable(game) || isLiveRouletteGame(game);
+      const personalGame = isPrivateCardTable(game) || isLiveRouletteGame(game) || isPrivateDiceTable(game);
       const legacy = personalGame && userId && shared &&
         [...shared.bets, ...shared.queuedBets].some(bet => bet.userId === userId && bet.status !== "cancelled");
       const ownerId = personalGame && userId && !legacy ? userId : null;
@@ -140,8 +144,9 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
       return;
     }
     const push = gross === bet.amount && room.game === "speed-baccarat" && (bet.option === "player" || bet.option === "banker");
-    const payout = allocation?.payout ?? (push ? gross : Math.floor(Math.max(0, gross) * 0.98 * 100 + 1e-8) / 100);
-    const held = allocation?.held ?? (push ? 0 : cents(Math.max(0, gross) * 0.02));
+    const fullReturn = push || room.game === "birds-beasts";
+    const payout = allocation?.payout ?? (fullReturn ? gross : Math.floor(Math.max(0, gross) * 0.98 * 100 + 1e-8) / 100);
+    const held = allocation?.held ?? (fullReturn ? 0 : cents(Math.max(0, gross) * 0.02));
     if (!Number.isFinite(payout) || !Number.isFinite(held)) throw new Error("Invalid settlement amount.");
     bet.payout = payout;
     bet.settledAt = now;
@@ -178,10 +183,20 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
     // At most current + queued round can contain wagers; skip only empty overdue rounds.
     for (let pass = 0; pass < 4; pass++) {
       const d = deadlines(room);
+      if (room.game === "birds-beasts" && now >= d.bettingEndsAt && !room.birdsOutcomeReady) {
+        const bets: Bets = {};
+        for (const bet of room.bets) {
+          if (bet.status === "pending" && isBetKey(bet.option)) bets[bet.option] = cents((bets[bet.option] ?? 0) + bet.amount);
+        }
+        room.outcome = (await resolveBirdsBeastsRound(tx, bets)).outcome;
+        room.birdsOutcomeReady = true;
+      }
       if (room.ownerId && now >= d.bettingEndsAt && !room.cardOutcomeReady) {
         const pending = room.bets.filter(bet => bet.status === "pending");
         if (pending.length) {
-          if (room.game === "auto-roulette" || room.game === "lightning-roulette") {
+          if (isPrivateDiceTable(room.game)) {
+            room.outcome = privateDiceOutcome(room.game, pending, await nextPlayerWin(tx, room.game, room.ownerId));
+          } else if (room.game === "auto-roulette" || room.game === "lightning-roulette") {
             const win = await nextPlayerWin(tx, room.game, room.ownerId);
             room.outcome = privateRouletteOutcome(room.game, pending, win);
           } else {
@@ -208,10 +223,11 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
           const amount = cents(previous.amount + bet.amount);
           const gross = rouletteBets.length
             ? cents(previous.gross + rouletteReturns[rouletteBets.indexOf(bet)])
-            : room.ownerId ? privateCardGross(room.game, bet.option, amount, room.outcome) : grossPayout(room.game, bet.option, amount, room.outcome);
+            : room.ownerId && !isPrivateDiceTable(room.game) ? privateCardGross(room.game, bet.option, amount, room.outcome) : grossPayout(room.game, bet.option, amount, room.outcome);
           const push = room.game === "speed-baccarat" && gross === amount && (bet.option === "player" || bet.option === "banker");
-          const payout = push ? gross : Math.floor(gross * 0.98 * 100 + 1e-8) / 100;
-          const held = push ? 0 : cents(gross * 0.02);
+          const fullReturn = push || room.game === "birds-beasts";
+          const payout = fullReturn ? gross : Math.floor(gross * 0.98 * 100 + 1e-8) / 100;
+          const held = fullReturn ? 0 : cents(gross * 0.02);
           // Match the source's aggregated spot payout, even for many small chip requests.
           await credit(tx, room, bet, wallets, cents(gross - previous.gross), d.resultAt, { payout: cents(payout - previous.payout), held: cents(held - previous.held) });
           groups.set(key, { amount, gross, payout, held });
@@ -227,6 +243,7 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
       room.queuedBets = [];
       room.outcome = createOutcome(room.game);
       room.cardOutcomeReady = false;
+      room.birdsOutcomeReady = false;
       delete room.cardPrize;
       delete room.cardOption;
       if (room.ownerId) {
@@ -249,7 +266,7 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
   }
   function snapshot(room: Room, user: Wallet | null, now: number): MultiplayerState<MultiplayerOutcome> {
     const currentPhase = phase(room, now), d = deadlines(room);
-    const visible = currentPhase === "result" || currentPhase === "running" && ["auto-roulette", "lightning-roulette", "dream-catcher", "32-cards", "baccarat"].includes(room.game);
+    const visible = currentPhase === "result" || currentPhase === "running" && ["auto-roulette", "lightning-roulette", "dream-catcher", "32-cards", "baccarat", "birds-beasts"].includes(room.game);
     const publicBet = (bet: RoomBet): MultiplayerBet => ({
       id: bet.id, name: bet.name, option: bet.option, amount: bet.amount, roundNo: bet.roundNo,
       status: bet.status, payout: bet.payout, mine: bet.userId === user?._id,
@@ -286,17 +303,17 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
         const receipt = await tx.get<Receipt>("multiplayerrequests", requestKey);
         if (receipt) {
           if (receipt.fingerprint !== fingerprint) throw new MultiplayerError("Request id has already been used for a different action.", 409);
-          return receipt.reply;
+          return game === "birds-beasts" && "ok" in receipt.reply ? { ...receipt.reply, state: snapshot(room, user, now) } : receipt.reply;
         }
         const d = deadlines(room), open = now < d.bettingEndsAt;
         let queued = false;
         if (action.action === "bet") {
-          if ((isPrivateCardTable(game) || isLiveRouletteGame(game)) && !room.ownerId) throw new MultiplayerError("Finish the previously accepted shared round, then refresh to start your personal table.", 409);
+          if ((isPrivateCardTable(game) || isLiveRouletteGame(game) || isPrivateDiceTable(game)) && !room.ownerId) throw new MultiplayerError("Finish the previously accepted shared round, then refresh to start your personal table.", 409);
           // Keep the accepted contract on old poolVersion wagers, not the current global flag.
           const poolMode = dailyPoolEnabled() && !isCardGame(game) && !isRouletteGame(game) && !isWheelGame(game);
           if (poolMode && action.poolRulesVersion !== DAILY_POOL_VERSION) throw new MultiplayerError("Read and accept the daily-pool rules before placing a new bet.");
           if (!catalog.isActive) throw new MultiplayerError("Game is currently disabled.", 403);
-          if (!open && (isCardGame(game) || isRouletteGame(game))) throw new MultiplayerError("Betting is closed. Wait for the next round to begin.", 409);
+          if (!open && (isCardGame(game) || isRouletteGame(game) || game === "birds-beasts")) throw new MultiplayerError("Betting is closed. Wait for the next round to begin.", 409);
           const expectedRound = room.roundNo + (open ? 0 : 1);
           if (action.roundNo !== expectedRound) throw new MultiplayerError("Round changed. Refresh the live table before betting.", 409);
           if (typeof action.option !== "string" || !validateOption(game, action.option)) throw new MultiplayerError("Invalid bet option.");
@@ -305,7 +322,11 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
           if (action.autoCashout !== undefined && (game !== "blast-off" || !Number.isFinite(action.autoCashout) || action.autoCashout < 1.01 || action.autoCashout > 250 || Math.abs(cents(action.autoCashout) - action.autoCashout) > 1e-8)) throw new MultiplayerError("Auto cashout must be between 1.01 and 250.");
           queued = !open;
           const target = queued ? room.queuedBets : room.bets;
-          if (room.ownerId && (game === "auto-roulette" || game === "lightning-roulette")) {
+          if (room.ownerId && isPrivateDiceTable(game)) {
+            if (!validDiceAllocation(game, [...target.filter(bet => bet.status === "pending"), { option: action.option, amount }])) {
+              throw new MultiplayerError("These dice bets must leave both a profitable and a zero-return outcome available.", 409);
+            }
+          } else if (room.ownerId && (game === "auto-roulette" || game === "lightning-roulette")) {
             if (!validRouletteAllocation(game, [...target.filter(bet => bet.status === "pending"), { option: action.option, amount }])) {
               throw new MultiplayerError("These bets cover every result or cannot produce a profitable win. Leave both a winning and a zero-return outcome available.", 409);
             }
@@ -326,7 +347,7 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
           }
           if (target.length >= 1000 || target.filter(b => b.userId === userId && b.status === "pending").length >= 100) throw new MultiplayerError("Table bet limit reached.", 429);
           if (user.balance < amount) throw new MultiplayerError("Insufficient balance.", 409);
-          if ((isCardGame(game) || isRouletteGame(game)) && await tx.now() >= d.bettingEndsAt) throw new MultiplayerError("Betting closed while processing. Wait for the next round to begin.", 409);
+          if ((isCardGame(game) || isRouletteGame(game) || game === "birds-beasts") && await tx.now() >= d.bettingEndsAt) throw new MultiplayerError("Betting closed while processing. Wait for the next round to begin.", 409);
           user.balance = cents(user.balance - amount);
           user.updatedAt = new Date(now).toISOString();
           await tx.put("users", userId, user);
@@ -349,7 +370,12 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
           const list = current ? room.bets : room.queuedBets;
           const cancel = list.filter(b => b.userId === userId && b.status === "pending" && (!action.betId || b.id === action.betId));
           if (!cancel.length) throw new MultiplayerError("No cancellable wager found.", 409);
-          if (room.ownerId && (game === "auto-roulette" || game === "lightning-roulette")) {
+          if (room.ownerId && isPrivateDiceTable(game)) {
+            const remaining = list.filter(bet => bet.status === "pending" && !cancel.includes(bet));
+            if (remaining.length && !validDiceAllocation(game, remaining)) {
+              throw new MultiplayerError("That cancellation leaves incompatible dice bets. Clear the round's bets together instead.", 409);
+            }
+          } else if (room.ownerId && (game === "auto-roulette" || game === "lightning-roulette")) {
             const remaining = list.filter(bet => bet.status === "pending" && !cancel.includes(bet));
             if (remaining.length && !validRouletteAllocation(game, remaining)) {
               throw new MultiplayerError("That cancellation would leave incompatible covering bets. Clear the round's bets together instead.", 409);
@@ -380,7 +406,7 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
         }
         const reply: MultiplayerReply = { ok: true, roundNo: action.roundNo, ...(action.action === "bet" ? { queued } : {}) };
         await tx.insert("multiplayerrequests", requestKey, { _id: requestKey, userId, game, createdAt: now, fingerprint, reply });
-        return reply;
+        return game === "birds-beasts" ? { ...reply, state: snapshot(room, user, now) } : reply;
       });
     },
   };

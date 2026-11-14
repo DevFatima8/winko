@@ -935,7 +935,6 @@ export default function CrashGame() {
       </main>
 
       <footer className="pb-6 pt-2 text-center text-[11px] text-slate-600">
-        Demo game · virtual money only · 18+ play responsibly
       </footer>
     </div>
   );

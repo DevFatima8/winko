@@ -442,6 +442,7 @@ export default function GameScreen() {
       const mult = wasFree && f ? f.mult : 1;
       const effectiveWin = Math.round(result.totalWin * mult * 100) / 100;
 
+      if (verified) pool.revealReturn(effectiveWin);
       setGrid(result.grid);
       setLineWins(result.lineWins);
       setScatterCells(result.scatterCells);
@@ -1401,7 +1402,7 @@ export default function GameScreen() {
               <div className="rounded-xl bg-black/30 p-3">
                 <h4 className="font-display mb-1 text-[11px] font-black tracking-widest text-[#ffd76a]">HOW TO PLAY</h4>
                 <p>Wins form with 3+ matching symbols (2+ for Wild, Lu Bu, Dong Zhuo, Soldier) on adjacent reels from the leftmost reel across 30 fixed lines. Diao Chan Wild substitutes for every symbol except the Phoenix Scatter.</p>
-                <p>Server-prepared reels select 10 winning players per 100 distinct players. The combined return for a paid spin and all its bonus spins is at most 2× the paid stake. Only reel combinations within that limit are eligible.</p>
+                <p>The combined return for a paid spin and all its bonus spins is at most 2× the paid stake. Only reel combinations within that limit are eligible.</p>
               </div>
               <div className="rounded-xl bg-black/30 p-3">
                 <h4 className="font-display mb-1 text-[11px] font-black tracking-widest text-[#ffd76a]">FREE SPINS</h4>

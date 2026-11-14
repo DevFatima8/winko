@@ -214,13 +214,12 @@ export function MarketGrid({
               type="button"
               disabled={locked}
               onClick={() => onSelect(m.id)}
-              className={`group relative flex flex-col items-start gap-2 rounded-xl border p-3 text-left transition ${
-                placed
+              className={`group relative flex flex-col items-start gap-2 rounded-xl border p-3 text-left transition ${placed
                   ? "border-emerald-400 bg-emerald-500/10 shadow-[0_0_0_1px_rgba(52,211,153,0.5),0_0_24px_rgba(52,211,153,0.25)]"
                   : selected
                     ? "border-amber-400 bg-amber-400/10 shadow-[0_0_0_1px_rgba(251,191,36,0.5),0_0_24px_rgba(251,191,36,0.2)]"
                     : "border-white/10 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.06]"
-              } ${locked && !placed ? "cursor-not-allowed opacity-45" : "cursor-pointer active:scale-[0.98]"}`}
+                } ${locked && !placed ? "cursor-not-allowed opacity-45" : "cursor-pointer active:scale-[0.98]"}`}
             >
               <div className="flex w-full items-center justify-between">
                 <span
@@ -384,11 +383,10 @@ export function BetSlip({
                 type="button"
                 disabled={!canBet}
                 onClick={() => setStake(clamp(c))}
-                className={`rounded-lg border py-2 text-xs font-extrabold tabular-nums transition disabled:opacity-40 ${
-                  stake === c
+                className={`rounded-lg border py-2 text-xs font-extrabold tabular-nums transition disabled:opacity-40 ${stake === c
                     ? "border-amber-400 bg-amber-400/15 text-amber-300"
                     : "border-white/10 bg-white/[0.04] text-slate-200 hover:border-white/30"
-                }`}
+                  }`}
               >
                 {c}
               </button>
@@ -440,11 +438,10 @@ export function BetSlip({
               type="button"
               disabled={!canBet || invalid}
               onClick={onPlace}
-              className={`w-full rounded-xl py-3.5 text-base font-black tracking-wide transition active:scale-98 disabled:cursor-not-allowed disabled:bg-slate-700/50 disabled:text-slate-400 disabled:shadow-none ${
-                !invalid && canBet
+              className={`w-full rounded-xl py-3.5 text-base font-black tracking-wide transition active:scale-98 disabled:cursor-not-allowed disabled:bg-slate-700/50 disabled:text-slate-400 disabled:shadow-none ${!invalid && canBet
                   ? "bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-600 hover:from-emerald-400 hover:to-green-400 text-white shadow-[0_0_25px_rgba(16,185,129,0.5)]"
                   : "bg-gradient-to-r from-amber-400 to-yellow-500 text-black shadow-md"
-              }`}
+                }`}
             >
               {cta}
             </button>
@@ -564,9 +561,6 @@ export function RulesModal({ onClose }: { onClose: () => void }) {
             <b className="text-amber-300">3.</b> The bowler runs in and the ball is bowled. If your market comes true you
             win <b>stake × odds</b>, otherwise the stake is lost.
           </li>
-          <li>
-            <b className="text-amber-300">4.</b> The server credits settled payouts after the platform share. Bets after the window closes reserve stakes for the next shared ball.
-          </li>
         </ol>
 
         <div className="mt-4 overflow-hidden rounded-xl border border-white/10">
@@ -589,10 +583,6 @@ export function RulesModal({ onClose }: { onClose: () => void }) {
             </tbody>
           </table>
         </div>
-
-        <p className="mt-4 rounded-lg bg-amber-400/10 px-3 py-2.5 text-xs leading-relaxed text-amber-200">
-          All amounts are in <b>Rs.</b> Your balance and wagers are stored on the server and do not reset on refresh. Play responsibly.
-        </p>
       </div>
     </div>
   );

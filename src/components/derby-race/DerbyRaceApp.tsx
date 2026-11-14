@@ -89,7 +89,7 @@ export default function HomePage() {
     const selection = { horseId: wager.horseId, round: roundRef.current };
     const acceptedWager = { ...wager, round: selection.round };
     pool.checkpoint({ bet: acceptedWager });
-    if (!await pool.start(wager.amount, () => {}, selection)) return;
+    if (!await pool.start(wager.amount, () => { }, selection)) return;
     betRef.current = acceptedWager;
     setBet(acceptedWager);
     const outcome = await pool.resolveServer(selection, { holdBalance: true });
@@ -200,7 +200,7 @@ export default function HomePage() {
   }
 
   return (
-    <main className="app-shell h-full w-full flex flex-col justify-between overflow-hidden px-1.5 sm:px-3 py-1">
+    <main className="derby-race-game app-shell h-full w-full flex flex-col justify-between overflow-hidden px-1.5 sm:px-3 py-1">
       <header className="site-header shrink-0 py-1">
         <div className="header-inner w-full flex items-center justify-between">
           <a className="brand" href="#top" aria-label="Derby Race home">
@@ -209,7 +209,7 @@ export default function HomePage() {
           </a>
           <div className="header-actions">
             <button type="button" className="how-to-button" onClick={() => rulesRef.current?.showModal()}><span className="question-mark">?</span> How to play</button>
-            <span className="practice-pill hidden sm:inline-flex"><span />DEMO MODE</span>
+            <span className="practice-pill hidden sm:inline-flex"><span />MODE</span>
             <div className="wallet-pill">
               <Coin />
               <span className="wallet-copy"><small>BALANCE</small><strong>Rs. {formatCoins(balance)}</strong></span>
@@ -292,7 +292,7 @@ export default function HomePage() {
                     disabled={!canEdit}
                     aria-pressed={stake === amount}
                   >
-                    {amount}
+                    <span>{amount}</span>
                   </button>
                 ))}
               </div>

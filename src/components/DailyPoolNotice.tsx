@@ -4,11 +4,14 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { DailyPoolGame } from "@/lib/dailyPoolRules";
 import { broadcastBalanceUpdate } from "@/lib/walletSync";
 import { isUnsupportedBrowserPoolGame } from "@/lib/dailyPoolBrowserGames";
+import { isThirtyWinGame } from "@/lib/winOpportunityRules";
+import { WinOpportunityNotice } from "./WinOpportunityNotice";
 
 export function DailyPoolNotice({ game, children }: { game: DailyPoolGame; children: ReactNode }) {
   const [error, setError] = useState("");
   const [enabled, setEnabled] = useState(false);
-  const [loaded, setLoaded] = useState(false);
+  const [loadedGame, setLoadedGame] = useState<DailyPoolGame | null>(null);
+  const loaded = loadedGame === game;
   const [walletError, setWalletError] = useState("");
   useEffect(() => {
     let alive = true;
@@ -20,13 +23,13 @@ export function DailyPoolNotice({ game, children }: { game: DailyPoolGame; child
       try {
         const response = await fetch(`/api/player/daily-pool?game=${game}`, { cache: "no-store", signal: controller.signal });
         if (response.status === 401) {
-          if (alive) { setEnabled(false); setLoaded(true); setError(""); }
+          if (alive) { setEnabled(false); setLoadedGame(game); setError(""); }
           return;
         }
         const data = await response.json();
         if (!response.ok) throw new Error(data.error ?? "Game status unavailable.");
         if (alive) {
-          setEnabled(data.enabled); setLoaded(true); setError("");
+          setEnabled(data.enabled); setLoadedGame(game); setError("");
           if (typeof data.balance === "number") broadcastBalanceUpdate(data.balance);
         }
       } catch (reason) {
@@ -50,7 +53,7 @@ export function DailyPoolNotice({ game, children }: { game: DailyPoolGame; child
   return (
     <div className="relative flex h-full min-h-0 flex-1 flex-col">
       {walletError && <div role="alert" className="flex shrink-0 items-start justify-between gap-2 bg-red-950 p-2 text-xs text-red-200"><span>{walletError}</span><button type="button" onClick={() => setWalletError("")} className="shrink-0 underline">Dismiss</button></div>}
-      <div className="flex min-h-0 flex-1 flex-col">{loaded && enabled && isUnsupportedBrowserPoolGame(game) ? <p role="alert" className="p-4 text-sm text-amber-200">New betting is unavailable for this game while its wager integration is being completed. No stake has been accepted.</p> : children}</div>
+      <div className="flex min-h-0 flex-1 flex-col">{loaded && enabled && isUnsupportedBrowserPoolGame(game) ? <p role="alert" className="p-4 text-sm text-amber-200">New betting is unavailable for this game while its wager integration is being completed. No stake has been accepted.</p> : isThirtyWinGame(game) ? <WinOpportunityNotice key={game} game={game} loaded={loaded} enabled={enabled}>{children}</WinOpportunityNotice> : children}</div>
       {error && <p role="alert" className="shrink-0 bg-[#21152e] p-2 text-xs text-amber-200">{error}</p>}
     </div>
   );

@@ -173,6 +173,7 @@ export function ThreeCardPoker() {
         dealerHand: dHand,
       });
       // The server already settled this exact hand with the same rules and credited the return.
+      pool.announce();
       setPlayerHand(pHand);
       setDealerHand(dHand);
       setLines(settled.lines);

@@ -372,7 +372,7 @@ export default function TeenPattiAK47() {
         </div>
 
         {/* Controls */}
-        <div className="controls">
+        <div className="ak47-controls">
           <div className="seg" role="group" aria-label="Bet type">
             <button
               type="button"
@@ -400,7 +400,7 @@ export default function TeenPattiAK47() {
             </button>
           </div>
 
-          <div className="chips">
+          <div className="ak47-chips">
             {CHIP_VALUES.map((value) => (
               <Chip
                 key={value}
@@ -409,29 +409,29 @@ export default function TeenPattiAK47() {
                 disabled={!bettingOpen}
               />
             ))}
-            <div className="flex items-center gap-1" style={{ flexBasis: "100%", justifyContent: "center" }}>
-              <input
-                type="number"
-                min={10}
-                value={customAmt}
-                placeholder="Custom amount"
-                aria-label="Custom bet amount"
-                disabled={!bettingOpen}
-                onChange={(e) => setCustomAmt(e.target.value)}
-                style={{ width: 120, padding: "6px 8px", borderRadius: 8, textAlign: "center", background: "rgba(0,0,0,.5)", border: "1px solid rgba(250,204,21,.5)", color: "#fde68a", fontWeight: 700 }}
-              />
-              <button
-                type="button"
-                className="btn-ghost"
-                disabled={!bettingOpen || !(Math.floor(Number(customAmt)) > 0)}
-                onClick={() => addChip(Math.floor(Number(customAmt)))}
-              >
-                ADD
-              </button>
-            </div>
+          </div>
+          <div className="ak47-custom-bet">
+            <input
+              type="number"
+              min={10}
+              value={customAmt}
+              placeholder="Custom amount"
+              aria-label="Custom bet amount"
+              disabled={!bettingOpen}
+              onChange={(e) => setCustomAmt(e.target.value)}
+              className="ak47-custom-amount"
+            />
+            <button
+              type="button"
+              className="btn-ghost"
+              disabled={!bettingOpen || !(Math.floor(Number(customAmt)) > 0)}
+              onClick={() => addChip(Math.floor(Number(customAmt)))}
+            >
+              ADD
+            </button>
           </div>
 
-          <div className="bet-actions">
+          <div className="ak47-bet-actions">
             {bettingOpen && (ante > 0 || pairPlus > 0) && (
               <button type="button" className="btn-ghost" onClick={clearBets}>
                 CLEAR BETS

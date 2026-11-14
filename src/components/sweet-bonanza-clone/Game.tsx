@@ -191,6 +191,7 @@ export default function SweetBonanzaGamePage() {
         setBoard(finalBoard);
         setPhase("drop");
         const finish = () => {
+          pool.releaseBalance();
           notifyGameResult("sweet-bonanza", noticeId, payout, pool.enabled);
           setLastWin(payout);
           if (won) gameSfx.win(); else gameSfx.lose();
@@ -319,7 +320,6 @@ export default function SweetBonanzaGamePage() {
         </nav>
 
         <div className="topbar-right">
-          <span className="play-mode"><span className="online-dot" /> FREE PLAY</span>
           <div className="wallet" aria-label={`Rs. ${formattedCredits}`}>
             <span className="wallet-icon" aria-hidden="true">✧</span>
             <span className="wallet-copy">
@@ -401,7 +401,6 @@ export default function SweetBonanzaGamePage() {
           <section className="control-card">
             <div className="card-heading">
               <div><span className="section-overline">SET YOUR PACE</span><h2>Wager controls</h2></div>
-              <span className="demo-tag">DEMO</span>
             </div>
 
             <div className="bet-label-row">
@@ -453,7 +452,7 @@ export default function SweetBonanzaGamePage() {
             {!isAffordable && <p className="insufficient-note">Your Rs. balance is below this wager.</p>}
 
             <div className="balance-row">
-              <span><span className="balance-dot" /> DEMO BALANCE</span>
+              <span><span className="balance-dot" />BALANCE</span>
             </div>
           </section>
 
@@ -479,12 +478,6 @@ export default function SweetBonanzaGamePage() {
         </aside>
       </section>
 
-      <footer className="page-footer">
-        <span>✦&nbsp; CANDY COMET ARCADE</span>
-        <p>Play for fun only · All amounts in Rs.</p>
-        <button type="button" onClick={() => setShowRules(true)}>PLAY RESPONSIBLY</button>
-      </footer>
-
       {showRules && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowRules(false); }}>
           <section className="rules-modal" role="dialog" aria-modal="true" aria-labelledby="rules-title">
@@ -498,7 +491,7 @@ export default function SweetBonanzaGamePage() {
               <li><span>02</span><p>A winning round shows a candy cluster and adds a random Rs. payout.</p></li>
               <li><span>03</span><p>Auto play runs up to five rounds and can be stopped at any time.</p></li>
             </ul>
-            <div className="modal-disclaimer"><span aria-hidden="true">ⓘ</span><p>This is a free-to-play entertainment demo. Amounts are shown in Rs.</p></div>
+            <div className="modal-disclaimer"><span aria-hidden="true">ⓘ</span><p>Amounts are shown in Rs.</p></div>
             <button className="modal-done" type="button" onClick={() => setShowRules(false)}>GOT IT, LET&apos;S PLAY</button>
           </section>
         </div>

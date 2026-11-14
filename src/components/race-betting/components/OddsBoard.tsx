@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Bet, BetType, GamePhase, Suit } from '../types';
 import { getSuitSymbol } from './PlayingCard';
 import { CheckCircle2, TrendingUp } from 'lucide-react';
@@ -18,6 +18,7 @@ export const OddsBoard: React.FC<OddsBoardProps> = ({
   onPlaceBet,
 }) => {
   const isBettingDisabled = false;
+  const [market, setMarket] = useState<'winner' | 'color' | 'cards' | 'points'>('winner');
 
   // Helper to find total staked on a specific bet
   const getBetStake = (type: BetType, target?: Suit, isLay?: boolean): number => {
@@ -27,16 +28,24 @@ export const OddsBoard: React.FC<OddsBoardProps> = ({
   };
 
   const SUIT_ROWS: { suit: Suit; label: string; symbol: string; color: string }[] = [
-    { suit: 'SPADE', label: 'Spade (Kâ™ )', symbol: 'â™ ', color: 'text-slate-900' },
-    { suit: 'HEART', label: 'Heart (Kâ™¥)', symbol: 'â™¥', color: 'text-rose-600' },
-    { suit: 'CLUB', label: 'Club (Kâ™£)', symbol: 'â™£', color: 'text-emerald-700' },
-    { suit: 'DIAMOND', label: 'Diamond (Kâ™¦)', symbol: 'â™¦', color: 'text-amber-700' },
+    { suit: 'SPADE', label: 'Spades', symbol: getSuitSymbol('SPADE'), color: 'text-slate-900' },
+    { suit: 'HEART', label: 'Hearts', symbol: getSuitSymbol('HEART'), color: 'text-rose-600' },
+    { suit: 'CLUB', label: 'Clubs', symbol: getSuitSymbol('CLUB'), color: 'text-emerald-700' },
+    { suit: 'DIAMOND', label: 'Diamonds', symbol: getSuitSymbol('DIAMOND'), color: 'text-amber-700' },
   ];
 
   return (
-    <div className="w-full space-y-4">
+    <div className="race20-board w-full min-h-0">
+      <div className="mb-1 grid grid-cols-4 gap-1" role="group" aria-label="Betting markets">
+        {(['winner', 'color', 'cards', 'points'] as const).map(value => (
+          <button type="button" key={value} aria-pressed={market === value} onClick={() => setMarket(value)}
+            className={`rounded-lg px-1 py-2 text-xs font-bold capitalize ${market === value ? 'bg-sky-700 text-white' : 'bg-slate-800 text-slate-300'}`}>
+            {value}
+          </button>
+        ))}
+      </div>
       {/* Main King Winner Market (Exchange Style: Back Blue / Lay Pink) */}
-      <div className="bg-slate-900/90 border border-slate-700/80 rounded-xl overflow-hidden shadow-xl">
+      <div hidden={market !== 'winner'} className="race20-winner bg-slate-900/90 border border-slate-700/80 rounded-xl overflow-hidden shadow-xl">
         <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-4 py-2.5 flex items-center justify-between border-b border-slate-700">
           <div className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full bg-emerald-400"></span>
@@ -137,7 +146,7 @@ export const OddsBoard: React.FC<OddsBoardProps> = ({
       </div>
 
       {/* Color Market: RED vs BLACK */}
-      <div className="bg-slate-900/90 border border-slate-700/80 rounded-xl overflow-hidden shadow-xl">
+      <div hidden={market !== 'color'} className="race20-color bg-slate-900/90 border border-slate-700/80 rounded-xl overflow-hidden shadow-xl">
         <div className="bg-gradient-to-r from-slate-800 to-slate-900 px-4 py-2 border-b border-slate-700 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-amber-400" />
@@ -155,7 +164,7 @@ export const OddsBoard: React.FC<OddsBoardProps> = ({
             return (
               <button
                 disabled={isBettingDisabled}
-                onClick={() => onPlaceBet('COLOR_RED', 'RED (â™¥ Hearts / â™¦ Diamonds)', 1.95)}
+                onClick={() => onPlaceBet('COLOR_RED', 'RED (Hearts / Diamonds)', 1.95)}
                 className={`relative p-3 rounded-xl border flex flex-col items-center justify-center transition-all ${
                   isBettingDisabled
                     ? 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed'
@@ -168,8 +177,8 @@ export const OddsBoard: React.FC<OddsBoardProps> = ({
                   </span>
                 )}
                 <div className="flex items-center gap-1.5 text-rose-400 text-2xl font-black">
-                  <span>â™¥</span>
-                  <span>â™¦</span>
+                  <span>{getSuitSymbol('HEART')}</span>
+                  <span>{getSuitSymbol('DIAMOND')}</span>
                 </div>
                 <div className="text-base font-black text-white mt-1">RED SUITS</div>
                 <div className="text-xs text-rose-300 font-mono mt-0.5">Odds: 1.95</div>
@@ -183,7 +192,7 @@ export const OddsBoard: React.FC<OddsBoardProps> = ({
             return (
               <button
                 disabled={isBettingDisabled}
-                onClick={() => onPlaceBet('COLOR_BLACK', 'BLACK (â™  Spades / â™£ Clubs)', 1.95)}
+                onClick={() => onPlaceBet('COLOR_BLACK', 'BLACK (Spades / Clubs)', 1.95)}
                 className={`relative p-3 rounded-xl border flex flex-col items-center justify-center transition-all ${
                   isBettingDisabled
                     ? 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed'
@@ -196,8 +205,8 @@ export const OddsBoard: React.FC<OddsBoardProps> = ({
                   </span>
                 )}
                 <div className="flex items-center gap-1.5 text-slate-300 text-2xl font-black">
-                  <span>â™ </span>
-                  <span>â™£</span>
+                  <span>{getSuitSymbol('SPADE')}</span>
+                  <span>{getSuitSymbol('CLUB')}</span>
                 </div>
                 <div className="text-base font-black text-white mt-1">BLACK SUITS</div>
                 <div className="text-xs text-slate-300 font-mono mt-0.5">Odds: 1.95</div>
@@ -208,12 +217,12 @@ export const OddsBoard: React.FC<OddsBoardProps> = ({
       </div>
 
       {/* Fancy Bets Grid: Total Cards & Total Points */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div hidden={market !== 'cards' && market !== 'points'} className="race20-fancy">
         {/* Total Cards Market */}
-        <div className="bg-slate-900/90 border border-slate-700/80 rounded-xl overflow-hidden shadow-xl p-3">
+        <div hidden={market !== 'cards'} className="bg-slate-900/90 border border-slate-700/80 rounded-xl overflow-hidden shadow-xl p-3">
           <div className="flex items-center justify-between pb-2 border-b border-slate-700 mb-3">
             <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
-              <span>ðŸƒ TOTAL CARDS TO FINISH</span>
+              <span>TOTAL CARDS TO FINISH</span>
             </h4>
             <span className="text-[11px] text-amber-400 font-bold">Fancy Market</span>
           </div>
@@ -339,10 +348,10 @@ export const OddsBoard: React.FC<OddsBoardProps> = ({
         </div>
 
         {/* Total Points Market */}
-        <div className="bg-slate-900/90 border border-slate-700/80 rounded-xl overflow-hidden shadow-xl p-3">
+        <div hidden={market !== 'points'} className="bg-slate-900/90 border border-slate-700/80 rounded-xl overflow-hidden shadow-xl p-3">
           <div className="flex items-center justify-between pb-2 border-b border-slate-700 mb-3">
             <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
-              <span>ðŸŽ¯ TOTAL CARD POINTS</span>
+              <span>TOTAL CARD POINTS</span>
             </h4>
             <span className="text-[11px] text-amber-400 font-bold">A=1, J=11, Q=12</span>
           </div>
@@ -432,9 +441,10 @@ export const OddsBoard: React.FC<OddsBoardProps> = ({
               })}
             </div>
 
-            <div className="p-2.5 bg-black/40 rounded-lg border border-slate-800 text-[11px] text-slate-400 leading-relaxed">
-              ðŸ’¡ <span className="text-slate-300 font-medium">Points calculation:</span> Each card dealt contributes its numerical value (Ace=1, 2-10=face value, Jack=11, Queen=12). The total sum when the 5th card of any suit drops decides the points!
-            </div>
+            <details className="p-1 bg-black/40 rounded-lg border border-slate-800 text-[11px] text-slate-400">
+              <summary className="cursor-pointer">How points work</summary>
+              Ace=1, 2-10=face value, Jack=11, Queen=12. The sum when any suit reaches five cards decides the result.
+            </details>
           </div>
         </div>
       </div>

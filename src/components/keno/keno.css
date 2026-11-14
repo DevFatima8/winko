@@ -140,3 +140,36 @@
     transform 130ms ease,
     box-shadow 130ms ease;
 }
+
+.keno-root .keno-board-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.keno-root .keno-board-viewport {
+  flex: none;
+  padding-block: 8px;
+}
+
+@media (min-width: 1024px) {
+  .keno-root .keno-board-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(180px, 1fr) auto;
+    align-items: stretch;
+    justify-items: center;
+  }
+
+  .keno-root .keno-board-viewport {
+    container-type: size;
+    min-height: 180px;
+    overflow: auto;
+  }
+
+  .keno-root .keno-board-grid {
+    /* Eight columns and five rows, with 8px gaps, must fit in both directions. */
+    width: min(100%, 560px, calc(160cqh + 4.8px));
+  }
+}

@@ -2,7 +2,8 @@
 
 import { localApi } from "@/lib/client";
 import { playGameSound, speakGameVoice } from "@/lib/gameAudio";
-import { broadcastBalanceUpdate } from "@/lib/walletSync";
+import { broadcastBalanceUpdate, confirmWalletReturn, getStoredWalletBalance, holdWalletReveal, revealWalletReturn } from "@/lib/walletSync";
+import { presentedWalletBalance } from "@/lib/walletReveal";
 import { BET_PRESETS } from "@/lib/betPresets";
 
 import Link from "next/link";
@@ -28,13 +29,25 @@ export function LimboGame({ backHref = "/player" }: { backHref?: string }) {
   const autoRef = useRef({ on: false, left: 0 });
   const rafRef = useRef(0);
   const requestRef = useRef<{ requestId: string; amount: number; target: number } | null>(null);
+  const revealKey = useRef<string | null>(null);
 
-  const load = useCallback(async () => { const r = await localApi("/api/limbo", { cache: "no-store" }); if (r.ok) setSt(await r.json()); }, []);
+  const load = useCallback(async () => {
+    const r = await localApi("/api/limbo", { cache: "no-store" });
+    if (r.ok) {
+      const state: State = await r.json();
+      broadcastBalanceUpdate(state.balance, "Limbo");
+      setSt({ ...state, balance: presentedWalletBalance(state.balance) });
+    }
+  }, []);
+  useEffect(() => () => {
+    cancelAnimationFrame(rafRef.current);
+    if (revealKey.current) revealWalletReturn(revealKey.current);
+  }, []);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (st && hist.length === 0 && st.recent.length) setHist(st.recent.slice(0, 12).reverse().map((r) => ({ result: r.result, won: r.outcome === "win", poolPending: r.poolPending, poolClaim: r.poolClaim }))); }, [st, hist.length]);
 
   const tgt = Math.max(1.01, Number(target) || 1.01);
-  const chance = 20;
+  const chance = 30;
   const amt = Number(amount) || 0;
   const profit = Math.floor(amt * tgt * 100) / 100 - amt;
 
@@ -61,16 +74,25 @@ export function LimboGame({ backHref = "/player" }: { backHref?: string }) {
     setBusy(true); setErr(null); setLast(null);
     const request = requestRef.current ?? { requestId: crypto.randomUUID(), amount: betVal, target: tgt };
     requestRef.current = request;
+    const key = `limbo:${request.requestId}`;
+    revealKey.current = key;
+    holdWalletReveal(key);
     let r: Response;
     try { r = await localApi("/api/limbo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) }); }
     catch { setErr("Connection interrupted. Bet again to safely retry the same wager."); setBusy(false); autoRef.current.on = false; setAutoLeft(0); return; }
     if (r.status === 401) { window.location.href = "/login"; return; }
     const j = await r.json();
     if (r.status < 500) requestRef.current = null;
-    if (j.error) { setErr(j.error); setBusy(false); autoRef.current.on = false; setAutoLeft(0); return; }
-    setSt((s) => (s ? { ...s, balance: j.balance } : s));
-    broadcastBalanceUpdate(j.balance, "Limbo");
+    if (j.error) {
+      if (r.status < 500) revealWalletReturn(key);
+      setErr(j.error); setBusy(false); autoRef.current.on = false; setAutoLeft(0); return;
+    }
+    confirmWalletReturn(key, j.balance, j.poolPending ? 0 : j.payout);
+    setSt((s) => (s ? { ...s, balance: presentedWalletBalance(j.balance) } : s));
     await animateTo(j.result);
+    revealWalletReturn(key);
+    revealKey.current = null;
+    setSt((s) => (s ? { ...s, balance: getStoredWalletBalance() ?? presentedWalletBalance(j.balance) } : s));
     if (!j.poolPending) { if (j.won) { playGameSound("coin"); speakGameVoice("limboWin"); } else { playGameSound("crash"); } }
     setLast({ result: j.result, won: j.won, payout: j.payout, poolPending: j.poolPending, poolClaim: j.poolClaim });
     window.dispatchEvent(new CustomEvent("wx:game-result", { detail: { game: "Limbo", bet: request.amount, win: j.payout, won: !j.poolPending && j.won, poolPending: j.poolPending, poolClaim: j.poolClaim } }));

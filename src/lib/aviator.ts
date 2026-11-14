@@ -12,7 +12,7 @@ export const flightSeedHash = (seed: string) => createHash("sha256").update(seed
 
 export const TABLES = {
   aviator: { name: "Aviator", waitMs: 10000, pauseMs: 3500, growth: 0.06, houseEdge: 1 - AVIATOR_RTP, maxMult: AVIATOR_MAX_CRASH, maxCashout: AVIATOR_MAX_CASHOUT, slots: 2, minBet: 10, maxBet: Number.MAX_SAFE_INTEGER },
-  "aviator-x": { name: "Aviator X", waitMs: 10000, pauseMs: 3500, growth: 0.075, houseEdge: 1 - AVIATOR_RTP, maxMult: AVIATOR_MAX_CRASH, maxCashout: AVIATOR_MAX_CASHOUT, slots: 3, minBet: 10, maxBet: Number.MAX_SAFE_INTEGER },
+  "aviator-x": { name: "Aviator X", waitMs: 10000, pauseMs: 3500, growth: 0.075, houseEdge: 1 - AVIATOR_RTP, maxMult: AVIATOR_MAX_CRASH, maxCashout: AVIATOR_MAX_CASHOUT, slots: 2, minBet: 10, maxBet: Number.MAX_SAFE_INTEGER },
 } as const;
 export type Table = keyof typeof TABLES;
 export const isTable = (t: string): t is Table => Object.prototype.hasOwnProperty.call(TABLES, t);
@@ -53,7 +53,7 @@ export async function getGameId(table: Table) {
   await dbConnect();
   const gme = await Game.findOneAndUpdate(
     { slug: table },
-    { $setOnInsert: { name: TABLES[table].name, slug: table, icon: table === "aviator" ? "✈️" : "🚀", category: "original", description: table === "aviator" ? "Plane udne se pehle cash out karein aur multiplier jeetein!" : "Aviator ka X edition — 3 bets, neon sky, crash below 100x.", isActive: true } },
+    { $setOnInsert: { name: TABLES[table].name, slug: table, icon: table === "aviator" ? "✈️" : "🚀", category: "original", description: table === "aviator" ? "Plane udne se pehle cash out karein aur multiplier jeetein!" : "Aviator ka X edition — 2 bets, neon sky, crash below 100x.", isActive: true } },
     { upsert: true, returnDocument: "after" },
   ).lean();
   gameIds[table] = gme!._id;
@@ -83,7 +83,9 @@ export async function cancelBet(userId: string, table: Table, slot = 0, expected
 }
 
 export async function cashOut(userId: string, table: Table, slot = 0, expectedRound?: number) {
-  if (!Number.isInteger(slot) || slot < 0 || slot >= TABLES[table].slots ||
+  // Previously accepted third-panel wagers must remain recoverable, but cannot be placed again.
+  const retiredSlot = table === "aviator-x" && slot === 2;
+  if (!Number.isInteger(slot) || slot < 0 || slot >= TABLES[table].slots && !retiredSlot ||
       expectedRound !== undefined && (!Number.isSafeInteger(expectedRound) || expectedRound < 1)) return { error: "Invalid cashout request." };
   return (await import("./sharedLegacyTables")).sharedFlightCashout(userId, slot, expectedRound, table);
 }

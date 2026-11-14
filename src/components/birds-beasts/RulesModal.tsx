@@ -43,12 +43,10 @@ export default function RulesModal({ open, onClose }: RulesModalProps) {
             When the timer hits zero, <b className="text-red-400">TIME&apos;S UP</b> flashes and the light starts running
             around the {WHEEL.length} lights.
           </li>
-          <li>You win when the light stops on an animal you bet on. Winning stakes are returned together with the profit.</li>
+          <li>Everyone plays the same server-timed round and sees the same animal. Animal multipliers include your stake; it is not added again.</li>
           <li>Chicken, Ostrich, Owl and Eagle are Birds. Rabbit, Monkey, Panda and Lion are Beasts.</li>
           <li>Sharks belong to neither side: when a Shark is drawn, BIRDS and BEASTS bets lose.</li>
-          <li>Each player-round counts once, regardless of how many options are staked. Idle rounds also advance the game-wide server cycle.</li>
-          <li>Every 100 server rounds contains two x8 landings combined (Owl/Panda), two x12 landings combined (Eagle/Lion), and one of each Shark in the final ten rounds.</li>
-          <li>The net-winning round target is 20%, not a guarantee. Your selections and the fixed appearance counts can change actual results.</li>
+          <li>Each table round counts once, regardless of the number of players or bets. Bets close for everyone together; wait for the next round after betting closes.</li>
         </ol>
 
         <h3 className="font-display mt-5 text-lg font-bold text-white">Paytable</h3>
@@ -76,7 +74,7 @@ export default function RulesModal({ open, onClose }: RulesModalProps) {
         </div>
 
         <p className="mt-4 text-xs text-white/50">
-          Example: 1,000 on Lion → Lion drawn → 12,000 profit, 13,000 returned (1:12). 1,000 on BIRDS → any bird drawn →
+          Example: 100 on Owl at x8 returns 800 total, not 900. 1,000 on Lion returns 12,000 total. 1,000 on BIRDS → any bird drawn →
           950 profit, 1,950 returned (1:{GROUP_MULTIPLIER}).
         </p>
 

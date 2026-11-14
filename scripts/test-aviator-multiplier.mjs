@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
+import { createElement } from "react";
+import * as jsxRuntime from "react/jsx-runtime";
+import { renderToStaticMarkup } from "react-dom/server";
 import { createLegacyScene } from "./multiplayer-legacy-harness.mjs";
 
 const source = readFileSync("src\\components\\AviatorGame.tsx", "utf8");
@@ -171,6 +174,93 @@ test("the shared animation uses the capped value for the screen and plane, not p
 const CFG = createLegacyScene().flight.TABLES;
 const crashTime = (startsAt, crash, growth) => startsAt + Math.log(crash) / growth * 1000 + 1;
 
+function aviatorXView({ width, phase = "waiting", myBets = [], queued = [] }) {
+  const state = {
+    serverNow: 1000, table: "aviator-x", config: { ...CFG["aviator-x"], slots: 3 },
+    round: { id: 42, status: phase, startsAt: 10000, endedAt: null, crashPoint: null, multiplier: 1.01 },
+    history: [], bets: [], totals: { count: 0, amount: 0, cashed: 0 },
+    myBets, queued, myHistory: [], top: [], balance: 1000,
+  };
+  const requests = [], events = [], nodes = [];
+  let hook = 0, captured;
+  const bindings = {
+    react: {
+      useState: initial => {
+        const index = hook++;
+        return [index === 0 ? state : index === 2 ? phase : typeof initial === "function" ? initial() : initial, () => {}];
+      },
+      useRef: initial => ({ current: initial }),
+      useEffect() {},
+      useCallback: fn => fn,
+    },
+    "react/jsx-runtime": jsxRuntime,
+    "next/link": { default: props => createElement("a", props) },
+    "@/lib/betPresets": { BET_PRESETS: [10, 20, 50, 100, 200] },
+    "@/lib/gameAudio": { playGameSound() {}, speakGameVoice() {} },
+    "@/lib/client": {
+      localApi: async (url, init) => {
+        if (url.startsWith("/api/aviator/state?")) return { ok: true, json: async () => state };
+        requests.push({ url, init });
+        return { ok: true, json: async () => ({ ok: true, win: 70.7 }) };
+      },
+    },
+  };
+  const viewModule = { exports: {} };
+  new Function("require", "module", "exports", "window", "CustomEvent", "capture",
+    code.replace("if (!state) {", "capture({ stRef });\nif (!state) {"),
+  )(
+    name => {
+      assert.ok(imports.has(name), name);
+      return bindings[name] ?? {};
+    }, viewModule, viewModule.exports,
+    { innerWidth: width, dispatchEvent: event => events.push(event) },
+    class { constructor(type, options) { this.type = type; this.detail = options.detail; } },
+    value => { captured = value; },
+  );
+  const tree = viewModule.exports.AviatorGame({ table: "aviator-x" });
+  captured.stRef.current = state;
+  function visit(node) {
+    if (Array.isArray(node)) node.forEach(visit);
+    else if (node?.props) {
+      nodes.push(node);
+      visit(node.props.children);
+    }
+  }
+  visit(tree);
+  return { html: renderToStaticMarkup(tree), nodes, requests, events };
+}
+
+test("Aviator X renders only two betting panels at mobile and desktop widths even with a stale three-slot response", () => {
+  for (const width of [360, 768, 1440]) {
+    const { html } = aviatorXView({ width });
+    assert.equal([...html.matchAll(/aria-label="Bet panel \d+"/g)].length, 2, `width ${width}`);
+    assert.ok(html.includes('aria-label="Bet panel 1"'));
+    assert.ok(html.includes('aria-label="Bet panel 2"'));
+    assert.ok(!html.includes("Previously accepted bet"));
+  }
+});
+
+test("Aviator X exposes only recovery actions for accepted third-slot bets, with exact current/queued cancellation and cashout", async () => {
+  const bet = { id: "old", slot: 2, bet: 70, outcome: "pending" };
+  const waiting = aviatorXView({ width: 360, myBets: [bet], queued: [{ slot: 2, bet: 30 }] });
+  assert.equal([...waiting.html.matchAll(/aria-label="Bet panel \d+"/g)].length, 2);
+  const cancel = waiting.nodes.filter(node => node.props.children === "Cancel previous bet");
+  assert.equal(cancel.length, 2);
+  await cancel[0].props.onClick();
+  await cancel[1].props.onClick();
+  assert.deepEqual(waiting.requests.map(request => request.url), [
+    "/api/aviator/bet?table=aviator-x&slot=2&roundNo=42",
+    "/api/aviator/bet?table=aviator-x&slot=2&roundNo=43",
+  ]);
+  const running = aviatorXView({ width: 1440, phase: "running", myBets: [bet] });
+  const cashout = running.nodes.find(node => node.props.children === "Cash out previous bet");
+  assert.ok(cashout);
+  await Promise.all([cashout.props.onClick(), cashout.props.onClick()]);
+  assert.equal(running.requests.length, 1);
+  assert.deepEqual(JSON.parse(running.requests[0].init.body), { table: "aviator-x", slot: 2, roundNo: 42 });
+  assert.equal(running.events[0].detail.bet, 70);
+});
+
 test("both capped tables retain their growth rates, slots and strict sub-100 limits", () => {
   for (const table of ["aviator", "aviator-x"]) {
     assert.equal(CFG[table].maxMult, 99.99);
@@ -180,7 +270,7 @@ test("both capped tables retain their growth rates, slots and strict sub-100 lim
   assert.equal(CFG.aviator.growth, 0.06);
   assert.equal(CFG["aviator-x"].growth, 0.075);
   assert.equal(CFG.aviator.slots, 2);
-  assert.equal(CFG["aviator-x"].slots, 3);
+  assert.equal(CFG["aviator-x"].slots, 2);
 });
 
 /** Simulates the browser: frames every 1000/fps ms, server samples arriving after a poll gap + latency. */

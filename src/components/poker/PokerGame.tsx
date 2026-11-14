@@ -48,7 +48,7 @@ function PlayingCard({ card, hidden, delay = 0 }: { card?: Card; hidden?: boolea
   const red = card && (card.suit === "♥" || card.suit === "♦");
   return (
     <div
-      className="card-enter relative h-[clamp(56px,9.5vh,88px)] w-[clamp(38px,6.8vw,60px)] sm:h-28 sm:w-20 md:h-34 md:w-24"
+      className="poker-card card-enter relative shrink-0 h-[clamp(56px,9.5vh,88px)] w-[clamp(38px,6.8vw,60px)] sm:h-28 sm:w-20 md:h-34 md:w-24"
       style={{ animationDelay: `${delay}ms`, perspective: "800px" }}
     >
       <div
@@ -57,17 +57,17 @@ function PlayingCard({ card, hidden, delay = 0 }: { card?: Card; hidden?: boolea
       >
         {/* front */}
         <div
-          className={`absolute inset-0 flex flex-col justify-between rounded-lg bg-white p-1 sm:p-2 shadow-[0_4px_14px_rgba(0,0,0,0.45)] ${red ? "text-red-600" : "text-slate-900"}`}
+          className={`poker-card-front absolute inset-0 flex flex-col justify-between rounded-lg bg-white p-1 sm:p-2 shadow-[0_4px_14px_rgba(0,0,0,0.45)] ${red ? "text-red-600" : "text-slate-900"}`}
           style={{ backfaceVisibility: "hidden" }}
         >
-          <div className="text-left text-[11px] font-bold leading-none sm:text-base">
+          <div className="poker-card-rank text-left text-[11px] font-bold leading-none sm:text-base">
             {card ? RANK_LABEL[card.rank] : ""}
-            <div className="text-[9px] sm:text-sm">{card?.suit}</div>
+            <div className="poker-card-suit text-[9px] sm:text-sm">{card?.suit}</div>
           </div>
-          <div className="text-center text-xl sm:text-3xl md:text-5xl">{card?.suit}</div>
-          <div className="rotate-180 text-left text-[11px] font-bold leading-none sm:text-base">
+          <div className="poker-card-symbol text-center text-xl sm:text-3xl md:text-5xl">{card?.suit}</div>
+          <div className="poker-card-rank rotate-180 text-left text-[11px] font-bold leading-none sm:text-base">
             {card ? RANK_LABEL[card.rank] : ""}
-            <div className="text-[9px] sm:text-sm">{card?.suit}</div>
+            <div className="poker-card-suit text-[9px] sm:text-sm">{card?.suit}</div>
           </div>
         </div>
         {/* back */}
@@ -170,6 +170,7 @@ export default function PokerGame({ backHref }: { backHref?: string }) {
           return;
         }
         const mult = round.playerWins ? PAYOUTS[round.playerScore.category] : 0;
+        pool.announce();
         const won = round.playerWins ? bet + bet * mult : 0;
         setPayout(won);
         if (round.playerWins) {
@@ -243,9 +244,9 @@ export default function PokerGame({ backHref }: { backHref?: string }) {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 min-h-0 w-full max-w-7xl mx-auto p-2 sm:p-4 overflow-y-auto lg:overflow-hidden grid lg:grid-cols-[1fr_310px] gap-3">
+      <main className="poker-layout flex-1 min-h-0 w-full max-w-7xl mx-auto p-2 sm:p-4 overflow-y-auto grid lg:grid-cols-[minmax(0,1fr)_310px] gap-3">
         {/* Table Felt */}
-        <section className="relative overflow-hidden rounded-2xl sm:rounded-[2rem] border-[6px] sm:border-[8px] border-[#3b2412] shadow-[0_15px_50px_rgba(0,0,0,0.8),inset_0_0_60px_rgba(0,0,0,0.7)] flex flex-col justify-between p-3 sm:p-6 min-h-[380px] lg:min-h-0">
+        <section className="poker-table relative rounded-2xl sm:rounded-[2rem] border-[6px] sm:border-[8px] border-[#3b2412] shadow-[0_15px_50px_rgba(0,0,0,0.8),inset_0_0_60px_rgba(0,0,0,0.7)] p-3 sm:p-6 lg:p-3">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,#0f7a4a_0%,#0a5c37_50%,#053d24_100%)] pointer-events-none" />
           <div className="absolute inset-2 sm:inset-3 rounded-xl sm:rounded-[1.6rem] border border-amber-300/25 pointer-events-none" />
           <div className="pointer-events-none absolute inset-0 select-none grid place-items-center text-7xl sm:text-9xl font-black text-white/[0.03]">
@@ -253,7 +254,7 @@ export default function PokerGame({ backHref }: { backHref?: string }) {
           </div>
 
           {/* Dealer Area */}
-          <div className="relative z-10 flex flex-col items-center gap-1.5 sm:gap-2">
+          <div className="relative z-10 flex shrink-0 flex-col items-center gap-1.5 sm:gap-2 lg:gap-1">
             <div className="flex items-center gap-2 text-[10px] sm:text-xs uppercase tracking-[0.25em] text-white/70 font-semibold">
               <span className="h-px w-6 sm:w-10 bg-white/30" /> Dealer <span className="h-px w-6 sm:w-10 bg-white/30" />
             </div>
@@ -273,7 +274,7 @@ export default function PokerGame({ backHref }: { backHref?: string }) {
           </div>
 
           {/* Center message / pot */}
-          <div className="relative z-10 my-1 flex flex-col items-center gap-2">
+          <div className="relative z-10 my-1 flex shrink-0 flex-col items-center gap-2 lg:gap-1">
             <div
               className={`rounded-full px-4 py-1.5 text-center text-xs sm:text-base font-bold shadow-lg backdrop-blur transition-all duration-300 ${
                 phase === "result"
@@ -300,7 +301,7 @@ export default function PokerGame({ backHref }: { backHref?: string }) {
           </div>
 
           {/* Player Area */}
-          <div className="relative z-10 flex flex-col items-center gap-1.5 sm:gap-2">
+          <div className="relative z-10 flex shrink-0 flex-col items-center gap-1.5 sm:gap-2 lg:gap-1">
             <div className={`h-5 text-xs sm:text-sm font-semibold transition-opacity duration-300 ${round && revealed.player === 5 ? "text-amber-200" : "text-transparent"}`}>
               {round ? `${HAND_NAMES[round.playerScore.category]} · pays ${PAYOUTS[round.playerScore.category]}:1` : "-"}
             </div>
@@ -321,7 +322,7 @@ export default function PokerGame({ backHref }: { backHref?: string }) {
         </section>
 
         {/* Controls and Side panel */}
-        <aside className="flex flex-col gap-2.5 sm:gap-3 overflow-y-auto pr-1">
+        <aside className="poker-controls flex flex-col gap-2.5 sm:gap-3 overflow-y-auto pr-1">
           {/* Chips & Quick Actions */}
           <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3 shadow-md">
             <div className="mb-2 flex items-center justify-between">
@@ -336,7 +337,7 @@ export default function PokerGame({ backHref }: { backHref?: string }) {
                   onClick={() => addChip(c)}
                   className={`chip grid h-11 w-11 sm:h-12 sm:w-12 place-items-center rounded-full border-2 border-dashed bg-gradient-to-br text-xs font-black text-white shadow-lg transition duration-150 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30 ${chipColor(c)}`}
                 >
-                  <span className="grid h-8 w-8 place-items-center rounded-full bg-black/40">{c >= 1000 ? "1K" : c}</span>
+                  <span className="poker-chip-label grid h-8 min-w-8 px-1 place-items-center rounded-full bg-black/40">{c}</span>
                 </button>
               ))}
             </div>

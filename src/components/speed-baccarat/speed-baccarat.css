@@ -33,6 +33,38 @@
   font-family: inherit;
 }
 
+.speed-baccarat-game .baccarat-right-rail {
+  align-content: start;
+  grid-auto-rows: max-content;
+}
+
+.speed-baccarat-game .baccarat-roadmap,
+.speed-baccarat-game .baccarat-wallet {
+  height: auto;
+  min-height: max-content;
+  flex: 0 0 auto;
+}
+
+.speed-baccarat-game .baccarat-road-chart {
+  height: 208px;
+  flex: 0 0 auto;
+  overflow: auto;
+}
+
+.speed-baccarat-game .baccarat-wallet-balance {
+  font-size: 22px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.speed-baccarat-game .baccarat-sidebar-button {
+  font-family: var(--font-num);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.1em;
+}
+
 @media (max-width: 639px) {
   .speed-baccarat-game .baccarat-hands { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .speed-baccarat-game .baccarat-center { width: 100%; }

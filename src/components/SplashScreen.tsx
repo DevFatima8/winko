@@ -1,9 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
 import { isGameReturn } from "@/lib/gameNavigation";
+import { GAME_IMAGES, GAME_SLUGS } from "@/lib/gameCatalog";
+import { preloadGameArtwork } from "@/lib/gameArtwork";
+import { loadProviderCatalog } from "@/lib/providerCatalogCache";
 
 const MIN_MS = 900;
-const MAX_MS = 4000;
+const MAX_MS = 10000;
 
 /** Full-screen branded loader shown on first open while the site and its data warm up. */
 export function SplashScreen() {
@@ -17,17 +20,27 @@ export function SplashScreen() {
       if (document.readyState === "complete") resolve();
       else window.addEventListener("load", () => resolve(), { once: true });
     });
-    const dataWarm = fetch("/api/public/data?view=info", { cache: "no-store" }).then(() => undefined).catch(() => undefined);
-    const cap = new Promise<void>((resolve) => window.setTimeout(resolve, MAX_MS));
-    let t1 = 0, t2 = 0;
-    void Promise.race([Promise.all([pageLoaded, dataWarm]), cap]).then(() => {
+    const panel = ["/", "/player", "/games-all", "/player/games-all"].includes(window.location.pathname);
+    const artwork = panel ? preloadGameArtwork(GAME_SLUGS.slice(0, 12).map(slug => GAME_IMAGES[slug])) : Promise.resolve();
+    const catalog = panel ? loadProviderCatalog().catch(error => console.warn("[splash] Catalogue warmup failed", error)) : Promise.resolve();
+    let capTimer = 0, t1 = 0, t2 = 0;
+    let alive = true;
+    const cap = new Promise<void>(resolve => {
+      capTimer = window.setTimeout(() => {
+        console.warn("[splash] Loading deadline reached; artwork continues warming in the background.");
+        resolve();
+      }, MAX_MS);
+    });
+    void Promise.race([Promise.all([pageLoaded, catalog, artwork]), cap]).then(() => {
+      window.clearTimeout(capTimer);
+      if (!alive) return;
       const wait = Math.max(0, MIN_MS - (Date.now() - started));
       t1 = window.setTimeout(() => {
         setLeaving(true);
         t2 = window.setTimeout(() => setGone(true), 500);
       }, wait);
     });
-    return () => { window.clearTimeout(t1); window.clearTimeout(t2); };
+    return () => { alive = false; window.clearTimeout(capTimer); window.clearTimeout(t1); window.clearTimeout(t2); };
   }, []);
 
   if (gone) return null;

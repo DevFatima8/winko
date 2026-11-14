@@ -31,7 +31,7 @@ export interface Animal {
   name: string;
   shortName: string;
   group: Group;
-  /** Profit multiplier – stake is returned on top (x12 => stake * 13 back). */
+  /** Total return multiplier, including the winning stake. */
   multiplier: number;
   image: string;
 }
@@ -119,7 +119,7 @@ export function totalOf(bets: Bets): number {
 
 export interface Evaluation {
   totalBet: number;
-  /** Total returned to the player (stake + profit of winning bets) */
+  /** Total returned to the player, including the winning stake. */
   payout: number;
   /** payout - totalBet */
   net: number;
@@ -137,7 +137,7 @@ export function evaluateBets(bets: Bets, slot: number): Evaluation {
     if (!amount || amount <= 0) continue;
     totalBet += amount;
     if (key === animal.id) {
-      payout += amount * (1 + animal.multiplier);
+      payout += amount * animal.multiplier;
       winningKeys.push(key);
     } else if ((key === "birds" || key === "beasts") && animal.group === key) {
       payout += amount * (1 + GROUP_MULTIPLIER);
