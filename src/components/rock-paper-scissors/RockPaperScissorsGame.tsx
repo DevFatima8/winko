@@ -132,7 +132,8 @@ export default function RockPaperScissorsGame({ backHref }: { backHref?: string 
   const total = wins + losses;
 
   return (
-    <div className="rock-paper-scissors-container h-full w-full flex flex-col min-h-0 bg-[radial-gradient(ellipse_at_top,#1b2a5e_0%,#0b1020_55%,#05070f_100%)] text-white overflow-hidden">
+    <div className="rock-paper-scissors-container h-full w-full flex flex-col min-h-0 bg-[#05070f] text-white overflow-hidden"
+      style={{ backgroundImage: 'url("/inner-games/Rock-Paper-Scissors.png")', backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }}>
       {error && <div role="alert" className="p-2 text-sm text-rose-300">{error} <button onClick={() => void retry()}>Retry confirmation</button></div>}
       {poolPending && <div role="status" className="px-3 text-xs text-amber-200">Results are provisional pool claims, not wallet winnings. Daily settlement determines payment.</div>}
       {/* Header */}

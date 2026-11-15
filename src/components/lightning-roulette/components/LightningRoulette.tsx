@@ -228,7 +228,8 @@ export default function LightningRoulette() {
   const lastResult = history[0] ?? 0;
 
   return (
-    <div className="lr-root text-white h-full w-full flex flex-col justify-between overflow-hidden px-1 sm:px-2 py-1 select-none">
+    <div className="lr-root text-white h-full w-full flex flex-col justify-between overflow-hidden px-1 sm:px-2 py-1 select-none"
+      style={{ backgroundImage: 'url("/inner-games/lightning-roulette.png")', backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat", backgroundColor: "#04050b" }}>
       {flash > 0 && <div key={flash} className="lightning-flash pointer-events-none fixed inset-0 z-50" />}
 
       <div className="lr-grid flex-1 min-h-0 w-full overflow-hidden">

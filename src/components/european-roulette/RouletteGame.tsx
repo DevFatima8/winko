@@ -391,7 +391,7 @@ export default function RouletteGame({ backHref = "/player" }: { backHref?: stri
   return (
     <div
       className="er-game relative flex h-full min-h-0 w-full flex-col overflow-y-auto overflow-x-hidden px-2 sm:px-4 py-1.5 select-none text-white"
-      style={{ background: "radial-gradient(ellipse at 50% 0%, #0f3d27 0%, #07150e 55%, #020805 100%)" }}
+      style={{ backgroundImage: 'url("/inner-games/european-roulette.png")', backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat", backgroundColor: "#020805" }}
     >
       <div className="er-shell flex flex-1 min-h-0 flex-col gap-1.5 w-full mx-auto">
         {/* Header */}

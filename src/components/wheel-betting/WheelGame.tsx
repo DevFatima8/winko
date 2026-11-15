@@ -307,7 +307,8 @@ export default function WheelGame() {
   ];
 
   return (
-    <div className="wheel-container h-full w-full text-slate-200 flex flex-col gap-2 px-1 sm:px-2 md:px-3 py-1 select-none">
+    <div className="wheel-container h-full w-full text-slate-200 flex flex-col gap-2 px-1 sm:px-2 md:px-3 py-1 select-none"
+      style={{ backgroundImage: 'url("/inner-games/wheel-betting.png")', backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }}>
       {/* ---------------- top bar ---------------- */}
       <header className="shrink-0 border-b border-white/10 bg-[#070b16]/85 backdrop-blur-xl rounded-xl">
         <div className="mx-auto flex max-w-[1280px] flex-wrap items-center justify-between gap-2 px-2 py-1.5 sm:px-4">

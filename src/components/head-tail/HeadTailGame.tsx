@@ -317,7 +317,8 @@ export default function HeadTailGame({ backHref = "/player" }: { backHref?: stri
   }, [flipping, pendingBet, lastRound]);
 
   return (
-    <div className="head-tail-container relative h-full w-full flex flex-col justify-between overflow-y-auto overflow-x-hidden md:overflow-hidden px-2 sm:px-4 py-1.5 select-none font-sans text-slate-100">
+    <div className="head-tail-container relative h-full w-full flex flex-col justify-between overflow-y-auto overflow-x-hidden md:overflow-hidden px-2 sm:px-4 py-1.5 select-none font-sans text-slate-100"
+      style={{ backgroundImage: 'url("/inner-games/head&tail.png")', backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }}>
       {livePhase === "betting" && (
         <div className="flex shrink-0 flex-wrap items-center justify-center gap-2 py-1">
           <span className="text-center text-xs text-amber-200" role="status">Next round in {live.countdown}s</span>

@@ -64,6 +64,10 @@ Fishing Arcade requires an explicit per-shot amount before Play. Its in-game amo
 
 Run `node --test scripts/test-game-history.mjs scripts/test-birds-beasts.mjs scripts/test-multiplayer.mjs scripts/test-multiplayer-client.mjs scripts/test-shared-aviator.mjs scripts/test-plinko-multipliers.mjs scripts/test-browser-recovery.mjs scripts/test-browser-card-autoplay.mjs` for focused regressions without real-money accounts.
 
+## In-game backgrounds
+
+The twelve images in [public/inner-games](public/inner-games) are used inside their matching native games, centered with cover sizing and no tiling. Keno, Tower and Dream Catcher use translucent stage panels so the artwork remains visible while betting controls stay readable. Preserve asset filenames and casing, including `Rock-Paper-Scissors.png`, for case-sensitive deployments. These backgrounds do not change game outcomes or wallet behavior.
+
 ## Disclosed 35% daily prize pools
 
 Catalog games use the same disclosed contract, with a **separate daily pool per game**, not one shared balance between games. This is a **different payout contract**, not a change to outcome probabilities: 35% of accepted, non-refunded stakes is the target pool, **including returned stake and profit**; the remaining 65% is retained by the platform. A successful result or cashout locks a provisional gross-return claim (including returned stake and game bonuses), without immediate wallet credit. After the Pakistan UTC+5 day ends and **all** its wagers finish, cryptographically sampled positive weights randomly divide the pool between successful wagers. Zero claims receive no allocation when successful claims exist. If no wager has a positive claim, all accepted stakes are used as weights, including no-win rounds. A sole bettor receives 35% of their eligible stake. Integer largest-remainder allocation and chronological fractional-paisa carry preserve the total budget. Unfinished interactive wagers can delay settlement indefinitely; later days wait for earlier unresolved days.

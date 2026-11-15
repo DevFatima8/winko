@@ -393,7 +393,8 @@ export default function KenoGame() {
   const broke = balance < 0.01 && !busy && !autoRunning;
 
   return (
-    <div className="keno-root h-full w-full flex flex-col justify-between overflow-hidden bg-[#1a2c38] px-1 sm:px-2.5 py-1 select-none">
+    <div className="keno-root h-full w-full flex flex-col justify-between overflow-hidden bg-[#1a2c38] px-1 sm:px-2.5 py-1 select-none"
+      style={{ backgroundImage: 'url("/inner-games/keno.png")', backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }}>
       <TopBar
         balance={balance}
         muted={muted}
@@ -407,7 +408,7 @@ export default function KenoGame() {
       />
 
       <main className="mx-auto w-full max-w-[1180px] flex-1 min-h-0 flex flex-col overflow-hidden px-1 sm:px-2 pt-1">
-        <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden rounded-lg bg-[#0f212e] shadow-[0_18px_50px_rgba(0,0,0,0.45)] flex flex-col">
+        <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden rounded-lg bg-[#0f212e]/30 shadow-[0_18px_50px_rgba(0,0,0,0.45)] flex flex-col">
           <div className="flex flex-col lg:flex-row shrink-0 lg:shrink lg:flex-1 lg:min-h-0">
             <div className="border-b border-[#2f4553] lg:border-b-0 lg:border-r shrink-0 lg:overflow-y-auto">
               <BetPanel
@@ -440,7 +441,7 @@ export default function KenoGame() {
               />
             </div>
 
-            <div className="keno-board-panel relative min-w-0 flex-1 bg-[#1a2c38] p-2 sm:p-4 lg:min-h-0 lg:overflow-y-auto">
+            <div className="keno-board-panel relative min-w-0 flex-1 bg-[#1a2c38]/50 p-2 sm:p-4 lg:min-h-0 lg:overflow-y-auto">
               <div className="keno-board-info flex w-full max-w-[560px] shrink-0 flex-col gap-2">
                 <div className="keno-board-status flex min-h-8 w-full flex-wrap items-center justify-between gap-2">
                   {busy && drawn.length > 0 ? (

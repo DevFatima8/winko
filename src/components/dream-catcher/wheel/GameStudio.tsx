@@ -235,7 +235,8 @@ export default function GameStudio({ backHref = "/player" }: { backHref?: string
         : "NEXT ROUND BETTING OPEN";
 
   return (
-    <div className="studio-stage relative flex h-full min-h-0 w-full flex-col justify-between overflow-y-auto overflow-x-hidden px-2 sm:px-4 py-1.5 select-none text-white">
+    <div className="studio-stage relative flex h-full min-h-0 w-full flex-col justify-between overflow-y-auto overflow-x-hidden px-2 sm:px-4 py-1.5 select-none text-white"
+      style={{ backgroundImage: 'url("/inner-games/dream-catcher.png")', backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat", backgroundColor: "#07040f" }}>
       {/* light beams */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-32 left-[8%] h-[520px] w-40 rotate-[18deg] bg-gradient-to-b from-fuchsia-400/20 to-transparent blur-2xl" />
@@ -300,7 +301,8 @@ export default function GameStudio({ backHref = "/player" }: { backHref?: string
 
       {/* ------------------------------ stage center ------------------------------ */}
       <main className="dw-layout flex-1 sm:min-h-0 flex flex-col justify-between gap-1.5 py-1 z-10">
-        <section className="dw-wheel-panel studio-floor relative flex shrink-0 sm:shrink sm:flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl border border-violet-300/15 p-1.5">
+        <section className="dw-wheel-panel studio-floor relative flex shrink-0 sm:shrink sm:flex-1 flex-col items-center justify-center gap-1.5 rounded-2xl border border-violet-300/15 p-1.5"
+          style={{ background: "linear-gradient(180deg, rgba(27,16,48,0.65), rgba(12,7,24,0.75))" }}>
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px gold-rule" />
 
           <div className="dw-wheel-space">

@@ -327,7 +327,7 @@ export default function AutoRoulette({ backHref }: { backHref?: string }) {
   const frac = phase === "betting" ? timeLeft / BET_TIME : 0;
 
   return (
-    <div className="auto-roulette-container h-full w-full flex flex-col min-h-0 text-white overflow-hidden" style={{ background: "radial-gradient(ellipse at 50% -10%, #0f3d2a 0%, #071a12 45%, #020806 100%)" }}>
+    <div className="auto-roulette-container h-full w-full flex flex-col min-h-0 text-white overflow-hidden" style={{ backgroundImage: 'url("/inner-games/auto-roulette.png")', backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat", backgroundColor: "#020806" }}>
       {/* Top bar */}
       <header className="flex-shrink-0 flex items-center justify-between border-b border-amber-500/20 bg-black/60 px-3 py-2 backdrop-blur z-10 md:px-8">
         <div className="flex items-center gap-2 sm:gap-3">

@@ -82,7 +82,7 @@ export function MinesGame({ backHref = "/player" }: { backHref?: string }) {
   const setAmt = (v: number) => setAmount(Math.max(10, Math.min(Math.max(10, Math.floor(st.balance)), v)).toFixed(2));
 
   return (
-    <div className="h-full w-full flex flex-col justify-between overflow-y-auto overflow-x-hidden lg:overflow-hidden rounded-xl sm:rounded-2xl border border-[#1b3560] select-none" style={{ background: C.bg, color: C.text }}>
+    <div className="h-full w-full flex flex-col justify-between overflow-y-auto overflow-x-hidden lg:overflow-hidden rounded-xl sm:rounded-2xl border border-[#1b3560] select-none" style={{ backgroundColor: C.bg, backgroundImage: 'url("/inner-games/mines.png")', backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat", color: C.text }}>
       {/* top bar */}
       <div className="shrink-0 flex items-center justify-between px-3 py-2" style={{ background: C.panel, borderBottom: `1px solid ${C.line}` }}>
         <div className="flex items-center gap-2">

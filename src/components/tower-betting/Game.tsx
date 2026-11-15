@@ -183,7 +183,8 @@ export default function TowerGame() {
   };
 
   return (
-    <div className="h-full w-full overflow-hidden bg-[#1a2c38] font-sans text-white rounded-xl sm:rounded-2xl border border-[#213743] flex flex-col justify-between px-1 sm:px-2 md:px-3 py-1 select-none">
+    <div className="h-full w-full overflow-hidden bg-[#1a2c38] font-sans text-white rounded-xl sm:rounded-2xl border border-[#213743] flex flex-col justify-between px-1 sm:px-2 md:px-3 py-1 select-none"
+      style={{ backgroundImage: 'url("/inner-games/tower-betting.png")', backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }}>
       {/* Top bar */}
       <header className="flex shrink-0 h-10 sm:h-12 items-center justify-between bg-[#1a2c38] px-3 sm:px-5 border-b border-white/5">
         <span className="text-lg sm:text-2xl font-extrabold italic tracking-tight bg-gradient-to-r from-emerald-400 to-teal-300 bg-clip-text text-transparent">TOWER</span>
@@ -285,10 +286,10 @@ export default function TowerGame() {
           </aside>
 
           {/* Game area */}
-          <section className="relative flex flex-1 min-h-0 items-center justify-center bg-[#0f212e] p-1 sm:p-3 overflow-hidden rounded-lg">
+          <section className="relative flex flex-1 min-h-0 items-center justify-center bg-[#0f212e]/30 p-1 sm:p-3 overflow-hidden rounded-lg">
             <div
-              className="relative w-full max-w-[460px] rounded-xl border-2 sm:border-4 border-[#2f4553] bg-[#1a2c38] p-2"
-              style={{ backgroundImage: "radial-gradient(circle at 50% 0%, #24414f 0%, #1a2c38 70%)" }}
+              className="relative w-full max-w-[460px] rounded-xl border-2 sm:border-4 border-[#2f4553] bg-[#1a2c38]/30 p-2"
+              style={{ backgroundImage: "radial-gradient(circle at 50% 0%, rgba(36,65,79,0.35) 0%, rgba(26,44,56,0.5) 70%)" }}
             >
               <div className="mb-1.5 flex justify-center">
                 <div className="rounded-t-full bg-[#2f4553] px-6 py-0.5 text-[10px] sm:text-xs font-bold text-amber-300">🐉 TOWER</div>
