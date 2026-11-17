@@ -1,4 +1,5 @@
 "use client";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useGameBalance, usePoolLifecycle, usePoolRoundState } from "@/lib/walletSync";
@@ -54,7 +55,7 @@ export default function HomePage() {
 
   const selectedHorse = HORSES.find((horse) => horse.id === selectedHorseId) ?? HORSES[0];
   const potentialReturn = Number((stake * PAYOUT_MULTIPLIER).toFixed(2));
-  const canBet = Number.isSafeInteger(stake) && stake >= 10 && stake <= balance;
+  const canBet = Number.isSafeInteger(stake) && stake >= 10 && stake <= MAX_GAME_BET && stake <= balance;
   const canEdit = !bet && !queue.queued;
   const winner = lastResult ? HORSES.find((horse) => horse.id === lastResult.winningHorseId) : null;
 
@@ -196,7 +197,7 @@ export default function HomePage() {
 
   function updateStake(value: string) {
     const amount = value === "" ? 0 : Math.floor(Number(value));
-    setStake(Number.isSafeInteger(amount) ? Math.max(0, amount) : 0);
+    setStake(Number.isSafeInteger(amount) ? Math.min(MAX_GAME_BET, Math.max(0, amount)) : 0);
   }
 
   return (
@@ -278,7 +279,7 @@ export default function HomePage() {
 
             <div className="stake-section mt-1.5">
               <div className="section-heading"><label htmlFor="wager-amount">WAGER</label><span>MIN Rs. 1</span></div>
-              <div className="stake-input-wrap mt-1 py-0.5 px-2.5 min-h-0 h-8 rounded-lg border border-white/20 bg-black/40"><Coin small /><input id="wager-amount" type="number" min={10} max={Math.floor(balance)} step={1} inputMode="numeric" value={stake || ""} onChange={(event) => updateStake(event.currentTarget.value)} disabled={!canEdit} aria-describedby="wager-help" className="text-sm font-bold" /><span>Rs.</span></div>
+              <div className="stake-input-wrap mt-1 py-0.5 px-2.5 min-h-0 h-8 rounded-lg border border-white/20 bg-black/40"><Coin small /><input id="wager-amount" type="number" min={10} max={Math.min(MAX_GAME_BET, Math.floor(balance))} step={1} inputMode="numeric" value={stake || ""} onChange={(event) => updateStake(event.currentTarget.value)} disabled={!canEdit} aria-describedby="wager-help" className="text-sm font-bold" /><span>Rs.</span></div>
               <div className="quick-stakes grid grid-cols-5 gap-1 mt-1" aria-label="Quick wager amounts">
                 {QUICK_STAKES.map((amount) => (
                   <button

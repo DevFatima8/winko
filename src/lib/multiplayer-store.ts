@@ -19,6 +19,9 @@ export interface MultiplayerTransaction {
 export interface MultiplayerStore {
   transact<T>(room: string, fn: (tx: MultiplayerTransaction) => Promise<T>): Promise<T>;
 }
+type MultiplayerReader = Pick<MultiplayerTransaction, "findWhere" | "now"> & {
+  get<T extends JsonDocument>(table: MultiplayerTable, id: string): Promise<T | null>;
+};
 type DataRow = RowDataPacket & { data: string | object };
 const parse = <T,>(row: DataRow): T => (typeof row.data === "string" ? JSON.parse(row.data) : row.data) as T;
 const allowedTables = new Set<MultiplayerTable>(["users", "devicesessions", "notifications", "paymentaccounts", "transactions", "games", "gameresults", "winholds", "multiplayerrooms", "multiplayerrequests", "aviatorrounds", "cardrounds", "cardbets", "chickengames", "chickendashes", "minesgames", "plinkobets", "dailypools", "dailypoolentries", "gregmornsessions", "gregmorntransactions"]);
@@ -127,6 +130,26 @@ function transaction(connection: PoolConnection): MultiplayerTransaction {
       return rows.map(row => parse<T>(row));
     },
   };
+}
+
+/** Historical display data must not hold the room's financial lock. */
+export async function readMultiplayer<T>(fn: (reader: MultiplayerReader) => Promise<T>): Promise<T> {
+  const pool = await getMysqlPool();
+  if (!pool) throw new Error("Multiplayer requires the configured MySQL database.");
+  const connection = await pool.getConnection();
+  try {
+    const tx = transaction(connection);
+    return await fn({
+      now: tx.now,
+      get: (table, id) => tx.get(table, id),
+      findWhere: tx.findWhere,
+    });
+  } catch (error) {
+    if (isConnectionError(error)) connection.destroy();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 /** The InnoDB room row is held until every financial write commits on this same connection. */

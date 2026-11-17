@@ -1,9 +1,10 @@
 import { BET_PRESETS } from "@/lib/betPresets";
+import { MAX_GAME_BET } from "./gameBetLimits";
 
 export const BETS = BET_PRESETS;
 export type BetAmount = number;
 export const MIN_BET = 10;
-export const MAX_BET = Number.MAX_SAFE_INTEGER;
+export const MAX_BET = MAX_GAME_BET;
 
 export const STARTING_BALANCE = 50000;
 export const PLAYER_WIN_RATE = 0.35;
@@ -140,7 +141,7 @@ export function mulberry32(seed: number) {
 }
 
 export function isValidBet(bet: number): bet is BetAmount {
-  return Number.isInteger(bet) && bet >= MIN_BET;
+  return Number.isInteger(bet) && bet >= MIN_BET && bet <= MAX_BET;
 }
 
 export function formatMoney(n: number) {

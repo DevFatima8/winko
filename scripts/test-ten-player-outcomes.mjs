@@ -6,6 +6,59 @@ import { createLegacyScene } from "./multiplayer-legacy-harness.mjs";
 const players = Array.from({ length: 100 }, (_, i) => `player-${i}`);
 const cycle = (s, game) => s.data.multiplayerrooms.find(row => row._id === `${game}:ten-player-wins:v1`);
 
+test("Chicken Road 2 uses the requested ladders and step counts without changing each difficulty's total clear odds", async () => {
+  const expected = {
+    easy: [1.01, 1.03, 1.06, 1.13, 1.24, 1.37, 1.55, 1.72, 1.90, 2.11, 2.34, 2.59, 2.87, 3.18, 3.52, 3.88, 4.25, 4.63, 5.05, 5.55, 6.10, 6.70, 7.35, 8.10, 9.00, 10.00],
+    medium: [1.08, 1.15, 1.24, 1.34, 1.46, 1.60, 1.78, 2.00, 2.28, 2.65, 3.10, 3.65, 4.35, 5.25, 6.40, 7.90, 9.50, 11.50, 14.50, 18.50, 24.50, 32.00],
+    hard: [1.15, 1.30, 1.48, 1.70, 1.96, 2.30, 2.75, 3.35, 4.15, 5.25, 6.80, 9.00, 12.20, 17.00, 25.00, 38.00, 60.00, 100.00],
+    hardcore: [1.30, 1.65, 2.30, 4.00, 6.50, 11.00, 19.00, 33.00, 58.00, 105.00, 190.00, 340.00, 540.00, 760.00, 1000.00],
+  };
+  const s = createLegacyScene(["alice"]);
+  const crashes = s.crashLanes;
+  for (const [difficulty, multipliers] of Object.entries(expected)) {
+    const oldLanes = ({ easy: 24, medium: 22, hard: 20, hardcore: 15 })[difficulty];
+    const game = s.chicken;
+    for (let oldCrash = 1; oldCrash <= oldLanes + 1; oldCrash++) {
+      crashes.sampleCrashLane = () => oldCrash;
+      const result = await game.startPoolChicken("alice", "chicken-road-2", 10, difficulty);
+      assert.equal(result.ok, true);
+      assert.equal(result.game.lanes, multipliers.length);
+      assert.equal(result.game.multiplierModel, "chicken-road-steps-v2");
+      assert.deepEqual(result.game.multipliers, multipliers);
+      const expectedCrash = oldCrash === oldLanes + 1 ? multipliers.length + 1 : Math.min(oldCrash, multipliers.length);
+      const saved = s.data.chickengames.find(row => row.status === "active");
+      assert.equal(saved.crashLane, expectedCrash);
+      s.data.chickengames.find(row => row.status === "active").status = "cashed";
+    }
+  }
+});
+
+test("Chicken Road 2 pays the configured 1000x Hardcore finish and preserves old active ladders", async () => {
+  const s = createLegacyScene(["alice", "bob"]);
+  const started = await s.chicken.startPoolChicken("alice", "chicken-road-2", 10, "hardcore");
+  const saved = s.data.chickengames.find(row => row._id === started.game.id);
+  saved.position = 14;
+  saved.crashLane = 16;
+  const finished = await s.chicken.actPoolChicken("alice", "chicken-road-2", "step");
+  assert.equal(finished.event, "finished");
+  assert.equal(finished.multiplier, 1000);
+  assert.equal(finished.win, 9800);
+  assert.equal(s.users.get("alice").balance, 10790);
+
+  const old = await s.chicken.startPoolChicken("bob", "chicken-road-2", 10, "easy");
+  const oldGame = s.data.chickengames.find(row => row._id === old.game.id);
+  delete oldGame.multiplierModel;
+  oldGame.lanes = 24;
+  oldGame.position = 2;
+  oldGame.crashLane = 25;
+  const payout = await s.chicken.actPoolChicken("bob", "chicken-road-2", "cashout");
+  let survival = 1;
+  for (let i = 0; i < 2; i++) survival *= (24 - i) / (25 - i);
+  const oldMultiplier = Math.floor((0.98 / survival) * 100) / 100;
+  assert.equal(payout.multiplier, oldMultiplier);
+  assert.equal(payout.game.multipliers.length, 24);
+});
+
 for (const game of ["fishing-arcade", "derby-race"]) {
   test(`${game}: repeat-player wagers consume exactly 30 opportunities per 100, replays do not redraw`, async () => {
     const s = createLegacyScene(["alice"], { poolEnabled: false });
@@ -117,8 +170,11 @@ test("Chicken rounds crash at the saved early, middle and final lane without rer
       let expected, draws = 0;
       s.crashLanes.sampleCrashLane = survival => {
         draws++;
-        expected = Math.min(point, survival.length);
-        return expected;
+        const oldCrash = Math.min(point, survival.length);
+        expected = slug === "chicken-road-2" && oldCrash === survival.length
+          ? 27
+          : slug === "chicken-road-2" ? Math.min(oldCrash, 26) : oldCrash;
+        return oldCrash;
       };
       await s.chicken.startPoolChicken("alice", slug, 10, "easy");
       let result;

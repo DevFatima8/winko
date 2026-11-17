@@ -2,6 +2,126 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createLegacyScene } from "./multiplayer-legacy-harness.mjs";
 
+for (const action of ["bet", "cashout"]) {
+  test(`Aviator ${action} completes in under one second while a history poll is blocked`, async () => {
+    const s = createLegacyScene();
+    const first = await s.flight.getState("alice", "aviator");
+    if (action === "cashout") {
+      await s.flight.placeBet("alice", "aviator", 50, 0, first.round.id);
+      s.at(first.round.startsAt + 180);
+    }
+    let release, started;
+    const gate = new Promise(resolve => { release = resolve; });
+    const entered = new Promise(resolve => { started = resolve; });
+    s.setQueryHook(async query => {
+      if (query.table === "aviatorrounds" && query.filter.status === "crashed") {
+        started();
+        await gate;
+      }
+    });
+    const poll = s.flight.getState("bob", "aviator");
+    await entered;
+    let timer;
+    try {
+      const request = action === "bet"
+        ? s.flight.placeBet("alice", "aviator", 50, 0, first.round.id)
+        : s.flight.cashOut("alice", "aviator", 0, first.round.id);
+      const result = await Promise.race([
+        request,
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("Action waited for history")), 900); }),
+      ]);
+      assert.equal(result.ok, true, JSON.stringify(result));
+      assert.ok(s.queries.filter(q => q.table === "aviatorrounds" && q.filter.status === "crashed").every(q => q.readOnly));
+    } finally {
+      clearTimeout(timer);
+      release();
+      await poll;
+    }
+  });
+}
+
+test("Aviator live cashout does not wait for other players' automatic payouts", async () => {
+  const others = Array.from({ length: 30 }, (_, i) => `other${i}`);
+  const s = createLegacyScene(["alice", ...others]);
+  const first = await s.flight.getState("alice", "aviator");
+  await s.flight.placeBet("alice", "aviator", 50, 0, first.round.id);
+  for (const id of others) await s.flight.placeBet(id, "aviator", 10, 0, first.round.id, false, 1.01);
+  s.at(first.round.startsAt + 180);
+  s.setReadDelay(40);
+  s.reads.length = 0;
+  const result = await s.flight.cashOut("alice", "aviator", 0, first.round.id);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.deepEqual(s.reads.filter(read => read.table === "users").map(read => read.id), ["alice"]);
+  s.setReadDelay(0);
+  s.at(first.round.startsAt + 1000);
+  const crashed = await s.flight.getState("alice", "aviator");
+  assert.equal(crashed.round.status, "crashed");
+  assert.ok(others.every(id => s.users.get(id).balance === 1000.1), "Saved automatic targets still pay after the crash");
+  assert.ok(s.data.gameresults.every(bet => bet.outcome === "win"));
+});
+
+test("Aviator current round lookup stays on primary keys after initialization and rollover", async () => {
+  const s = createLegacyScene();
+  const first = await s.flight.getState("alice", "aviator");
+  s.queries.length = 0;
+  await s.flight.placeBet("alice", "aviator", 50, 0, first.round.id);
+  s.at(first.round.startsAt + 180);
+  await s.flight.cashOut("alice", "aviator", 0, first.round.id);
+  s.at(first.round.startsAt + 1000);
+  const crashed = await s.flight.getState(null, "aviator");
+  s.at(crashed.round.endedAt + 3500);
+  const next = await s.flight.getState("alice", "aviator");
+  assert.equal(next.round.id, first.round.id + 1);
+  assert.equal(s.queries.filter(query => query.table === "aviatorrounds" && !query.readOnly).length, 0);
+  const head = s.data.multiplayerrooms.find(row => row._id.endsWith(":head"));
+  assert.equal(head.roundId, s.data.aviatorrounds.at(-1)._id);
+  head.roundId = "missing";
+  await assert.rejects(s.flight.placeBet("alice", "aviator", 50, 0), /round reference is invalid/);
+});
+
+test("Aviator action at a crash still pays everyone's saved autos before accepting the next bet", async () => {
+  const s = createLegacyScene();
+  const first = await s.flight.getState("alice", "aviator");
+  await s.flight.placeBet("alice", "aviator", 50, 0, first.round.id);
+  await s.flight.placeBet("bob", "aviator", 100, 0, first.round.id, false, 1.01);
+  s.at(first.round.startsAt + 1000);
+  const next = await s.flight.placeBet("alice", "aviator", 50, 0, first.round.id + 1);
+  assert.equal(next.queued, true);
+  assert.equal(s.users.get("bob").balance, 1001);
+  assert.equal(s.data.gameresults.find(bet => bet.userId === "alice" && bet.roundNo === first.round.id).outcome, "lose");
+  assert.equal((await s.flight.cashOut("alice", "aviator", 0, first.round.id)).error, "Flew away!");
+  assert.equal(s.users.get("alice").balance, 900);
+});
+
+test("Aviator adopts an existing round without changing accepted wagers or its commitment", async () => {
+  const s = createLegacyScene(["alice"]);
+  const first = await s.flight.getState("alice", "aviator");
+  await s.flight.placeBet("alice", "aviator", 50, 0, first.round.id);
+  const headIndex = s.data.multiplayerrooms.findIndex(row => row._id.endsWith(":head"));
+  s.data.multiplayerrooms.splice(headIndex, 1);
+  const round = structuredClone(s.data.aviatorrounds[0]);
+  const bet = structuredClone(s.data.gameresults[0]);
+  const adopted = await s.flight.getState("alice", "aviator");
+  assert.equal(adopted.round.id, first.round.id);
+  assert.equal(adopted.fairness.serverSeedHash, first.fairness.serverSeedHash);
+  assert.equal(adopted.myBets[0].bet, 50);
+  assert.equal(adopted.balance, 950);
+  assert.deepEqual(s.data.aviatorrounds[0], round);
+  assert.deepEqual(s.data.gameresults[0], bet);
+});
+
+test("Aviator history and top wins include auto payouts committed by that same state poll", async () => {
+  const s = createLegacyScene(["alice"]);
+  const first = await s.flight.getState("alice", "aviator");
+  await s.flight.placeBet("alice", "aviator", 100, 0, first.round.id, false, 1.01);
+  s.at(first.round.startsAt + 180);
+  const state = await s.flight.getState("alice", "aviator");
+  assert.equal(state.balance, 1001);
+  assert.equal(state.myBets[0].win, 101);
+  assert.equal(state.myHistory[0].win, 101);
+  assert.equal(state.top[0].win, 101);
+});
+
 test("Aviator and Aviator X accept requested presets with a Rs. 10 minimum", async () => {
   const s = createLegacyScene();
   const first = await s.flight.getState("alice", "aviator");
@@ -189,6 +309,19 @@ test("Aviator and Aviator X each wait a full ten seconds before new flights", as
   assert.equal((await s.flight.getState(null, "aviator-x")).round.status, "waiting");
   s.at(x.round.startsAt);
   assert.equal((await s.flight.getState(null, "aviator-x")).round.status, "running");
+});
+
+test("Aviator state, bet and cashout transactions do not scan daily-pool ledgers", async () => {
+  const s = createLegacyScene(["alice"], { poolEnabled: true });
+  let settlements = 0;
+  const settle = s.pool.settleDailyPools;
+  s.pool.settleDailyPools = async (...args) => { settlements++; return settle(...args); };
+  const state = await s.flight.getState("alice", "aviator");
+  const bet = await s.flight.placeBet("alice", "aviator", 50, 0, state.round.id, true);
+  assert.equal(bet.ok, true);
+  s.at(state.round.startsAt + 180);
+  assert.equal((await s.flight.cashOut("alice", "aviator", 0, state.round.id)).ok, true);
+  assert.equal(settlements, 0);
 });
 
 test("Aviator: failed reservation and failed cashout roll back wallet and ledger atomically", async () => {

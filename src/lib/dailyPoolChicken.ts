@@ -11,7 +11,7 @@ import { dailyPoolEnabled } from "./dailyPoolConfig";
 import { heldPortion } from "./winHold";
 
 type ChickenSlug = "chicken-road-2" | "chicken-dash";
-type Chicken = (ChickenGameDoc | ChickenDashDoc) & { playerCycleVersion?: string; crashModel?: string };
+type Chicken = (ChickenGameDoc | ChickenDashDoc) & { multiplierModel?: string; playerCycleVersion?: string; crashModel?: string };
 const tableFor = (slug: ChickenSlug) => slug === "chicken-road-2" ? "chickengames" as const : "chickendashes" as const;
 const publicGame = (g: Chicken) => "difficulty" in g ? road.publicState(g) : dash.pub(g);
 
@@ -25,6 +25,7 @@ async function transact<T>(slug: ChickenSlug, fn: (tx: MultiplayerTransaction) =
 export async function startPoolChicken(userId: string, slug: ChickenSlug, amount: number, level: string) {
   const config = slug === "chicken-road-2" ? road : dash;
   if (!Number.isFinite(amount) || amount < config.MIN_BET) return { error: `Minimum bet Rs. ${config.MIN_BET} hai.` };
+  if (amount > config.MAX_BET) return { error: "Maximum bet per player per round is Rs. 100,000." };
   if (slug === "chicken-road-2" ? !road.isDifficulty(level) : !dash.isLevel(level)) return { error: "Valid difficulty select karein." };
   const denied = await checkGameAccess(userId, slug);
   if (denied) return { error: denied };
@@ -51,7 +52,7 @@ export async function startPoolChicken(userId: string, slug: ChickenSlug, amount
     };
     let game: Chicken;
     if (slug === "chicken-road-2" && road.isDifficulty(level)) {
-      game = { ...base, difficulty: level, lanes: road.lanesFor(level), crashLane: road.rollCrashLane(level) };
+      game = { ...base, difficulty: level, lanes: road.lanesFor(level), crashLane: road.rollCrashLane(level), multiplierModel: road.CHICKEN_ROAD_MULTIPLIER_MODEL };
     } else if (dash.isLevel(level)) {
       game = { ...base, level, lanes: dash.LEVELS[level].steps, crashLane: dash.rollCrashLane(level), ...dash.bagFor(level), bagCollected: false, dashes: [] };
     } else throw new Error("Invalid daily-pool chicken difficulty.");
@@ -70,10 +71,11 @@ export async function actPoolChicken(userId: string, slug: ChickenSlug, action: 
   return transact(slug, async tx => {
     const table = tableFor(slug);
     const game = (await tx.findWhere<Chicken>(table, { userId, status: "active" }, 1))[0];
-    if (!game || game.betAmount <= 0) return null;
+    if (!game || !Number.isFinite(game.betAmount) || game.betAmount <= 0) return null;
     if (game.poolVersion && game.poolVersion !== DAILY_POOL_VERSION ||
         game.playerCycleVersion && game.playerCycleVersion !== "ten-player-wins-v1" ||
-        game.crashModel && game.crashModel !== "independent-lanes-v1") throw new Error("Unsupported chicken wager version.");
+        game.crashModel && game.crashModel !== "independent-lanes-v1" ||
+        game.multiplierModel && game.multiplierModel !== road.CHICKEN_ROAD_MULTIPLIER_MODEL) throw new Error("Unsupported chicken wager version.");
     if (action === "cashout" && game.position < 1) return { error: "Cash out ke liye kam az kam ek lane cross karein." };
     const now = new Date(await tx.now());
     let event: "dead" | "safe" | "dash" | "finished" | "cashed" = "cashed";
@@ -99,14 +101,16 @@ export async function actPoolChicken(userId: string, slug: ChickenSlug, action: 
         event = to >= game.lanes ? "finished" : dashed ? "dash" : "safe";
       }
     }
-    const multiplier = "difficulty" in game ? road.multiplierAt(game.difficulty, game.position) : dash.multiplierAt(game.level, game.position);
+    const multiplier = "difficulty" in game ? road.multiplierForGame(game, game.position) : dash.multiplierAt(game.level, game.position);
     const terminal = action === "cashout" || event === "finished" || event === "dead";
     if (terminal) {
       const bonus = "bagCollected" in game && game.bagCollected ? game.bagMult : 0;
-      const gross = event === "dead" ? 0 : game.betAmount * Math.min(MAX_MULTIPLIER, multiplier + bonus);
+      const maxMultiplier = "difficulty" in game && game.multiplierModel === road.CHICKEN_ROAD_MULTIPLIER_MODEL
+        ? road.CHICKEN_ROAD_MAX_MULTIPLIER : MAX_MULTIPLIER;
+      const gross = event === "dead" ? 0 : game.betAmount * Math.min(maxMultiplier, multiplier + bonus);
       const claim = cents(gross) / 100;
       const pooled = game.poolVersion === DAILY_POOL_VERSION;
-      const legacy = !game.playerCycleVersion && !game.poolVersion && !game.crashModel;
+      const legacy = "level" in game && !game.playerCycleVersion && !game.poolVersion && !game.crashModel;
       const payout = pooled ? 0 : payoutAfterHouseShare(legacy ? gross : claim);
       const result = await tx.get<GameResultDoc & PoolFields>("gameresults", game.resultId);
       if (!result || result.userId !== userId || result.outcome !== "pending" ||
@@ -132,7 +136,7 @@ export async function actPoolChicken(userId: string, slug: ChickenSlug, action: 
         user.balance = balanceCents / 100;
         user.updatedAt = now;
         await tx.put("users", userId, user);
-        const holdAmount = heldPortion(legacy ? gross : claim);
+        const holdAmount = heldPortion(gross);
         if (holdAmount > 0) {
           const id = randomUUID();
           const hold: WinHoldDoc = { _id: id, userId, amount: holdAmount, claimed: false, claimedAt: null, unlockAt: now, createdAt: now, updatedAt: now };

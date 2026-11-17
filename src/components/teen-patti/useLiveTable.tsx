@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 
 type Wagers = Record<string, number>;
 const sum = (bets: object): number => Object.values(bets).reduce((a: number, b: number) => a + b, 0);
 
 export function useLiveTable<T extends { [K in keyof T]: number }>({
   phase, balance, draft, targets, start, reset, apply, prepaid = false,
-  minBet = 10, maxBet = Infinity, singleTarget = false,
+  minBet = 10, maxBet = MAX_GAME_BET, singleTarget = false,
   autoStart = true, validate, queueNextRound = true,
 }: {
   phase: string;
@@ -119,7 +120,7 @@ export function useLiveTable<T extends { [K in keyof T]: number }>({
       <select aria-label="Next round target" value={target} onChange={(e) => setTarget(e.target.value)} className="bg-slate-900 rounded">
         {targets.map((key) => <option key={key} value={key}>{key}</option>)}
       </select>
-      <input aria-label="Next round amount" type="number" min={minBet} value={amount} onChange={(e) => setAmount(e.target.value)} className="w-16 bg-slate-900 rounded px-1" />
+      <input aria-label="Next round amount" type="number" min={minBet} max={Math.min(maxBet, MAX_GAME_BET)} value={amount} onChange={(e) => setAmount(e.target.value)} className="w-16 bg-slate-900 rounded px-1" />
       <button type="button" onClick={queue}>Queue next round</button>
       <button type="button" disabled={!queued} onClick={() => {
         queuedRef.current = null;

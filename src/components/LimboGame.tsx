@@ -202,7 +202,7 @@ export function LimboGame({ backHref = "/player" }: { backHref?: string }) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setAmount(Math.min(Math.max(10, Math.floor(st.balance)), Math.max(10, amt * 2)).toFixed(2))}
+                  onClick={() => setAmount(Math.min(st.limits.max, Math.max(10, Math.floor(st.balance)), Math.max(10, amt * 2)).toFixed(2))}
                   className="border-l-2 border-slate-700 px-4 text-xs font-black text-white transition active:scale-95 cursor-pointer shadow-sm hover:brightness-110"
                   style={{ backgroundColor: "#7c3aed", color: "#ffffff", borderLeftColor: "#334155" }}
                   title="Double Bet"
@@ -246,7 +246,7 @@ export function LimboGame({ backHref = "/player" }: { backHref?: string }) {
               <input
                 type="number"
                 min={10}
-                max={Math.max(10, Math.floor(st.balance))}
+                max={Math.min(st.limits.max, Math.max(10, Math.floor(st.balance)))}
                 value={customAmount}
                 onChange={(e) => setCustomAmount(Math.max(10, Math.min(Math.max(10, Math.floor(st.balance)), Number(e.target.value) || 50)))}
                 className="w-20 bg-transparent text-center text-xs font-black text-white outline-none"

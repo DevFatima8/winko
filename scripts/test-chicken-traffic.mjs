@@ -11,8 +11,8 @@ function scene(file, names) {
   }).outputText;
   const loaded = { exports: {} };
   new Function("require", "module", "exports", source)((name) => {
-    assert.ok(["@/lib/client", "@/lib/gameAudio", "@/lib/walletSync", "@/lib/walletReveal", "@/lib/betPresets", "./ChickenDashGame", "next/link", "react", "react/jsx-runtime"].includes(name), `Unexpected import: ${name}`);
-    return {};
+    assert.ok(["@/lib/client", "@/lib/gameAudio", "@/lib/walletSync", "@/lib/walletReveal", "@/lib/betPresets", "@/lib/gameBetLimits", "./ChickenDashGame", "next/link", "react", "react/jsx-runtime"].includes(name), `Unexpected import: ${name}`);
+    return name === "@/lib/gameBetLimits" ? { gameBetError: () => null, MAX_GAME_BET: 100000 } : {};
   }, loaded, loaded.exports);
   return loaded.exports.trafficTest;
 }

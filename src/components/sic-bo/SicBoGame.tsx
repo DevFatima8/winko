@@ -1,4 +1,5 @@
 "use client";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 import { gameSfx } from "@/lib/gameSfx";
 import { useMultiplayerGame } from "@/lib/useMultiplayerGame";
 import { LiveMultiplayerBets } from "@/components/LiveMultiplayerBets";
@@ -356,7 +357,7 @@ export default function SicBoGame() {
                 <div className="stake-label-row"><label htmlFor="stake-input">YOUR STAKE</label><span>Rs.</span></div>
                 <div className="stake-input-wrap">
                   <span className="stake-coin">G</span>
-                  <input id="stake-input" type="number" min="1" step="1" max={balance} value={stake} disabled={locked} onChange={(event) => { setStake(Number(event.target.value)); setNotice(""); }} aria-label="Stake amount in Rs." />
+                  <input id="stake-input" type="number" min={10} step="1" max={Math.min(MAX_GAME_BET, balance)} value={stake} disabled={locked} onChange={(event) => { setStake(Number(event.target.value)); setNotice(""); }} aria-label="Stake amount in Rs." />
                   <span className="stake-unit">Rs.</span>
                 </div>
                 <div className="chip-row" aria-label="Choose a chip value">

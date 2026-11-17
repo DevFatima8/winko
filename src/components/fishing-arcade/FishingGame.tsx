@@ -1,4 +1,5 @@
 "use client";
+import { gameBetError, MAX_GAME_BET } from "@/lib/gameBetLimits";
 
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -55,12 +56,15 @@ export default function FishingGame({ backHref = "/player" }: { backHref?: strin
   const [balance, setBalance] = useGameBalance("fishing-arcade", START_BALANCE);
   const poolEnabled = useDailyPoolMode();
   const viewportRef = useRef<HTMLDivElement>(null);
+  const gameRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<FishingEngine | null>(null);
   const balanceRef = useRef(balance);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [scale, setScale] = useState(1);
+  const [stageWidth, setStageWidth] = useState(W);
+  const stageWidthRef = useRef(W);
   const [ready, setReady] = useState(false);
   const [engineReady, setEngineReady] = useState(false);
   const [needsLandscape, setNeedsLandscape] = useState(false);
@@ -82,7 +86,12 @@ export default function FishingGame({ backHref = "/player" }: { backHref?: strin
     const portrait = window.matchMedia("(max-width: 1023px) and (orientation: portrait)");
     const updateOrientation = () => setNeedsLandscape(portrait.matches);
     const fit = () => {
-      setScale(Math.min(viewport.clientWidth / W, viewport.clientHeight / H));
+      if (!viewport.clientWidth || !viewport.clientHeight) return;
+      const width = Math.max(960, H * viewport.clientWidth / viewport.clientHeight);
+      stageWidthRef.current = width;
+      setStageWidth(width);
+      setScale(Math.min(viewport.clientWidth / width, viewport.clientHeight / H));
+      engineRef.current?.setViewportWidth(width);
     };
     fit();
     updateOrientation();
@@ -133,6 +142,7 @@ export default function FishingGame({ backHref = "/player" }: { backHref?: strin
       },
     });
     engine.setBalance(balanceRef.current);
+    engine.setViewportWidth(stageWidthRef.current);
     void recoverBrowserProjectiles("fishing-arcade").then(async recovery => {
       if (disposed) return;
       if (recovery.snapshot) await engine.restore(recovery.snapshot as EngineRecovery, recovery.activeIds);
@@ -214,6 +224,11 @@ export default function FishingGame({ backHref = "/player" }: { backHref?: strin
 
   const startGame = () => {
     const stake = customBet ?? BETS[betIdx];
+    const limitError = gameBetError(stake);
+    if (limitError) {
+      showToast(limitError);
+      return;
+    }
     if (!Number.isSafeInteger(stake) || stake < 10 || stake > balanceRef.current) {
       showToast("Enter a bet of at least Rs. 10 within your balance.");
       return;
@@ -225,7 +240,7 @@ export default function FishingGame({ backHref = "/player" }: { backHref?: strin
 
   const enterLandscape = async () => {
     try {
-      if (!document.fullscreenElement) await viewportRef.current?.parentElement?.requestFullscreen();
+      if (!document.fullscreenElement) await gameRef.current?.requestFullscreen();
       const orientation = screen.orientation;
       if ("lock" in orientation && typeof orientation.lock === "function") await orientation.lock("landscape");
       else showToast("Turn your phone sideways to play.");
@@ -235,14 +250,20 @@ export default function FishingGame({ backHref = "/player" }: { backHref?: strin
     }
   };
 
-  const toggleFullscreen = () => {
+  const toggleFullscreen = async () => {
     sfx.click();
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else void document.documentElement.requestFullscreen?.().catch(() => undefined);
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else if (gameRef.current?.requestFullscreen) await gameRef.current.requestFullscreen();
+      else showToast("Fullscreen is unavailable in this browser. Turn your phone sideways.");
+    } catch (error) {
+      console.warn("[fishing fullscreen]", error);
+      showToast("Fullscreen is unavailable. Turn your phone sideways to play.");
+    }
   };
 
   return (
-    <div className="fishing-arcade-container relative flex h-full w-full items-center justify-center overflow-hidden p-1 select-none">
+    <div ref={gameRef} className="fishing-arcade-container relative flex h-full w-full items-center justify-center overflow-hidden select-none">
       {needsLandscape && (
         <div role="status" className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-[#02152b] p-6 text-center text-sky-100">
           <svg aria-hidden="true" viewBox="0 0 64 64" className="h-16 w-16 text-yellow-300" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
@@ -265,11 +286,11 @@ export default function FishingGame({ backHref = "/player" }: { backHref?: strin
       <div ref={viewportRef} inert={needsLandscape} className="flex h-full w-full items-center justify-center overflow-hidden bg-[#02152b]">
         <div
           className="relative shrink-0"
-          style={{ width: W * scale, height: H * scale, opacity: ready ? 1 : 0, transition: "opacity .3s" }}
+          style={{ width: stageWidth * scale, height: H * scale, opacity: ready ? 1 : 0, transition: "opacity .3s" }}
         >
           <div
             className="font-arcade absolute top-0 left-0 overflow-hidden"
-            style={{ width: W, height: H, transform: `scale(${scale})`, transformOrigin: "top left" }}
+            style={{ width: stageWidth, height: H, transform: `scale(${scale})`, transformOrigin: "top left" }}
           >
             <canvas
               ref={canvasRef}
@@ -467,7 +488,7 @@ export default function FishingGame({ backHref = "/player" }: { backHref?: strin
                   </div>
                   <label className="mt-5 flex items-center justify-center gap-3 text-xl font-bold text-white">
                     Bet per shot (Rs.)
-                    <input type="number" min={10} step={1} inputMode="numeric"
+                    <input type="number" min={10} max={MAX_GAME_BET} step={1} inputMode="numeric"
                       aria-label="Starting bet per shot" value={customBet ?? BETS[betIdx]}
                       onChange={event => setCustomBet(Math.floor(Number(event.target.value)))}
                       className="w-36 rounded-xl border-2 border-yellow-300 bg-slate-950 px-3 py-2 text-center text-yellow-200" />

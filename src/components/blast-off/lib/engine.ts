@@ -1,3 +1,5 @@
+import { BLAST_OFF_MAX_CRASH } from "@/lib/blastOffRules";
+
 export type Phase = "betting" | "flying" | "crashed";
 
 export const WIN_RATE = 0.35;
@@ -5,7 +7,7 @@ export const LOSS_RATE = 0.65;
 
 export const BETTING_MS = 10000;
 export const CRASH_HOLD_MS = 3200;
-export const MAX_MULTIPLIER = 250;
+export const MAX_MULTIPLIER = BLAST_OFF_MAX_CRASH;
 
 /** multiplier as a function of flight seconds (exponential ascent) */
 export function multiplierAt(seconds: number): number {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 
 interface BetAmountInputProps {
   value: number;
@@ -22,6 +23,7 @@ export default function BetAmountInput({
 }: BetAmountInputProps) {
   const [text, setText] = useState(String(value));
   const [focused, setFocused] = useState(false);
+  const maximum = Math.min(MAX_GAME_BET, max ?? MAX_GAME_BET);
 
   useEffect(() => {
     if (!focused) setText(String(value));
@@ -36,14 +38,14 @@ export default function BetAmountInput({
         type="number"
         inputMode="numeric"
         min={10}
-        max={max}
+        max={maximum}
         step={1}
         disabled={disabled}
         value={text}
         onChange={(e) => {
           setText(e.target.value);
           const n = Math.floor(Number(e.target.value));
-          if (Number.isFinite(n) && n >= 10) onChange(max ? Math.min(n, max) : n);
+          if (Number.isFinite(n) && n >= 10) onChange(Math.min(n, maximum));
         }}
         onFocus={() => setFocused(true)}
         onBlur={() => {

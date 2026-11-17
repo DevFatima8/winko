@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { ArrowLeft, ChevronRight, Headphones, Landmark, Bitcoin, RefreshCw, WalletCards, X } from "lucide-react";
 import { PaymentLogo } from "./PaymentLogo";
+import { OpenSupportButton } from "./OpenSupport";
 import { withdrawAction } from "@/lib/clientActions";
 import { getCurrentUser } from "@/lib/auth";
 import { usePage } from "@/lib/useDb";
@@ -119,7 +120,7 @@ export function WithdrawRequest({ balance, hasPin, limits, initialAccounts = {} 
         <div role="tablist" aria-label="Withdrawal" className="flex min-w-0 flex-1 gap-5 overflow-x-auto [scrollbar-width:none]">
           {TABS.map((t) => <button type="button" key={t} role="tab" aria-selected={tab === t} onClick={() => { setTab(t); setEditing(null); setError(""); }} className={`shrink-0 whitespace-nowrap border-b-2 py-3 text-[13px] ${tab === t ? "border-[#ffc933] text-[#ffc933]" : "border-transparent text-slate-200"}`}>{t}</button>)}
         </div>
-        <button type="button" aria-label="Support" onClick={() => window.dispatchEvent(new CustomEvent("wx:open-support"))} className="shrink-0 p-2 text-[#ffc933]"><Headphones size={21} /></button>
+        <OpenSupportButton className="shrink-0 p-2 text-[#ffc933]"><Headphones size={21} /></OpenSupportButton>
       </header>
 
       {tab === "Request withdrawal" && <div className="space-y-4">

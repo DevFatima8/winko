@@ -1,4 +1,5 @@
 "use client";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 import { gameSfx } from "@/lib/gameSfx";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -423,7 +424,7 @@ export default function FortuneOxGame({ backHref = "/player" }: { backHref?: str
               <span className="text-2xl font-black text-yellow-300">Rs. {fmt(bet)}</span>
             </div>
             <div className="mt-4 flex gap-2">
-                            <button onClick={() => setBet(Math.max(1, Math.floor(balance)))} className="flex-1 rounded-full border-2 border-yellow-500 bg-black/40 py-2 text-xs font-bold text-yellow-200">MAX BET</button>
+                            <button onClick={() => setBet(Math.min(MAX_GAME_BET, Math.max(10, Math.floor(balance))))} className="flex-1 rounded-full border-2 border-yellow-500 bg-black/40 py-2 text-xs font-bold text-yellow-200">MAX BET</button>
               <button onClick={() => setShowBet(false)} className="flex-1 rounded-full bg-yellow-400 py-2 text-xs font-black text-red-900">CONFIRM</button>
             </div>
           </div>

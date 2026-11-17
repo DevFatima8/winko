@@ -1,4 +1,5 @@
 "use client";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 import { GameOverOverlay } from "@/components/GameOverOverlay";
 import { gameSfx } from "@/lib/gameSfx";
 import { isMuflisBrowserDeal } from "@/lib/browserCardGuards";
@@ -76,7 +77,7 @@ export default function MuflisGame({ backHref = "/player" }: { backHref?: string
 
   const maxBet = () => {
     if (phase !== "betting") return;
-    setBet(balance);
+    setBet(Math.min(MAX_GAME_BET, balance));
   };
 
   const deal = useCallback(async () => {

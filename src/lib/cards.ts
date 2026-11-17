@@ -1,10 +1,11 @@
 import { checkGameAccess } from "./gameAccess";
 import { payoutAfterHouseShare, MAX_MULTIPLIER } from "./outcomes";
 import { randomInt } from "node:crypto";
+import { MAX_GAME_BET } from "./gameBetLimits";
 
 
 export const MIN_BET = 10;
-export const MAX_BET = Number.MAX_SAFE_INTEGER;
+export const MAX_BET = MAX_GAME_BET;
 
 export const TABLES = {
   "dragon-tiger": {
@@ -161,7 +162,7 @@ export async function placeBet(userId: string, table: Table, option: string, amo
   const opts = TABLES[table].options as Record<string, unknown>;
   if (!(option in opts)) return { error: "Invalid bet option." };
   if (!Number.isFinite(amount) || amount < MIN_BET) return { error: `Minimum bet Rs. ${MIN_BET} hai.` };
-  amount = Math.floor(amount);
+  if (amount <= MAX_BET) amount = Math.floor(amount);
   const denied = await checkGameAccess(userId, table);
   if (denied) return { error: denied };
   return (await import("./sharedLegacyTables")).sharedCardBet(userId, table, option, amount, targetRound, requestId);

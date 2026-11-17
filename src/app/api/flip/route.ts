@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
 import { LOCAL_GAMES_CONNECTED, LOCAL_GAMES_UNAVAILABLE } from "@/lib/gameAvailability";
 import { MIN_BET, WIN_CHANCE, isSide, otherSide, type FlipResponse } from "@/components/head-tail/lib/game";
+import { gameBetError } from "@/lib/gameBetLimits";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +18,8 @@ export async function POST(request: Request) {
   if (!isSide(choice) || typeof amount !== "number" || !Number.isFinite(amount) || amount < MIN_BET) {
     return Response.json({ error: "Invalid bet." }, { status: 400 });
   }
+  const limitError = gameBetError(amount);
+  if (limitError) return Response.json({ error: limitError }, { status: 400 });
 
   const win = randomInt(1000) < WIN_CHANCE * 1000;
   const body: FlipResponse = { win, result: win ? choice : otherSide(choice) };

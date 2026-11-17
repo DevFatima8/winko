@@ -159,7 +159,7 @@ export default function Game({ backHref }: { backHref?: string }) {
           <div className="text-yellow-400 font-extrabold text-base sm:text-xl tracking-wider">32 CARDS</div>
           <span className="text-[11px] text-white/60 hidden sm:inline">Round #{roundNo.toString().padStart(6, "0")}</span>
         </div>
-        <div className="text-xs text-white/70 hidden md:block">Min Rs. 10 · Max Rs. 50,000</div>
+        <div className="text-xs text-white/70 hidden md:block">Min Rs. 10 · Max Rs. 100,000</div>
         <div className="bg-black/70 border border-yellow-500/50 rounded-full px-3 py-1 text-xs sm:text-sm">
           Balance: <span className="text-yellow-400 font-bold">Rs. {balance.toLocaleString()}</span>
         </div>

@@ -30,8 +30,10 @@ export default function GamePageClient({ params, searchParams }: { params?: Reco
     const isFramedGame = FRAMED_GAMES.includes(slug);
     if (isFramedGame) {
       return (
-        <div className="fixed top-0 left-0 right-0 bottom-[calc(86px+env(safe-area-inset-bottom,0px))] md:bottom-0 z-30 flex h-[calc(100dvh-86px-env(safe-area-inset-bottom,0px))] md:h-[100dvh] w-full flex-col overflow-hidden bg-[#07090e] px-1 pt-1 pb-0 sm:p-2 md:p-3 text-white select-none">
-          <div className="mx-auto flex h-full w-full max-w-[1440px] flex-col overflow-hidden rounded-xl sm:rounded-2xl border border-white/10 shadow-2xl">
+        <div className={slug === "fishing-arcade"
+          ? "fixed inset-0 z-[60] flex h-[100dvh] w-full flex-col overflow-hidden bg-[#02152b] text-white select-none"
+          : "fixed top-0 left-0 right-0 bottom-[calc(86px+env(safe-area-inset-bottom,0px))] md:bottom-0 z-30 flex h-[calc(100dvh-86px-env(safe-area-inset-bottom,0px))] md:h-[100dvh] w-full flex-col overflow-hidden bg-[#07090e] px-1 pt-1 pb-0 sm:p-2 md:p-3 text-white select-none"}>
+          <div className={slug === "fishing-arcade" ? "flex h-full w-full flex-col overflow-hidden" : "mx-auto flex h-full w-full max-w-[1440px] flex-col overflow-hidden rounded-xl sm:rounded-2xl border border-white/10 shadow-2xl"}>
             <GameView slug={slug} backHref="/player" />
           </div>
         </div>

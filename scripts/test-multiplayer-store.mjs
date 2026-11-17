@@ -23,7 +23,7 @@ function fixture(connections) {
       }),
     };
   }, loaded, loaded.exports);
-  return loaded.exports.mysqlMultiplayerStore;
+  return { ...loaded.exports.mysqlMultiplayerStore, read: loaded.exports.readMultiplayer };
 }
 
 function connection(overrides = {}) {
@@ -42,6 +42,30 @@ test("successful transactions commit and release the connection", async () => {
   const db = connection();
   assert.equal(await fixture([db]).transact("test", async () => 42), 42);
   assert.deepEqual(db.calls, ["ping", "query", "beginTransaction", "execute", "query", "commit", "release"]);
+});
+
+test("historical reads release their connection without taking a financial room lock", async () => {
+  const statements = [];
+  const db = connection({ query(sql) {
+    statements.push(sql);
+    return [[{ data: { _id: "history" } }]];
+  } });
+  const rows = await fixture([db]).read(async reader => {
+    assert.deepEqual(Object.keys(reader).sort(), ["findWhere", "get", "now"]);
+    return reader.findWhere("aviatorrounds", { status: "crashed" }, 40);
+  });
+  assert.deepEqual(rows, [{ _id: "history" }]);
+  assert.deepEqual(db.calls, ["query", "release"]);
+  assert.ok(statements.every(sql => !/FOR UPDATE|multiplayerlocks/.test(sql)));
+});
+
+test("historical read errors surface and release or destroy the connection without retry", async () => {
+  for (const fatal of [false, true]) {
+    const error = Object.assign(new Error("History unavailable"), { fatal });
+    const db = connection({ query() { throw error; } });
+    await assert.rejects(fixture([db]).read(reader => reader.get("aviatorrounds", "history")), e => e === error);
+    assert.deepEqual(db.calls, fatal ? ["query", "destroy", "release"] : ["query", "release"]);
+  }
 });
 
 test("player login resolves through the permanent random_id mapping, not user JSON", async () => {

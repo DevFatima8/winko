@@ -12,6 +12,7 @@ import { isSlotGame } from "@/lib/slotGameRules";
 import { actBrowserCard } from "@/lib/browserCardActions";
 import { LOCAL_GAMES_CONNECTED, LOCAL_GAMES_UNAVAILABLE } from "@/lib/gameAvailability";
 import { isThirtyWinGame } from "@/lib/winOpportunityRules";
+import { gameBetError } from "@/lib/gameBetLimits";
 
 export const dynamic = "force-dynamic";
 
@@ -129,6 +130,11 @@ export async function POST(request: Request) {
     }
 
     delta = Math.round(delta * 100) / 100;
+    const wagerStake = Math.max(Number.isFinite(bet) && bet > 0 ? bet : 0, delta < 0 ? -delta : 0);
+    if (isDailyPoolGame(game) && wagerStake > 0) {
+      const limitError = gameBetError(wagerStake);
+      if (limitError) return NextResponse.json({ error: limitError }, { status: 400 });
+    }
 
     await dbConnect();
     const uid = oid(me.id);

@@ -14,10 +14,12 @@ import { nextPlayerWin } from "./playerWinCycle";
 import { isPrivateDiceTable, privateDiceOutcome, validDiceAllocation } from "./privateDiceTables";
 import { resolveBirdsBeastsRound } from "./birdsBeastsRounds";
 import { isBetKey, type Bets } from "@/components/birds-beasts/lib/game-config";
+import { gameBetError } from "./gameBetLimits";
+import { BLAST_OFF_MODEL, BLAST_OFF_PREVIOUS_MODEL, BLAST_OFF_MAX_CASHOUT, blastOffPayout, blastOffMaxCrash, blastOffMaxCashout, isBlastOffModel, type BlastOffModel } from "./blastOffRules";
 
 type Wallet = { _id: string; name: string; role: string; balance: number; isActive: boolean; blockedGames?: string[]; vipBetPoints?: number; updatedAt?: string };
 type CatalogGame = { _id: string; slug: string; isActive: boolean };
-type RoomBet = Omit<MultiplayerBet, "mine"> & { userId: string; cashoutMultiplier?: number; createdAt?: number; settledAt?: number };
+type RoomBet = Omit<MultiplayerBet, "mine"> & { userId: string; cashoutMultiplier?: number; createdAt?: number; settledAt?: number; blastModel?: BlastOffModel };
 type Room = {
   _id: string; gameId: string; game: MultiplayerGame; roundNo: number; startedAt: number;
   roundTimingVersion?: 1 | 2;
@@ -144,7 +146,7 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
       return;
     }
     const push = gross === bet.amount && room.game === "speed-baccarat" && (bet.option === "player" || bet.option === "banker");
-    const fullReturn = push || room.game === "birds-beasts";
+    const fullReturn = push || room.game === "birds-beasts" || isBlastOffModel(bet.blastModel);
     const payout = allocation?.payout ?? (fullReturn ? gross : Math.floor(Math.max(0, gross) * 0.98 * 100 + 1e-8) / 100);
     const held = allocation?.held ?? (fullReturn ? 0 : cents(Math.max(0, gross) * 0.02));
     if (!Number.isFinite(payout) || !Number.isFinite(held)) throw new Error("Invalid settlement amount.");
@@ -176,7 +178,7 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
       const targetAt = d.bettingEndsAt + flightMs(bet.autoCashout);
       if (now < targetAt) continue;
       bet.cashoutMultiplier = bet.autoCashout;
-      await credit(tx, room, bet, wallets, cents(bet.amount * bet.autoCashout), targetAt);
+      await credit(tx, room, bet, wallets, isBlastOffModel(bet.blastModel) ? blastOffPayout(bet.amount, bet.autoCashout, bet.blastModel) : cents(bet.amount * bet.autoCashout), targetAt);
     }
   }
   async function advance(tx: MultiplayerTransaction, room: Room, wallets: Map<string, Wallet>, now: number) {
@@ -241,7 +243,8 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
       room.roundTimingVersion = 2;
       room.bets = room.queuedBets;
       room.queuedBets = [];
-      room.outcome = createOutcome(room.game);
+      const reservedBlast = room.game === "blast-off" ? room.bets.find(bet => bet.status === "pending") : undefined;
+      room.outcome = createOutcome(room.game, reservedBlast?.blastModel === BLAST_OFF_PREVIOUS_MODEL ? BLAST_OFF_PREVIOUS_MODEL : !!reservedBlast && reservedBlast.blastModel !== BLAST_OFF_MODEL);
       room.cardOutcomeReady = false;
       room.birdsOutcomeReady = false;
       delete room.cardPrize;
@@ -283,7 +286,8 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
         resultAt: hiddenCrash ? 0 : d.resultAt,
         endsAt: hiddenCrash ? 0 : d.endsAt,
         result: visible ? room.outcome : null,
-        ...(room.game === "blast-off" && currentPhase === "running" ? { multiplier: Math.floor(multiplierAt((now - d.bettingEndsAt) / 1000) * 100) / 100 } : {}),
+        ...(room.game === "blast-off" ? { flightModel: (room.outcome as BlastOutcome).model } : {}),
+        ...(room.game === "blast-off" && currentPhase === "running" ? { multiplier: Math.floor(multiplierAt((now - d.bettingEndsAt) / 1000, blastOffMaxCrash((room.outcome as BlastOutcome).model)) * 100) / 100 } : {}),
       },
       bets, queuedBets, myBets: bets.filter(b => b.mine), myQueuedBets: queuedBets.filter(b => b.mine),
       history: room.history,
@@ -309,8 +313,11 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
         let queued = false;
         if (action.action === "bet") {
           if ((isPrivateCardTable(game) || isLiveRouletteGame(game) || isPrivateDiceTable(game)) && !room.ownerId) throw new MultiplayerError("Finish the previously accepted shared round, then refresh to start your personal table.", 409);
+          if (game === "blast-off" && (open ? (room.outcome as BlastOutcome).model !== BLAST_OFF_MODEL : room.queuedBets.some(bet => bet.status === "pending" && bet.blastModel !== BLAST_OFF_MODEL))) {
+            throw new MultiplayerError("Previously accepted Blast Off round is finishing. Wait for the next round before placing a new bet.", 409);
+          }
           // Keep the accepted contract on old poolVersion wagers, not the current global flag.
-          const poolMode = dailyPoolEnabled() && !isCardGame(game) && !isRouletteGame(game) && !isWheelGame(game);
+          const poolMode = dailyPoolEnabled() && !isCardGame(game) && !isRouletteGame(game) && !isWheelGame(game) && game !== "blast-off";
           if (poolMode && action.poolRulesVersion !== DAILY_POOL_VERSION) throw new MultiplayerError("Read and accept the daily-pool rules before placing a new bet.");
           if (!catalog.isActive) throw new MultiplayerError("Game is currently disabled.", 403);
           if (!open && (isCardGame(game) || isRouletteGame(game) || game === "birds-beasts")) throw new MultiplayerError("Betting is closed. Wait for the next round to begin.", 409);
@@ -319,9 +326,11 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
           if (typeof action.option !== "string" || !validateOption(game, action.option)) throw new MultiplayerError("Invalid bet option.");
           const amount = action.amount;
           if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 10 || Math.abs(cents(amount) - amount) > 1e-8) throw new MultiplayerError("Bet must be at least 10, with at most two decimals.");
-          if (action.autoCashout !== undefined && (game !== "blast-off" || !Number.isFinite(action.autoCashout) || action.autoCashout < 1.01 || action.autoCashout > 250 || Math.abs(cents(action.autoCashout) - action.autoCashout) > 1e-8)) throw new MultiplayerError("Auto cashout must be between 1.01 and 250.");
+          if (action.autoCashout !== undefined && (game !== "blast-off" || !Number.isFinite(action.autoCashout) || action.autoCashout < 1.01 || action.autoCashout > BLAST_OFF_MAX_CASHOUT || Math.abs(cents(action.autoCashout) - action.autoCashout) > 1e-8)) throw new MultiplayerError(`Auto cashout must be between 1.01 and ${BLAST_OFF_MAX_CASHOUT}.`);
           queued = !open;
           const target = queued ? room.queuedBets : room.bets;
+          const limitError = gameBetError(amount, target.filter(bet => bet.userId === userId && bet.status !== "cancelled").reduce((sum, bet) => sum + bet.amount, 0));
+          if (limitError) throw new MultiplayerError(limitError);
           if (room.ownerId && isPrivateDiceTable(game)) {
             if (!validDiceAllocation(game, [...target.filter(bet => bet.status === "pending"), { option: action.option, amount }])) {
               throw new MultiplayerError("These dice bets must leave both a profitable and a zero-return outcome available.", 409);
@@ -352,6 +361,7 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
           user.updatedAt = new Date(now).toISOString();
           await tx.put("users", userId, user);
           const bet: RoomBet = { id: randomUUID(), userId, name: mask(user.name), option: action.option, amount, roundNo: expectedRound, status: "pending", payout: 0, createdAt: now, ...(action.autoCashout !== undefined ? { autoCashout: action.autoCashout } : {}) };
+          if (game === "blast-off") bet.blastModel = BLAST_OFF_MODEL;
           if (poolMode) {
             const id = hash(`result:${bet.id}`);
             const result: GameResultDoc = {
@@ -398,10 +408,11 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
           if (game !== "blast-off" || action.roundNo !== room.roundNo || phase(room, now) !== "running") throw new MultiplayerError("Cashout is not available for this round.", 409);
           const cashouts = room.bets.filter(b => b.userId === userId && b.status === "pending" && (!action.betId || b.id === action.betId));
           if (!cashouts.length) throw new MultiplayerError("No active flight wager found.", 409);
-          const multiple = Math.floor(multiplierAt((now - d.bettingEndsAt) / 1000) * 100) / 100;
+          const model = (room.outcome as BlastOutcome).model;
+          const multiple = Math.min(blastOffMaxCashout(model), Math.floor(multiplierAt((now - d.bettingEndsAt) / 1000, blastOffMaxCrash(model)) * 100) / 100);
           for (const bet of cashouts) {
             bet.cashoutMultiplier = multiple;
-            await credit(tx, room, bet, wallets, cents(bet.amount * multiple), now);
+            await credit(tx, room, bet, wallets, isBlastOffModel(bet.blastModel) ? blastOffPayout(bet.amount, multiple, bet.blastModel) : cents(bet.amount * multiple), now);
           }
         }
         const reply: MultiplayerReply = { ok: true, roundNo: action.roundNo, ...(action.action === "bet" ? { queued } : {}) };

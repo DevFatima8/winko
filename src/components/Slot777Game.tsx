@@ -217,7 +217,7 @@ export function Slot777Game({ backHref = "/player" }: { backHref?: string }) {
             <div className="flex items-center gap-1">
               <button onClick={() => setAmount((a) => Math.max(st.limits.min, a - 10))} className="h-8 w-8 sm:h-9 sm:w-9 rounded-lg bg-amber-700 hover:bg-amber-600 text-lg font-black text-white transition active:scale-95 cursor-pointer">−</button>
               <div className="flex-1 text-center"><div className="text-[9px] uppercase text-slate-400">Bet</div><div className="text-sm sm:text-base font-black text-white">{amount}</div></div>
-              <button onClick={() => setAmount((a) => Math.min(Math.max(st.limits.min, Math.floor(st.balance)), a + 10))} className="h-8 w-8 sm:h-9 sm:w-9 rounded-lg bg-amber-700 hover:bg-amber-600 text-lg font-black text-white transition active:scale-95 cursor-pointer">+</button>
+              <button onClick={() => setAmount((a) => Math.min(st.limits.max, Math.max(st.limits.min, Math.floor(st.balance)), a + 10))} className="h-8 w-8 sm:h-9 sm:w-9 rounded-lg bg-amber-700 hover:bg-amber-600 text-lg font-black text-white transition active:scale-95 cursor-pointer">+</button>
             </div>
 
             {/* SPIN: Emerald Green Vibrant button */}

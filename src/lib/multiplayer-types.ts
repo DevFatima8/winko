@@ -1,3 +1,5 @@
+import type { BlastOffModel } from "./blastOffRules";
+
 export const MULTIPLAYER_GAMES = [
   "baccarat", "speed-baccarat", "dream-catcher", "football-studio",
   "auto-roulette", "lightning-roulette", "sic-bo", "blast-off",
@@ -29,6 +31,7 @@ export type MultiplayerRound<R = unknown> = {
   endsAt: number;
   result: R | null;
   multiplier?: number;
+  flightModel?: BlastOffModel;
 };
 export type MultiplayerState<R = unknown> = {
   game: MultiplayerGame;

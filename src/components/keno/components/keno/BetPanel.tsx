@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { BET_PRESETS } from "@/lib/betPresets";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 import { MAX_PICKS, RISK_LEVELS, type RiskLevel } from "@/lib/keno";
 
 export type AutoConfig = {
@@ -232,7 +233,8 @@ export default function BetPanel(props: Props) {
           <input
             type="number"
             inputMode="decimal"
-            min={0}
+            min={10}
+            max={MAX_GAME_BET}
             step="any"
             value={bet}
             disabled={autoRunning}

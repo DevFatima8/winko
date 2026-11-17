@@ -5,10 +5,11 @@ import { checkGameAccess } from "./gameAccess";
 import { payoutAfterHouseShare, MAX_MULTIPLIER } from "./outcomes";
 import { sampleCrashLane } from "./crashLane";
 import { holdWinShare } from "./winHold";
+import { MAX_GAME_BET } from "./gameBetLimits";
 
 
 export const MIN_BET = 10;
-export const MAX_BET = Number.MAX_SAFE_INTEGER;
+export const MAX_BET = MAX_GAME_BET;
 export const MAX_WIN = Number.MAX_SAFE_INTEGER;
 export const RTP = 0.9685; // official Chicken Dash RTP 96.85%
 
@@ -142,6 +143,7 @@ export async function startGame(userId: string, amount: number, level: string) {
   await dbConnect();
   if (!isLevel(level)) return { error: "Level select karein." };
   if (!Number.isFinite(amount) || amount < MIN_BET) return { error: `Minimum bet Rs. ${MIN_BET} hai.` };
+  if (amount > MAX_BET) return { error: "Maximum bet per player per round is Rs. 100,000." };
   amount = Math.floor(amount);
   const denied = await checkGameAccess(userId, "chicken-dash");
   if (denied) return { error: denied };

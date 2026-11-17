@@ -93,6 +93,7 @@ function harness(c, initial = room(c), network = null) {
       if (name === "./dailyPoolConsent") return { dailyPoolConsent: () => undefined };
       if (name === "@/lib/multiplayer-types") return load("src\\lib\\multiplayer-types.ts");
       if (name === "@/lib/betPresets") return { BET_PRESETS: [25, 50, 100, 500, 1000] };
+      if (name === "@/lib/blastOffRules") return load("src\\lib\\blastOffRules.ts");
       if (name === "@/lib/gameSfx") return { gameSfx: new Proxy({}, { get: () => () => {} }) };
       if (name.endsWith("/sound")) return { sfx: new Proxy({}, { get: () => () => {} }), playSound: () => {} };
       if (name === "./lib/engine") return load(path.join(path.dirname(file), "lib\\engine.ts"));
@@ -270,6 +271,25 @@ test("blast-off: auto is one server-owned cashout target, manual cashout is a re
   const next = room(c); next.round.roundNo = 72; h.render(next);
   assert.equal(h.calls.filter(c => c[0] === "place").length, 2);
   h.unmount(); assert.equal(h.listeners.size, 0);
+});
+
+test("blast-off: new multiplier and auto-target controls stay below 100x while old flights retain their display", () => {
+  const c = cases.find(c => c.slug === "blast-off"), state = room(c, "running");
+  state.round.flightModel = "blast-off-30-capped-v2";
+  const h = harness(c, state);
+  h.live.now = state.round.bettingEndsAt + 60000;
+  h.render();
+  assert.equal(h.captured.e.multiplier, 99.99);
+  assert.ok(h.captured.e.multiplier < 100);
+  const targetInput = nodes(h.tree).find(n => n?.type === "input" && n.props.id === "target");
+  targetInput.props.onChange({ target: { value: "100" } });
+  h.render();
+  h.captured.actions.placeBet();
+  assert.deepEqual(h.calls.at(-1), ["place", "main", 100, 99.98]);
+  state.round.flightModel = "blast-off-30-v1";
+  h.render(state);
+  assert.equal(h.captured.e.multiplier, 250.01);
+  h.unmount();
 });
 
 test("blast-off: hidden future deadlines do not control flight animation or predict cashouts", () => {

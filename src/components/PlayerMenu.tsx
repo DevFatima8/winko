@@ -8,6 +8,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { LanguageSwitch } from "./LanguageSwitch";
 import { BrandLogo } from "./BrandLogo";
 import { CopyBtn } from "./PlayerUi";
+import { SupportUnreadDot } from "./SupportUnread";
 import { useAppInstalled } from "@/lib/appInstall";
 import { RefreshIcon, HeadsetIcon, DownloadIcon, GlobeIcon, WalletIcon, BanknoteIcon, GamepadIcon, FlameIcon, SpadeIcon, BellIcon, UserIcon } from "./Icons";
 
@@ -95,7 +96,7 @@ export function PlayerMenu({ name, uid, balance, guest, onNavigate, onLogout }: 
       </div>
 
       <div className="shrink-0 divide-y divide-white/10 rounded-xl border border-white/10 bg-[#1d1a25]">
-        <div role="button" tabIndex={0} className={row} onClick={() => { onNavigate?.(); window.dispatchEvent(new CustomEvent("wx:open-support")); }}><HeadsetIcon size={15} />Customer Service{chev}</div>
+        <div role="button" tabIndex={0} className={row} onClick={() => { onNavigate?.(); window.dispatchEvent(new CustomEvent("wx:open-support")); }}><span className="relative"><HeadsetIcon size={15} /><SupportUnreadDot /></span>Customer Service{chev}</div>
         {!installed && <button type="button" className={`${row} w-full text-left`} onClick={() => { onNavigate?.(); window.dispatchEvent(new CustomEvent("wx:install-now")); }}><DownloadIcon size={15} />APP Download{chev}</button>}
         <div className={row}><GlobeIcon size={15} /><span>{t("language")}</span><span className="ml-auto"><LanguageSwitch compact /></span></div>
       </div>

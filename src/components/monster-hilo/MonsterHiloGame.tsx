@@ -1,4 +1,5 @@
 "use client";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { GameOverOverlay } from "@/components/GameOverOverlay";
@@ -238,7 +239,7 @@ export default function MonsterHiloGame() {
 
   const changeBet = (val: number) => {
     if (phase !== "ready" || idleRound.watching) return;
-    setBet(String(Math.max(10, Math.min(balance, Math.round(val)))));
+    setBet(String(Math.max(10, Math.min(MAX_GAME_BET, balance, Math.round(val)))));
   };
 
   const startGame = async () => {

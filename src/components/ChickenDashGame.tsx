@@ -1,4 +1,5 @@
 "use client";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 
 import { localApi } from "@/lib/client";
 import { playGameSound, speakGameVoice } from "@/lib/gameAudio";
@@ -709,7 +710,7 @@ export function ChickenDashGame({ backHref = "/player" }: { backHref?: string })
   };
 
   const balance = st?.balance ?? 0;
-  const min = st?.limits.min ?? 10, max = Math.max(min, Math.floor(st?.balance ?? 0));
+  const min = st?.limits.min ?? 10, max = Math.min(st?.limits.max ?? MAX_GAME_BET, Math.max(min, Math.floor(st?.balance ?? 0)));
   const potential = game && phase === "active" ? game.potential : 0;
   const nextWin = game && phase === "active" && game.nextMultiplier ? Math.floor(game.bet * game.nextMultiplier * 100) / 100 : 0;
   const lvlColor: Record<Level, string> = { easy: "bg-[#22c55e] text-slate-950", normal: "bg-[#f59e0b] text-slate-950", hard: "bg-[#ef4444] text-white" };

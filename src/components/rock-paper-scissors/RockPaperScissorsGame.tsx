@@ -1,4 +1,5 @@
 "use client";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 
 import { notifyGameResult } from "@/lib/gameResultNotice";
 import { gameSfx } from "@/lib/gameSfx";
@@ -62,7 +63,7 @@ export default function RockPaperScissorsGame({ backHref }: { backHref?: string 
     return () => clearInterval(t);
   }, [rolling]);
 
-  const canPlay = !rolling && !settling && !pending && !error && bet > 0 && bet <= balance;
+  const canPlay = !rolling && !settling && !pending && !error && bet >= 10 && bet <= MAX_GAME_BET && bet <= balance;
 
   const play = useCallback(
     async (choice: Move) => {
@@ -237,7 +238,7 @@ export default function RockPaperScissorsGame({ backHref }: { backHref?: string 
                   disabled={rolling}
                   value={bet || ""}
                   placeholder="0"
-                  onChange={(e) => setBet(Math.min(Math.floor(balance), Math.max(0, Math.floor(Number(e.target.value)) || 0)))}
+                  onChange={(e) => setBet(Math.min(MAX_GAME_BET, Math.floor(balance), Math.max(0, Math.floor(Number(e.target.value)) || 0)))}
                   className="w-24 rounded-md border border-white/20 bg-black/40 px-2 py-0.5 text-right text-amber-300 outline-none"
                 />
               </span>
@@ -272,14 +273,14 @@ export default function RockPaperScissorsGame({ backHref }: { backHref?: string 
                 </button>
                 <button
                   disabled={rolling}
-                  onClick={() => setBet((b) => Math.min(balance, b * 2))}
+                  onClick={() => setBet((b) => Math.min(MAX_GAME_BET, balance, b * 2))}
                   className="rounded-lg border border-indigo-500/40 bg-indigo-600/30 hover:bg-indigo-600/50 px-2 py-1 text-[11px] font-bold text-indigo-200 transition-all active:scale-95 disabled:opacity-40"
                 >
                   2×
                 </button>
                 <button
                   disabled={rolling}
-                  onClick={() => setBet(Math.floor(balance))}
+                  onClick={() => setBet(Math.min(MAX_GAME_BET, Math.floor(balance)))}
                   className="rounded-lg border border-amber-500/50 bg-amber-600/30 hover:bg-amber-600/50 px-2.5 py-1 text-[11px] font-bold text-amber-200 transition-all active:scale-95 disabled:opacity-40"
                 >
                   MAX

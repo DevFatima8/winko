@@ -531,7 +531,7 @@ export function CrashGoal() {
 
   const setSlotAmount = useCallback(
     (index: number, value: number) => {
-      if (slotsRef.current[index].placed) return;
+      if (slotsRef.current[index].placed || pools[index].busy) return;
       syncSlots((list) => {
         const copy = [...list];
         copy[index] = { ...copy[index], amount: value };

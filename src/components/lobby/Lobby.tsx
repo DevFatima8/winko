@@ -8,6 +8,7 @@ import { InstallApp } from "../../components/InstallApp";
 import { useAppInstalled } from "@/lib/appInstall";
 import { rememberGameReturn } from "@/lib/gameNavigation";
 import { OpenSupportButton } from "../../components/OpenSupport";
+import { SupportUnreadDot } from "../../components/SupportUnread";
 import { LanguageSwitch } from "../../components/LanguageSwitch";
 import { BrandLogo } from "../../components/BrandLogo";
 import { ThemeToggle } from "../../components/ThemeToggle";
@@ -165,7 +166,7 @@ function MoreMenu({ onClose, onNavigate, unclaimed }: { onClose: () => void; onN
   const items: It[] = [
     { label: "VIP", icon: MI("vip"), href: "/player/vip" },
     { label: "Invite", icon: MI("invite"), href: "/player/team" },
-    { label: "Support", icon: MI("support"), run: () => window.dispatchEvent(new CustomEvent("wx:open-support")) },
+    { label: "Support", icon: <span className="relative">{MI("support")}<SupportUnreadDot /></span>, run: () => window.dispatchEvent(new CustomEvent("wx:open-support")) },
     { label: "Event", icon: MI("event"), href: "/events" },
     { label: "Reward Feedback", icon: MI("reward_feedback"), href: "/feedback" },
     { label: "Security Center", icon: MI("security_center"), href: "/player/profile/security" },

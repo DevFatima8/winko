@@ -3,6 +3,7 @@ import { LOCAL_GAMES_CONNECTED, LOCAL_GAMES_UNAVAILABLE } from "@/lib/gameAvaila
 
 import { spin } from "@/components/wheel-betting/lib/spin-engine";
 import { MIN_BET } from "@/components/wheel-betting/lib/wheel";
+import { gameBetError } from "@/lib/gameBetLimits";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,8 @@ export async function POST(request: Request) {
   if (bet < MIN_BET) {
     return NextResponse.json({ error: `Minimum bet is ${MIN_BET}.` }, { status: 400 });
   }
+  const limitError = gameBetError(bet);
+  if (limitError) return NextResponse.json({ error: limitError }, { status: 400 });
 
   const clientSeed = typeof body.clientSeed === "string" ? body.clientSeed : undefined;
   const result = spin(Math.round(bet * 100) / 100, clientSeed);

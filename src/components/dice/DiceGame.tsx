@@ -8,6 +8,7 @@ import { BET_PRESETS } from "@/lib/betPresets";
 import { notifyGameResult } from "@/lib/gameResultNotice";
 import {
   MIN_BET,
+  MAX_BET,
   START_BALANCE,
   clamp,
   emptyStats,
@@ -115,7 +116,7 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
   /* ---------- derived ---------- */
   const chance = winChanceFor(target, dir);
   const payout = payoutFor(chance);
-  const betNum = clamp(round2(parseFloat(betStr) || 0), 0, 99_999_999);
+  const betNum = Math.max(0, round2(parseFloat(betStr) || 0));
   const winAmt = round2(betNum * (payout - 1));
   const outOfChips = balance < MIN_BET;
   const marker = display !== null ? display : last ? last.value : null;
@@ -155,9 +156,9 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
   const doRoll = useCallback(async () => {
     if (rollingRef.current || pending || error) return;
     const d = dataRef.current;
-    const b = clamp(round2(parseFloat(d.betStr) || 0), 0, 99_999_999);
-    if (b < MIN_BET) {
-      toast(`Minimum bet is Rs. ${MIN_BET.toFixed(2)}`, "error");
+    const b = Math.max(0, round2(parseFloat(d.betStr) || 0));
+    if (b < MIN_BET || b > MAX_BET) {
+      toast(`Bet must be between Rs. ${MIN_BET.toFixed(2)} and Rs. ${MAX_BET.toLocaleString()}`, "error");
       sfx.deny();
       if (autoRef.current.on) setAuto((a) => ({ ...a, on: false }));
       return;
@@ -313,7 +314,7 @@ export default function DiceGame({ backHref = "/player" }: { backHref?: string }
   const applyBet = (fn: (n: number) => number) => {
     setBetStr((s) => {
       const cur = parseFloat(s) || 0;
-      return round2(clamp(fn(cur), 0, 99_999_999)).toFixed(2);
+      return round2(clamp(fn(cur), MIN_BET, MAX_BET)).toFixed(2);
     });
     sfx.click();
   };

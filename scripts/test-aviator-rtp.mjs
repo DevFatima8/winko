@@ -19,9 +19,10 @@ function load(file, imports = {}) {
   return loaded.exports;
 }
 const rules = load("src\\lib\\aviatorRules.ts");
+const gameBetLimits = load("src\\lib\\gameBetLimits.ts");
 const flight = load("src\\lib\\aviator.ts", {
   "node:crypto": crypto, "./mongo": {}, "@/models": {}, "./gameAccess": {}, "./aviatorRules": rules,
-  "./multiplayer-store": {}, "./dailyPoolRules": {}, "./dailyPool": {},
+  "./multiplayer-store": {}, "./dailyPoolRules": {}, "./dailyPool": {}, "./gameBetLimits": gameBetLimits,
 });
 const targets = [1.01, 1.2, 1.5, 1.98, 1.99, 2, 2.01, 3, 5, 10, 20, 50, 99.98];
 const D = 2n ** 52n;
@@ -225,6 +226,7 @@ test("lifetime statistics select only settled model wagers under the game lock a
       Game: { findOneAndUpdate: () => ({ lean: async () => ({ _id: "flight-game" }) }) },
     },
     "./dailyPoolRules": { dailyPoolLock: table => `lock:${table}` },
+    "./gameBetLimits": gameBetLimits,
     "./dailyPool": { allRows: async (_tx, _collection, query) => { filters = query; return rows.filter(row => row.flightModel === query.flightModel); } },
     "./multiplayer-store": { mysqlMultiplayerStore: { transact: async (room, fn) => { lock = room; return fn({}); } } },
   });

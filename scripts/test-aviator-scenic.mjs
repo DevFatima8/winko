@@ -17,6 +17,7 @@ function load(file, imports) {
   return loaded.exports;
 }
 const flightRules = load("src\\lib\\aviatorRules.ts");
+const gameBetLimits = { gameBetError: () => null, MAX_GAME_BET: 100000 };
 
 test("Aviator X renders only two independent betting panels even when the server supports three slots", () => {
   const state = {
@@ -39,7 +40,8 @@ test("Aviator X renders only two independent betting panels even when the server
       useEffect() {},
     },
     "react/jsx-runtime": jsx, "next/link": { default: "a" },
-    "@/lib/client": {}, "@/lib/gameAudio": {}, "@/lib/gameSfx": {},
+    "@/lib/client": {}, "@/lib/gameAudio": {}, "@/lib/gameSfx": {}, "@/lib/gameBetLimits": gameBetLimits,
+    "@/lib/aviatorFlight": { AVIATOR_STATE_POLL_MS: 1500 },
     "@/lib/walletSync": {}, "@/lib/betPresets": { BET_PRESETS: [10, 20, 50, 100, 200] },
     "@/lib/aviatorRules": flightRules, "./AviatorScenicView": {}, "@/lib/aviatorScenery": {},
   });
@@ -64,14 +66,14 @@ function scene(overrides = {}, presets = [10, 15, 20, 25, 50]) {
   const values = [], calls = [];
   let cursor = 0, tree;
   const { AviatorScenicView } = load("src\\components\\AviatorScenicView.tsx", {
-    react: { useEffect() {}, useState(initial) { const index = cursor++; if (!(index in values)) values[index] = initial; return [values[index], value => { values[index] = value; }]; } },
+    react: { useEffect() {}, useState(initial) { const index = cursor++; if (!(index in values)) values[index] = initial; return [values[index], value => { values[index] = typeof value === "function" ? value(values[index]) : value; }]; } },
     "react/jsx-runtime": jsx, "next/link": { default: "a" },
     "lucide-react": Object.fromEntries(["ArrowLeft", "House", "Menu", "Signal", "Volume2", "VolumeX", "X"].map(name => [name, name])),
     "@/lib/betPresets": { BET_PRESETS: presets },
     "@/lib/aviatorRules": flightRules,
   });
   const state = {
-    config: { slots: 2, minBet: 0.01, maxBet: 50000, waitMs: 10000 }, balance: 1000,
+    config: { slots: 2, minBet: 10, maxBet: 100000, waitMs: 10000 }, balance: 1000,
     round: { id: 42 }, history: [{ id: 41, crashPoint: 2.5 }], totals: { count: 0, amount: 0, cashed: 0 },
     bets: [], myBets: [], queued: [], myHistory: [], top: [], ...overrides.state,
   };
@@ -134,6 +136,45 @@ test("Running, pending and queued buttons delegate only to the existing slot han
   assert.deepEqual(queued.calls, [["onCancel", 0]]);
 });
 
+test("Aviator keeps the Bet and Cash Out labels visible while safely disabling an in-flight action", () => {
+  const placing = scene({ panels: [{ amount: "100", busy: true }] });
+  const bet = placing.find(node => node.props?.["data-action"] === "bet");
+  assert.equal(bet.props.disabled, true);
+  assert.equal(bet.props.children[0], "Bet");
+
+  const cashingOut = scene({
+    phase: "running",
+    state: { myBets: [{ slot: 0, bet: 100, outcome: "pending" }] },
+    panels: [{ amount: "100", busy: true }],
+  });
+  const cashout = cashingOut.find(node => node.props?.["data-action"] === "cashout");
+  assert.equal(cashout.props.disabled, true);
+  assert.equal(cashout.props.children[0], "Cash Out");
+  assert.doesNotMatch(cashingOut.text(), /Confirming/);
+});
+
+test("Aviator freezes the click-time estimate until cashout settles and resumes it after a failure", () => {
+  const s = scene({
+    phase: "running", multiplier: 2,
+    state: { myBets: [{ slot: 0, bet: 100, outcome: "pending", flightModel: flightRules.AVIATOR_MODEL }] },
+    panels: [{ amount: "100", busy: false }],
+  });
+  s.find(node => node.props?.["data-action"] === "cashout").props.onClick();
+  assert.deepEqual(s.calls, [["onCashout", 0]]);
+  s.props.panels[0].busy = true;
+  s.props.multiplier = 3;
+  s.render();
+  assert.match(s.text(), /Est\.\s+Rs\.\s+200\.00/);
+  assert.equal(s.find(node => node.props?.["data-action"] === "cashout").props.disabled, true);
+  s.props.panels[0].busy = false;
+  s.render();
+  assert.match(s.text(), /Rs\.\s+300\.00/);
+  assert.doesNotMatch(s.text(), /Est\./);
+  s.props.state.myBets[0] = { slot: 0, bet: 100, outcome: "win", win: 210 };
+  s.render();
+  assert.match(s.text(), /Paid: Rs\.\s+210\.00/);
+});
+
 test("Aviator shows the next countdown while a full crash-state refresh is late, without enabling cashout", () => {
   const s = scene({ phase: "crashed", countdown: 4.8, multiplier: 3.3 });
   assert.match(s.text(), /NEXT ROUND.*Starts in\s+5\s+s/);
@@ -152,11 +193,11 @@ test("Aviator shows all five shared amounts directly and uses profile updates wi
   assert.deepEqual(quickButtons().map(node => node.props.children), [...presets, ...presets]);
   quickButtons()[1].props.onClick();
   assert.deepEqual(s.calls.at(-1), ["onPanelChange", 0, { amount: "15.00" }]);
-  presets.splice(0, 5, 0.01, 5, 30, 100, 50000);
+  presets.splice(0, 5, 10, 20, 30, 100, 100000);
   s.render();
   assert.deepEqual(quickButtons().map(node => node.props.children), [...presets, ...presets]);
   quickButtons()[0].props.onClick();
-  assert.deepEqual(s.calls.at(-1), ["onPanelChange", 0, { amount: "0.01" }]);
+  assert.deepEqual(s.calls.at(-1), ["onPanelChange", 0, { amount: "10.00" }]);
   s.props.state.queued = [{ slot: 0, bet: 15 }];
   s.render();
   assert.ok(quickButtons().slice(0, 5).every(node => node.props.disabled));
@@ -169,7 +210,7 @@ test("Amount bounds, auto controls, busy state and histories remain available", 
   s.props.panels[0].amount = "999999";
   s.render();
   s.find(node => node.props?.["aria-label"] === "Bet amount 1").props.onBlur();
-  assert.deepEqual(s.calls.slice(0, 2), [["onPanelChange", 0, { amount: "100.00" }], ["onPanelChange", 0, { amount: "999999.00" }]]);
+  assert.deepEqual(s.calls.slice(0, 2), [["onPanelChange", 0, { amount: "100.00" }], ["onPanelChange", 0, { amount: "100000.00" }]]);
   s.find(node => node.props?.["aria-label"] === "Auto Bet 1").props.onChange({ target: { checked: true } });
   assert.deepEqual(s.calls.at(-1), ["onPanelChange", 0, { autoBet: true }]);
   s.props.panels[0].busy = true;

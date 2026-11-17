@@ -943,7 +943,7 @@ export const CANNON_STYLES = [
   { main: "#c25cff", dark: "#5a1aa8", glow: "#e6b0ff" },
 ];
 
-export function drawCannon(ctx: Ctx, angle: number, level: number, recoil: number, t: number) {
+export function drawCannon(ctx: Ctx, angle: number, level: number, recoil: number, t: number, cannon = CANNON) {
   const st = CANNON_STYLES[Math.min(level, CANNON_STYLES.length - 1)];
   const barrels = level >= 6 ? 3 : level >= 4 ? 2 : 1;
   const offsets = barrels === 1 ? [0] : barrels === 2 ? [-10, 10] : [-16, 0, 16];
@@ -951,7 +951,7 @@ export function drawCannon(ctx: Ctx, angle: number, level: number, recoil: numbe
   const len = 66 + level * 4;
 
   ctx.save();
-  ctx.translate(CANNON.x, CANNON.y);
+  ctx.translate(cannon.x, cannon.y);
 
   // glow under turret
   const gg = ctx.createRadialGradient(0, 0, 10, 0, 0, 100);

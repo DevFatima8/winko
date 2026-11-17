@@ -1,4 +1,5 @@
 "use client";
+import { gameBetError, MAX_GAME_BET } from "@/lib/gameBetLimits";
 
 import Link from "next/link";
 import { localApi } from "@/lib/client";
@@ -7,6 +8,7 @@ import { gameSfx } from "@/lib/gameSfx";
 import { broadcastBalanceUpdate } from "@/lib/walletSync";
 import { BET_PRESETS } from "@/lib/betPresets";
 import { aviatorPayout, validAutoCashout } from "@/lib/aviatorRules";
+import { AVIATOR_STATE_POLL_MS } from "@/lib/aviatorFlight";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AviatorScenicView } from "./AviatorScenicView";
 import { disposeAviatorScenery, drawAviatorScenery } from "@/lib/aviatorScenery";
@@ -96,6 +98,7 @@ const MAX_RATE = 3.5;
 const MAX_BACKLOG_MS = 3000;
 /** Pause between lightweight flight reads (one small SELECT each). */
 const FLIGHT_POLL_MS = 150;
+export
 /** Small reads allowed in flight at once, so one slow reply does not starve the counter. */
 const MAX_FLIGHT_READS = 3;
 const CRASH_VISIBLE_MS = 1000;
@@ -356,7 +359,7 @@ export function AviatorGame({
   useEffect(() => {
     refreshMounted.current = true;
     refresh();
-    const id = setInterval(refresh, 600);
+    const id = setInterval(refresh, AVIATOR_STATE_POLL_MS);
     return () => {
       refreshMounted.current = false;
       clearInterval(id);
@@ -452,6 +455,11 @@ export function AviatorGame({
         showToast("err", `Minimum bet is Rs. ${minBet}. Please enter at least ${minBet}.`);
         return;
       }
+      const limitError = gameBetError(amount);
+      if (limitError) {
+        showToast("err", limitError);
+        return;
+      }
       const autoCashout = p.autoCash ? Number(p.autoCashAt) : undefined;
       if (autoCashout !== undefined && !validAutoCashout(autoCashout)) {
         showToast("err", "Auto cashout must be 1.01x to 99.98x, with at most two decimal places.");
@@ -470,7 +478,10 @@ export function AviatorGame({
           body: JSON.stringify({ table, amount, slot: i, roundNo, queueIfClosed: table === "aviator", autoCashout }),
         });
         if (!j) return;
-        if (j.error) showToast("err", j.error);
+        if (j.error) {
+          showToast("err", j.error);
+          void refresh();
+        }
         else {
           if (stRef.current) {
             // A read started before this committed receipt must not erase the confirmed reservation.
@@ -482,7 +493,6 @@ export function AviatorGame({
           }
           showToast("ok", j.queued ? "Bet placed for your next round." : "Bet placed. Flight starts after the countdown.");
         }
-        void refresh().then(() => refresh());
       } finally {
         pendingBets.current.delete(i);
         setPanel(i, { busy: false });
@@ -535,6 +545,7 @@ export function AviatorGame({
         if (!j) return;
         if (j.error) {
           showToast("err", j.error);
+          void refresh();
         } else {
           if (j.bet && stRef.current) {
             acceptedRefresh.current = ++refreshSequence.current;
@@ -553,7 +564,6 @@ export function AviatorGame({
             })
           );
         }
-        void refresh().then(() => refresh());
       } finally {
         pendingBets.current.delete(i);
         setPanel(i, { busy: false });
@@ -1250,7 +1260,7 @@ export function AviatorGame({
                   : mine?.poolVersion ? Math.round(bet * mult * 100) / 100 : Math.floor((bet + netWin) * 100) / 100;
                 const setAmt = (v: number) =>
                   setPanel(i, {
-                    amount: Math.max(state.config.minBet, v).toFixed(2),
+                    amount: Math.min(MAX_GAME_BET, Math.max(state.config.minBet, v)).toFixed(2),
                   });
 
                 let mode: "bet" | "cancel" | "cashout" | "queued" | "next";

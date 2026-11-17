@@ -1,4 +1,5 @@
 "use client";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 
 import { localApi } from "@/lib/client";
 import { playGameSound, speakGameVoice } from "@/lib/gameAudio";
@@ -200,7 +201,7 @@ export function PlinkoGame({ backHref = "/player" }: { backHref?: string }) {
   }, [auto]);
 
   const stopAuto = () => { autoRef.current.on = false; setAuto(false); setAutoLeft(0); };
-  const min = st?.limits.min ?? 10, max = Math.max(min, Math.floor(st?.balance ?? 0));
+  const min = st?.limits.min ?? 10, max = Math.min(st?.limits.max ?? MAX_GAME_BET, Math.max(min, Math.floor(st?.balance ?? 0)));
   const table = st?.tables[risk][rows] ?? [];
   const locked = auto || inflight > 0;
 
@@ -281,7 +282,7 @@ export function PlinkoGame({ backHref = "/player" }: { backHref?: string }) {
 
           <div className="rounded-md bg-[#0f212e] p-2 text-[10px] text-slate-400">
             <div className="flex justify-between"><span>{st?.dailyPoolEnabled ? "Max claim weight" : "Max payout"}</span><b className="text-white">{table.length ? fmtMult(Math.max(...table)) : "-"}</b></div>
-            <p className="mt-2 text-[10px] text-slate-400">13 buckets with one center 0x and 0.7x on either side. Below 1x returns less than your stake. Maximum multiplier: 1.8x. The configured win cycle is unchanged.</p>
+            <p className="mt-2 text-[10px] text-slate-400">13 buckets with one center 0x. Displayed multipliers are gross returns including stake; payouts deduct 2%. Independent random drops target 80% net RTP (20% total house edge). Actual daily returns vary; no win is guaranteed. Risk settings use the same odds.</p>
             {st?.dailyPoolEnabled && <p className="mt-1 text-[10px] text-amber-200">daily pool · Multipliers are provisional claims, not immediate payouts.</p>}
           </div>
         </aside>

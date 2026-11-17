@@ -1,12 +1,16 @@
 "use client";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from "react";
+import Image from "next/image";
 import { useGameBalance, usePoolLifecycle, usePoolRoundState } from "@/lib/walletSync";
 import { BET_PRESETS } from "@/lib/betPresets";
 import BetAmountInput from "@/components/BetAmountInput";
+import { useDb, useSession } from "@/lib/useDb";
+import { avatarSrc, isAvatar } from "@/lib/avatars";
 import { AnimatePresence, motion } from "framer-motion";
 import type { Card, Group } from "./engine";
-import { handValue, meldType, RANK_LABEL, solve, buildDeck, shuffle } from "./engine";
+import { handValue, meldType, RANK_LABEL, SUITS, SUIT_SYMBOL, solve, buildDeck, shuffle } from "./engine";
 import { useIdleCardRound } from "../teen-patti/useIdleCardRound";
 import { cardMove, restoreCardRound } from "@/lib/interactiveCardClient";
 import { PlayingCard } from "./PlayingCard";
@@ -22,7 +26,6 @@ interface Stats {
   streak: number;
 }
 
-const CHIP_OPTIONS: number[] = [...BET_PRESETS];
 const CHIP_COLORS: Partial<Record<number, string>> = {
   10: "#d9d1b8",
   20: "#d9d1b8",
@@ -42,6 +45,11 @@ const CHIP_LABEL: Partial<Record<number, string>> = {
 const MIN_BET = 10;
 const TOP_UP = 10000;
 const MAX_HINTS = 3;
+const ENTRY_CARDS: Card[] = [
+  { id: "14S", rank: 14, suit: "S" },
+  { id: "13H", rank: 13, suit: "H" },
+  { id: "12S", rank: 12, suit: "S" },
+];
 
 // ── Presentational Chip ──────────────────────────────────────────
 
@@ -159,6 +167,25 @@ function groupLabel(g: Group): string {
   return `RUN · ${RANK_LABEL[rs[0]]}–${RANK_LABEL[rs[rs.length - 1]]}`;
 }
 
+function Dealer({ dealing }: { dealing: boolean }) {
+  return <div className={`rummy-dealer ${dealing ? "rummy-dealing" : ""}`} role="img" aria-label={dealing ? "Dealer distributing 13 cards" : "Table dealer"}>
+    <svg viewBox="0 0 120 130" aria-hidden="true">
+      <path d="M29 70Q11 4 58 3Q106 0 94 79Z" fill="#40251f" />
+      <path d="M48 53V74H72V53" fill="#cc926e" />
+      <ellipse cx="60" cy="33" rx="22" ry="28" fill="#efbb94" />
+      <path d="M34 37Q31 3 60 4Q88 4 85 34Q66 28 57 13Q47 31 34 37" fill="#4a2a23" />
+      <path d="M48 34h5m15 0h5" stroke="#382325" strokeWidth="2" strokeLinecap="round" />
+      <path d="M54 46q6 5 12 0" fill="none" stroke="#a9444d" strokeWidth="2" />
+      <path d="M39 64L22 111L44 123L76 123L98 111L81 64L68 76L51 75Z" fill="#14101d" />
+      <path d="M39 68L20 105Q18 114 28 115L58 109M81 68L100 105Q102 114 92 115L62 109" fill="none" stroke="#efbb94" strokeWidth="12" strokeLinecap="round" />
+      <path d="M48 64l12 6l12-6v15l-12-6l-12 6Z" fill="#faf2db" />
+      <rect x="49" y="101" width="22" height="28" rx="2" fill="#e1e1ce" transform="rotate(-12 60 115)" />
+      <rect x="53" y="104" width="14" height="20" rx="1" fill="#295574" transform="rotate(-12 60 115)" />
+    </svg>
+    {dealing && <><i className="rummy-dealt-card rummy-dealt-left" /><i className="rummy-dealt-card rummy-dealt-right" /><i className="rummy-dealt-card rummy-dealt-you" /></>}
+  </div>;
+}
+
 // ── Main Rummy Component ─────────────────────────────────────────
 
 export default function RummyGame() {
@@ -166,6 +193,19 @@ export default function RummyGame() {
   const [muted, setMuted] = usePersistentState("rr_muted", false);
   const [balance] = useGameBalance("rummy", TOP_UP);
   const pool = usePoolLifecycle("rummy");
+  const { user: player } = useSession();
+  const { data: lobby, error: lobbyError, reload: reloadLobby } = useDb(async () => {
+    const response = await fetch("/api/player/rummy", { cache: "no-store" });
+    const reply = await response.json();
+    if (!response.ok) throw new Error(reply.error || "Rummy levels could not be loaded.");
+    if (!Number.isInteger(reply.unlockedLevel) || reply.unlockedLevel < 1 || reply.unlockedLevel > 5) throw new Error("Invalid Rummy level progress.");
+    return reply as { unlockedLevel: number };
+  });
+  const [level, setLevel] = useState(1);
+  const [dealing, setDealing] = useState(false);
+  const [turn, setTurn] = useState({ seat: 0, until: 0 });
+  const [seconds, setSeconds] = useState(30);
+  const [botMoves, setBotMoves] = useState([0, 0]);
   const [bet, setBet] = usePersistentState("rr_bet", 500);
   const [stats, setStats] = usePersistentState<Stats>("rr_stats", {
     wins: 0,
@@ -186,12 +226,19 @@ export default function RummyGame() {
   const [toast, setToast] = useState<string | null>(null);
   const [shake, setShake] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [drag, setDrag] = useState<{ id: string; x: number; y: number } | null>(null);
 
   const lockRef = useRef(false);
+  const meldZone = useRef<HTMLDivElement>(null);
+  const pointerDrag = useRef<{ id: string; x: number; y: number; moved: boolean } | null>(null);
+  const suppressClick = useRef(false);
   const settledRef = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const turnAction = useRef<() => void>(() => {});
+  const dealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const idleRound = useIdleCardRound({
-    idle: wagerPhase === "bet", finished: wagerPhase === "result", busy: pool.busy,
+    idle: wagerPhase === "bet", finished: wagerPhase === "result", busy: pool.busy, paused: true,
     frames: () => {
       const cards = shuffle(buildDeck()).slice(0, 13);
       return Array.from({ length: 14 }, (_, count) => ({ at: count * 45, view: cards.slice(0, count) }));
@@ -210,6 +257,27 @@ export default function RummyGame() {
   const groups = idleRound.watching ? [] : wagerGroups;
 
   useEffect(() => setReady(true), []);
+  useEffect(() => () => {
+    if (dealTimer.current) clearTimeout(dealTimer.current);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+  }, []);
+  useEffect(() => {
+    if (wagerPhase !== "play" || dealing || !turn.until) return;
+    const timer = setInterval(() => {
+      const remaining = Math.max(0, Math.ceil((turn.until - Date.now()) / 1000));
+      setSeconds(remaining);
+      if (remaining > 0) return;
+      clearInterval(timer);
+      if (turn.seat === 0) turnAction.current();
+      else {
+        setBotMoves(previous => previous.map((moves, index) => index === turn.seat - 1 ? moves + 1 : moves));
+        const seat = (turn.seat + 1) % 3;
+        setSeconds(seat === 0 ? 30 : 2);
+        setTurn({ seat, until: Date.now() + (seat === 0 ? 30000 : 1500) });
+      }
+    }, 100);
+    return () => clearInterval(timer);
+  }, [wagerPhase, dealing, turn]);
 
   const placedIds = useMemo(() => {
     const s = new Set<string>();
@@ -218,7 +286,12 @@ export default function RummyGame() {
   }, [groups]);
 
   const freeCards = useMemo(() => hand.filter((c) => !placedIds.has(c.id)), [hand, placedIds]);
-  const canDeal = balance >= bet && balance > 0;
+  const canDeal = !!lobby && balance >= bet && bet >= MIN_BET && bet <= MAX_GAME_BET && !actionBusy;
+  const playerTurn = !dealing && turn.seat === 0;
+  const endPlayerTurn = useCallback(() => {
+    setSeconds(2);
+    setTurn({ seat: 1, until: Date.now() + 1500 });
+  }, []);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -226,39 +299,55 @@ export default function RummyGame() {
     toastTimer.current = setTimeout(() => setToast(null), 2300);
   };
 
-  const startDeal = async () => {
-    if (wagerPhase !== "bet" || balance < bet || !idleRound.claim()) return;
-    if (!await pool.start(bet)) { idleRound.release(); return; }
-    const dealt = await cardMove<{ hand: Card[] }>(pool, "deal");
-    if (!dealt) return;
-    const d = { hand: dealt.view.hand };
-    settledRef.current = false;
-    lockRef.current = true;
-    setHand(d.hand);
-    setGroups([]);
-    setSelected([]);
-    setHintIds([]);
-    setHintsLeft(MAX_HINTS);
-    setResult(null);
-    setPhase("play");
-    setDealKey((k) => k + 1);
-    sfx.deal();
-    setTimeout(() => {
-      lockRef.current = false;
-    }, 13 * 45 + 700);
+  const startDeal = async (stake = bet, chosenLevel = level) => {
+    if (!["bet", "result"].includes(wagerPhase) || actionBusy || pool.busy || !lobby ||
+        chosenLevel > lobby.unlockedLevel || stake < MIN_BET || stake > MAX_GAME_BET || balance < stake ||
+        wagerPhase === "bet" && !idleRound.claim()) return;
+    setActionBusy(true);
+    try {
+      if (!await pool.start(stake)) { idleRound.release(); return; }
+      const dealt = await cardMove<{ hand: Card[] }>(pool, "deal", { level: chosenLevel });
+      if (!dealt) return;
+      setBet(stake);
+      setLevel(chosenLevel);
+      setDealing(true);
+      setBotMoves([0, 0]);
+      const d = { hand: dealt.view.hand };
+      settledRef.current = false;
+      lockRef.current = true;
+      setHand(d.hand);
+      setGroups([]);
+      setSelected([]);
+      setHintIds([]);
+      setHintsLeft(MAX_HINTS);
+      setResult(null);
+      setPhase("play");
+      setDealKey((k) => k + 1);
+      sfx.deal();
+      dealTimer.current = setTimeout(() => {
+        lockRef.current = false;
+        setDealing(false);
+        setSeconds(30);
+        setTurn({ seat: 0, until: Date.now() + 30000 });
+      }, 13 * 45 + 700);
+    } finally {
+      setActionBusy(false);
+    }
   };
 
   useEffect(() => {
     let disposed = false;
-    void restoreCardRound<{ hand: Card[] }>("rummy", pool).then(async restored => {
+    void restoreCardRound<{ hand: Card[]; level?: number }>("rummy", pool).then(async restored => {
       if (disposed || !restored) return;
-      const round = restored.phase === "accepted" ? await cardMove<{ hand: Card[] }>(pool, "deal") : restored;
+      const round = restored.phase === "accepted" ? await cardMove<{ hand: Card[]; level?: number }>(pool, "deal") : restored;
       if (disposed || !round || round.phase !== "play") return;
       settledRef.current = false;
       lockRef.current = false;
       setHand(round.view.hand);
       setGroups([]);
       setPhase("play");
+      setLevel(round.view.level ?? 1);
+      setTurn({ seat: 0, until: Date.now() + 30000 });
     });
     return () => { disposed = true; };
     // Restore once on mount; the wallet lifecycle replays any unconfirmed move first.
@@ -271,6 +360,7 @@ export default function RummyGame() {
     const reply = await cardMove<{ win: boolean }>(pool, win ? "declare" : "forfeit",
       win ? { groups: melds.map((g) => g.cards.map((c) => c.id)) } : undefined);
     if (!reply) { settledRef.current = false; lockRef.current = false; return; }
+    reloadLobby();
     win = reply.view.win;
     settledRef.current = true;
     lockRef.current = true;
@@ -298,7 +388,7 @@ export default function RummyGame() {
   };
 
   const selectCard = (id: string) => {
-    if (idleRound.watching || lockRef.current) return;
+    if (idleRound.watching || lockRef.current || !playerTurn) return;
     if (selected.includes(id)) {
       setSelected((s) => s.filter((x) => x !== id));
       sfx.unselect();
@@ -308,9 +398,9 @@ export default function RummyGame() {
     }
   };
 
-  const addMeld = () => {
-    if (idleRound.watching || lockRef.current) return;
-    const cards = hand.filter((c) => selected.includes(c.id));
+  const addMeld = (ids = selected) => {
+    if (idleRound.watching || lockRef.current || !playerTurn) return;
+    const cards = freeCards.filter((c) => ids.includes(c.id));
     if (cards.length < 3) {
       sfx.invalid();
       showToast("Select 3 or more cards first");
@@ -334,11 +424,11 @@ export default function RummyGame() {
       lockRef.current = true;
       const melds = [...groups, { type: t, cards }];
       setTimeout(() => finish(true, "All 13 cards arranged — clean rummy!", melds), 620);
-    }
+    } else endPlayerTurn();
   };
 
   const autoArrange = () => {
-    if (idleRound.watching || lockRef.current) return;
+    if (idleRound.watching || lockRef.current || !playerTurn) return;
     const sol = solve(hand);
     if (!sol) {
       sfx.invalid();
@@ -359,7 +449,7 @@ export default function RummyGame() {
   };
 
   const useHint = () => {
-    if (idleRound.watching || lockRef.current || hintsLeft <= 0) return;
+    if (idleRound.watching || lockRef.current || !playerTurn || hintsLeft <= 0) return;
     const sol = solve(freeCards);
     if (!sol) {
       sfx.invalid();
@@ -372,7 +462,7 @@ export default function RummyGame() {
   };
 
   const takeBack = (cardId: string) => {
-    if (idleRound.watching || lockRef.current) return;
+    if (idleRound.watching || lockRef.current || !playerTurn) return;
     setGroups((gs) => gs.filter((g) => !g.cards.some((c) => c.id === cardId)));
     setHintIds([]);
     sfx.tap();
@@ -383,9 +473,56 @@ export default function RummyGame() {
     finish(false, "You folded the hand");
   };
 
-  const clampBet = (v: number) => Math.max(MIN_BET, Math.floor(v / 50) * 50);
+  const sortHand = () => {
+    if (idleRound.watching || lockRef.current || !playerTurn || actionBusy) return;
+    setHand([...wagerHand].sort((a, b) => SUITS.indexOf(a.suit) - SUITS.indexOf(b.suit) || a.rank - b.rank));
+    setSelected([]);
+    sfx.tap();
+  };
+
+  const beginDrag = (event: PointerEvent<HTMLButtonElement>, id: string) => {
+    if (idleRound.watching || lockRef.current || !playerTurn || phase !== "play") return;
+    suppressClick.current = false;
+    pointerDrag.current = { id, x: event.clientX, y: event.clientY, moved: false };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const moveDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    const start = pointerDrag.current;
+    if (!start) return;
+    const x = event.clientX - start.x, y = event.clientY - start.y;
+    if (Math.hypot(x, y) > 8) start.moved = true;
+    if (start.moved) setDrag({ id: start.id, x, y });
+  };
+
+  const endDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    const start = pointerDrag.current;
+    pointerDrag.current = null;
+    setDrag(null);
+    if (!start?.moved) return;
+    suppressClick.current = true;
+    const area = meldZone.current?.getBoundingClientRect();
+    if (area && event.clientX >= area.left && event.clientX <= area.right && event.clientY >= area.top && event.clientY <= area.bottom) {
+      addMeld(selected.includes(start.id) ? selected : [...selected, start.id]);
+    }
+  };
+
+  useEffect(() => {
+    turnAction.current = () => {
+      if (lockRef.current || settledRef.current) {
+        setTurn({ seat: 0, until: Date.now() + 30000 });
+        return;
+      }
+      const candidate = selected.length >= 3 && meldType(freeCards.filter(card => selected.includes(card.id)))
+        ? selected : solve(freeCards)?.[0]?.cards.map(card => card.id);
+      if (candidate) addMeld(candidate);
+      else { setSelected([]); endPlayerTurn(); }
+    };
+  });
+
+  const clampBet = (v: number) => Math.min(MAX_GAME_BET, Math.max(MIN_BET, Math.floor(v / 50) * 50));
   const changeBet = (fn: (b: number) => number) => {
-    if (wagerPhase !== "bet" || idleRound.watching) return;
+    if (wagerPhase !== "bet" || idleRound.watching || actionBusy) return;
     setBet((b) => clampBet(fn(b)));
     sfx.chip();
   };
@@ -393,7 +530,7 @@ export default function RummyGame() {
   const outOfChips = balance < MIN_BET;
 
   return (
-    <div className="rummy-wrapper rummy-felt-bg relative flex h-full max-w-5xl mx-auto w-full flex-col justify-between overflow-hidden rounded-2xl border border-[#e7bc55]/30 shadow-2xl select-none text-[#f7f1de] px-1 sm:px-2 py-0.5">
+    <div className="rummy-wrapper rummy-room relative flex h-full mx-auto w-full flex-col overflow-hidden rounded-2xl border border-[#e7bc55]/30 shadow-2xl select-none text-[#f7f1de] px-1 sm:px-2 py-0.5">
       {idleRound.countdown !== null && <p className="relative z-20 shrink-0 text-center text-xs text-amber-200" role="status">Next round in {idleRound.countdown}s</p>}
       <div className="rummy-table-ring pointer-events-none absolute inset-0 rounded-2xl" />
 
@@ -463,7 +600,7 @@ export default function RummyGame() {
       </header>
 
       {/* ── Body ── */}
-      <main className="relative z-10 flex min-h-0 flex-1 flex-col p-2">
+      <main className="rummy-main relative z-10 flex min-h-0 flex-1 flex-col">
         <AnimatePresence mode="wait">
           {phase === "bet" && (
             <motion.section
@@ -472,108 +609,64 @@ export default function RummyGame() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -18 }}
               transition={{ duration: 0.25 }}
-              className="flex h-full flex-1 min-h-0 flex-col items-center justify-around gap-2 px-2 py-2 sm:gap-4"
+              className="rummy-entry"
             >
-              <p className="font-display text-xs font-bold tracking-[0.3em] text-[#9fd0b8]/90 sm:text-sm">
-                CHOOSE BET &amp; DEAL
-              </p>
-
-              {outOfChips ? (
-                <div className="flex flex-col items-center gap-3 rounded-2xl border border-[#e7bc55]/30 bg-[#072b20]/80 px-6 py-4 text-center shadow-[0_18px_40px_rgba(0,0,0,0.45)]">
-                  <p className="text-base font-semibold text-[#f6e3a1]">You are out of chips</p>
+              <div className="rummy-entry-art" aria-hidden="true">
+                <div className="rummy-entry-fan">
+                  {ENTRY_CARDS.map((card, index) => (
+                    <div key={card.id} style={{ rotate: `${(index - 1) * 17}deg`, translate: `${(index - 1) * 46}px 0` }}>
+                      <PlayingCard card={card} />
+                    </div>
+                  ))}
                 </div>
-              ) : (
-                <>
-                  <div className="flex items-end gap-2.5 sm:gap-4 flex-wrap justify-center">
-                    {CHIP_OPTIONS.map((v) => (
-                      <Chip
-                        key={v}
-                        value={v}
-                        size={52}
-                        selected={bet === v}
-                        dim={v > balance}
-                        onClick={() => {
-                          setBet(v);
-                          sfx.chip();
-                        }}
-                      />
-                    ))}
-                    <BetAmountInput
-                      value={bet}
-                      onChange={(n) => setBet(Math.max(1, Math.floor(n)))}
-                      max={balance}
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-center">
+                <h2 className="font-display gold-text">Rummy</h2>
+                <p>13 CARDS · SETS &amp; RUNS</p>
+              </div>
+              <div className="rummy-entry-content">
+                <h2 className="rummy-section-title">CHOOSE YOUR TABLE</h2>
+                <div className="rummy-levels" aria-label="Bet amount tables">
+                  {BET_PRESETS.map((value, index) => (
                     <button
                       type="button"
-                      onClick={() => changeBet((b) => b - 100)}
-                      className="rummy-btn-dark h-8 w-8 sm:h-9 sm:w-9 rounded-full text-base font-bold"
-                      aria-label="Decrease bet"
+                      key={value}
+                      disabled={actionBusy || !lobby || index + 1 > lobby.unlockedLevel}
+                      aria-pressed={level === index + 1}
+                      aria-label={`Level ${index + 1}, stake Rs. ${value.toLocaleString()}${lobby && index + 1 > lobby.unlockedLevel ? ", locked" : ", join"}`}
+                      className={`rummy-level rummy-level-${index + 1}`}
+                      onClick={() => { sfx.chip(); void startDeal(value, index + 1); }}
                     >
-                      −
+                      <span className="rummy-level-title">LV{index + 1}</span>
+                      <span className="rummy-level-coin" aria-hidden="true">Rs</span>
+                      <span>Entry stake</span>
+                      <strong>Rs. {value.toLocaleString()}</strong>
+                      <span className="rummy-level-join">{lobby && index + 1 <= lobby.unlockedLevel ? "JOIN" : "LOCKED"}</span>
                     </button>
-                    <div className="min-w-[120px] rounded-xl border border-[#e7bc55]/40 bg-[#072b20]/80 px-4 py-1.5 text-center shadow-[0_6px_18px_rgba(0,0,0,0.4)]">
-                      <p className="text-[8px] font-semibold tracking-[0.25em] text-[#9fd0b8]/80">BET AMOUNT</p>
-                      <p className="font-display text-base sm:text-lg font-bold text-[#f6e3a1] tabular-nums">
-                        Rs. {bet.toLocaleString()}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => changeBet((b) => b + 100)}
-                      className="rummy-btn-dark h-8 w-8 sm:h-9 sm:w-9 rounded-full text-base font-bold"
-                      aria-label="Increase bet"
-                    >
-                      +
-                    </button>
-                    <div className="flex gap-1">
-                      <button
-                        type="button"
-                        onClick={() => changeBet((b) => b / 2)}
-                        className="rounded-lg border border-amber-400/40 bg-gradient-to-r from-amber-600/30 to-amber-500/30 px-2 py-1 text-xs font-bold text-amber-200 transition hover:brightness-110 active:scale-95"
-                      >
-                        ½
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => changeBet((b) => b * 2)}
-                        className="rounded-lg border border-indigo-400/40 bg-gradient-to-r from-indigo-600/30 to-blue-600/30 px-2 py-1 text-xs font-bold text-indigo-200 transition hover:brightness-110 active:scale-95"
-                      >
-                        2×
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setBet(clampBet(balance));
-                          sfx.chip();
-                        }}
-                        className="rounded-lg border border-emerald-400/40 bg-gradient-to-r from-emerald-600/30 to-teal-600/30 px-2 py-1 text-xs font-bold text-emerald-200 transition hover:brightness-110 active:scale-95"
-                      >
-                        MAX
-                      </button>
-                    </div>
+                  ))}
+                </div>
+                <div className="rummy-quick-amounts" aria-label="Bet amount presets">
+                  {BET_PRESETS.map(value => <button key={value} type="button" disabled={actionBusy} aria-pressed={bet === value} onClick={() => setBet(value)}>Rs. {value.toLocaleString()}</button>)}
+                </div>
+                <div className="rummy-entry-controls">
+                  <div className="rummy-custom-amount"><span className="rummy-stake-shortcuts">Custom stake
+                    <span>
+                      <button type="button" onClick={() => changeBet((value) => value - 50)} disabled={actionBusy} aria-label="Decrease bet by 50">-</button>
+                      <button type="button" onClick={() => changeBet((value) => value + 50)} disabled={actionBusy} aria-label="Increase bet by 50">+</button>
+                      <button type="button" onClick={() => changeBet(() => Math.min(balance, MAX_GAME_BET))} disabled={actionBusy}>MAX</button>
+                    </span>
+                  </span>
+                    <BetAmountInput value={bet} onChange={(value) => { if (!actionBusy) setBet(value); }} disabled={actionBusy} max={Math.min(balance, MAX_GAME_BET)} />
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={startDeal}
-                    disabled={!canDeal}
-                    className="rummy-btn-gold rounded-xl px-10 py-2.5 font-display text-lg font-black tracking-[0.16em] sm:px-14 sm:text-xl shadow-lg shadow-amber-500/25 active:scale-95 transition-transform"
-                  >
-                    DEAL 13 CARDS
+                  <button type="button" onClick={() => changeBet((value) => value / 2)} disabled={actionBusy} className="rummy-btn-dark rounded-lg px-3 py-2" aria-label="Halve bet">½</button>
+                  <button type="button" onClick={() => changeBet((value) => value * 2)} disabled={actionBusy} className="rummy-btn-dark rounded-lg px-3 py-2">2×</button>
+                  <button type="button" onClick={() => void startDeal()} disabled={!canDeal} className="rummy-btn-gold rummy-deal-button">
+                    {actionBusy ? "DEALING…" : "DEAL 13 CARDS"}
                   </button>
-
-                  <p className="max-w-md text-center text-[10px] sm:text-xs leading-relaxed text-[#9fd0b8]/70">
-                    Arrange all <span className="font-bold text-[#f6e3a1]">13 cards</span> into SETs &amp; RUNs to win <span className="font-bold text-[#f6e3a1]">2X Payout</span>.
-                  </p>
-                </>
-              )}
-
-              <p className="text-[9px] tracking-[0.16em] text-[#9fd0b8]/50">
-                WINS {stats.wins} · BEST WIN Rs. {stats.best.toLocaleString()}
-              </p>
+                </div>
+                <p className="rummy-entry-note" role="status">{outOfChips ? "Not enough balance. Minimum stake Rs. 10." : bet > balance ? "Not enough balance for this stake." : "Arrange all 13 cards into SETs & RUNs · Gross payout 2x, including stake"}</p>
+                <p className="rummy-entry-note">Win a level to unlock the next. Progress is saved to your account.</p>
+                {lobbyError && <p role="alert" className="rummy-entry-note">{lobbyError} <button type="button" onClick={reloadLobby}>Retry</button></p>}
+              </div>
+              <div className="rummy-player-strip"><span className="rummy-profile-avatar">{player && isAvatar(player.avatar) ? <Image src={avatarSrc(player.avatar)} alt="Your profile avatar" width={42} height={42} unoptimized /> : "Y"}</span><span>{player?.name ?? "YOU"}</span><strong>Rs. {ready ? balance.toLocaleString() : "—"}</strong><span>WINS {stats.wins} · BEST Rs. {stats.best.toLocaleString()}</span></div>
             </motion.section>
           )}
 
@@ -583,27 +676,25 @@ export default function RummyGame() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex h-full min-h-0 flex-1 flex-col justify-between py-1 overflow-y-auto"
+              className="rummy-table-view"
             >
-              {/* top strip */}
-              <div className="flex items-center justify-center gap-1.5 px-2 pt-0.5 sm:gap-3 flex-wrap shrink-0">
-                <span className="rounded-full border border-[#e7bc55]/40 bg-[#072b20]/80 px-3 py-0.5 text-xs font-bold tracking-[0.12em] text-[#f6e3a1]">
-                  BET Rs. {bet.toLocaleString()}
-                </span>
-                <span className="rounded-full border border-[#5aa986]/30 bg-[#072b20]/60 px-3 py-0.5 text-xs font-semibold tracking-[0.12em] text-[#9fd0b8]">
-                  HAND {handValue(hand)} PTS
-                </span>
-                <button
-                  type="button"
-                  onClick={forfeit}
-                  className="rounded-full border border-rose-500/50 bg-gradient-to-r from-rose-950/70 to-red-950/70 px-3 py-0.5 text-xs font-bold tracking-[0.12em] text-rose-300 transition hover:brightness-110 active:scale-95"
-                >
-                  FORFEIT
-                </button>
+              <div className="rummy-table-toolbar">
+                <span>BET <strong>Rs. {bet.toLocaleString()}</strong></span>
+                <span>LV{level} · {phase === "result" ? "HAND COMPLETE" : dealing ? "DEALING" : turn.seat === 0 ? `YOUR TURN · ${seconds}s` : "COMPUTER TURN"}</span>
+                <button type="button" onClick={forfeit} disabled={idleRound.watching || phase !== "play" || actionBusy} className="rummy-drop-button">DROP / FORFEIT</button>
               </div>
-
-              {/* melds */}
-              <div className="flex min-h-[55px] sm:min-h-[80px] flex-wrap content-center items-center justify-center gap-x-3 gap-y-2 px-2 my-1 overflow-y-auto shrink-0">
+              <div className="rummy-oval-area">
+                <Dealer dealing={dealing} />
+                <div className="rummy-oval">
+                  {[1, 2].map(seat => <div key={seat} className={`rummy-computer-seat rummy-computer-seat-${seat} ${turn.seat === seat && phase === "play" ? "rummy-seat-active" : ""}`} aria-label={`Computer-controlled seat ${seat}`} title="Computer-controlled seat">
+                    <span className="rummy-avatar" aria-hidden="true"><svg viewBox="0 0 40 40"><circle cx="20" cy="14" r="8" fill="currentColor" /><path d="M5 38Q5 23 20 23Q35 23 35 38" fill="currentColor" /></svg></span>
+                    <span className="rummy-computer-cards" aria-label="Computer arranging cards">{[0, 1, 2].map(card => <i key={card} style={{ rotate: `${(card - 1) * 12}deg` }} />)}</span>
+                    <span className="rummy-computer-meld" key={botMoves[seat - 1]}>{botMoves[seat - 1] > 0 ? "SET / RUN" : ""}</span>
+                    {turn.seat === seat && phase === "play" && <small className="rummy-computer-timer">{seconds}s</small>}
+                  </div>)}
+                  <div className="rummy-table-watermark" aria-hidden="true">RUMMY</div>
+                  <div className="rummy-table-instruction" role="status">{dealing ? "Dealer is distributing cards" : !playerTurn ? "Computer arranging cards" : groups.length ? "Your turn: place a meld or take a group back" : "Your turn: select cards, then place a SET or RUN"}</div>
+                  <div ref={meldZone} className={`rummy-meld-zone ${drag ? "rummy-drop-ready" : ""}`} aria-label="Place selected meld here">
                 <AnimatePresence initial={false}>
                   {groups.map((g) => (
                     <motion.div
@@ -612,7 +703,7 @@ export default function RummyGame() {
                       animate={{ scale: 1, y: 0, opacity: 1 }}
                       exit={{ scale: 0.7, opacity: 0 }}
                       transition={{ type: "spring", stiffness: 320, damping: 22 }}
-                      className="relative"
+                      className="rummy-placed-group"
                     >
                       <span className="absolute -top-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-[#d6a63a] px-2 py-0.2 text-[8px] sm:text-[9px] font-black tracking-[0.1em] text-[#072b20] whitespace-nowrap shadow">
                         {groupLabel(g)}
@@ -624,7 +715,9 @@ export default function RummyGame() {
                             type="button"
                             onClick={() => takeBack(c.id)}
                             title="Take meld back"
-                            className={`w-7 sm:w-8 ${i > 0 ? "-ml-3 sm:-ml-3.5" : ""} cursor-pointer transition-transform hover:-translate-y-1`}
+                            disabled={phase !== "play" || idleRound.watching || !playerTurn}
+                            aria-label={`Take back ${groupLabel(g)}`}
+                            className={`rummy-meld-card ${i > 0 ? "rummy-meld-overlap" : ""}`}
                           >
                             <PlayingCard card={c} size="slot" />
                           </button>
@@ -634,19 +727,34 @@ export default function RummyGame() {
                   ))}
                 </AnimatePresence>
                 {groups.length === 0 && (
-                  <p className="text-[11px] tracking-[0.2em] text-[#9fd0b8]/40 text-center">
-                    YOUR MELDS APPEAR HERE
-                  </p>
+                  <div className="rummy-empty-table">
+                    <div className="rummy-card-back" aria-hidden="true"><SpadeMark className="h-9 w-9" /></div>
+                    <p>13 dealt cards<br /><span>Place your melds here</span></p>
+                    <div className="rummy-table-card" aria-hidden="true"><PlayingCard card={hand[0] ?? { id: "14S", rank: 14, suit: "S" }} /></div>
+                  </div>
                 )}
+                  </div>
+                  <div className={`rummy-table-player ${playerTurn && phase === "play" ? "rummy-seat-active" : ""}`}>
+                    <span className="rummy-avatar" style={{ "--turn-progress": `${seconds / 30 * 100}%` } as CSSProperties}>
+                      {player && isAvatar(player.avatar) ? <Image src={avatarSrc(player.avatar)} alt="Your profile avatar" width={56} height={56} unoptimized /> : "Y"}
+                    </span>
+                    <div>
+                      <span className="rummy-account-label" title={player?.id}>{player?.username ?? player?.name ?? "YOU"} · {handValue(freeCards)} POINTS</span>
+                      <strong>Rs. {ready ? balance.toLocaleString() : "—"}</strong>
+                      <span>{phase === "play" ? dealing ? "DEALING" : playerTurn ? `${seconds}s · YOUR TURN` : "WAIT FOR YOUR TURN" : "HAND COMPLETE"}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* hand */}
               <motion.div
                 animate={shake ? { x: [0, -10, 10, -6, 6, 0] } : { x: 0 }}
                 transition={{ duration: 0.4 }}
-                className="rummy-hand-scroll my-auto shrink-0 overflow-x-auto px-2 pt-8 pb-5"
+                className="rummy-hand-tray"
               >
-                <div className="mx-auto flex w-max items-end">
+                <div className="rummy-hand-heading"><span>{freeCards.length} CARDS IN HAND</span><button type="button" onClick={sortHand} disabled={idleRound.watching || phase !== "play" || actionBusy || !playerTurn}>AUTO SORT</button></div>
+                <div className="rummy-hand-cards" style={{ "--card-count": Math.max(1, freeCards.length) } as CSSProperties}>
                   <AnimatePresence initial={false}>
                     {freeCards.map((c, i) => {
                       const isSel = selected.includes(c.id);
@@ -659,12 +767,19 @@ export default function RummyGame() {
                           animate={{ y: isSel ? -16 : 0, opacity: 1, rotate: 0 }}
                           exit={{ y: -60, scale: 0.6, opacity: 0, transition: { duration: 0.2 } }}
                           transition={{ delay: i * 0.045, type: "spring", stiffness: 300, damping: 24 }}
-                          onClick={() => selectCard(c.id)}
-                          style={{ zIndex: isSel ? 60 : i }}
-                          className={`w-[36px] shrink-0 cursor-pointer sm:w-[48px] md:w-[56px] ${
-                            i > 0 ? "-ml-2.5 sm:-ml-3.5 md:-ml-4" : ""
-                          } rounded-[7px] ${isHint ? "card-hint" : ""}`}
-                          aria-label={`${RANK_LABEL[c.rank]} of ${c.suit}`}
+                          onClick={() => {
+                            if (suppressClick.current) { suppressClick.current = false; return; }
+                            selectCard(c.id);
+                          }}
+                          onPointerDown={(event) => beginDrag(event, c.id)}
+                          onPointerMove={moveDrag}
+                          onPointerUp={endDrag}
+                          onPointerCancel={() => { pointerDrag.current = null; setDrag(null); suppressClick.current = true; }}
+                          style={{ zIndex: drag?.id === c.id ? 100 : isSel ? 60 : i, translate: drag?.id === c.id ? `${drag.x}px ${drag.y}px` : undefined }}
+                          className={`rummy-hand-card ${isSel ? "rummy-card-selected" : ""} ${isHint ? "card-hint" : ""}`}
+                          disabled={idleRound.watching || phase !== "play" || !playerTurn}
+                          aria-pressed={isSel}
+                          aria-label={`${RANK_LABEL[c.rank]} of ${SUIT_SYMBOL[c.suit]}`}
                         >
                           <PlayingCard card={c} />
                         </motion.button>
@@ -675,11 +790,11 @@ export default function RummyGame() {
               </motion.div>
 
               {/* action bar */}
-              <div className="flex items-center justify-center gap-1.5 px-2 pb-1 sm:gap-2.5 flex-wrap shrink-0">
+              <div className="rummy-table-actions">
                 <button
                   type="button"
                   onClick={useHint}
-                  disabled={hintsLeft <= 0}
+                  disabled={hintsLeft <= 0 || phase !== "play" || idleRound.watching || !playerTurn}
                   className="rounded-xl border border-purple-400/40 bg-gradient-to-r from-purple-900/50 to-indigo-900/50 px-3.5 py-1.5 text-xs font-bold tracking-[0.1em] text-purple-200 transition hover:brightness-110 active:scale-95 disabled:opacity-30"
                 >
                   HINT ({hintsLeft})
@@ -687,21 +802,23 @@ export default function RummyGame() {
                 <button
                   type="button"
                   onClick={autoArrange}
+                  disabled={phase !== "play" || idleRound.watching || !playerTurn}
                   className="rounded-xl border border-cyan-400/40 bg-gradient-to-r from-cyan-900/50 to-blue-900/50 px-3.5 py-1.5 text-xs font-bold tracking-[0.1em] text-cyan-200 transition hover:brightness-110 active:scale-95"
                 >
                   AUTO ARRANGE
                 </button>
                 <button
                   type="button"
-                  onClick={addMeld}
-                  disabled={selected.length < 3}
+                  onClick={() => addMeld()}
+                  disabled={selected.length < 3 || phase !== "play" || idleRound.watching || !playerTurn}
                   className="rummy-btn-gold rounded-xl px-4 py-1.5 font-display text-xs font-bold tracking-[0.12em] sm:px-6 sm:text-sm active:scale-95 transition-transform"
                 >
-                  ADD MELD{selected.length ? ` (${selected.length})` : ""}
+                  PLACE MELD{selected.length ? ` (${selected.length})` : ""}
                 </button>
+                <button type="button" className="rummy-btn-dark rounded-xl px-3 py-1.5 text-xs" disabled={phase !== "play" || !playerTurn} onClick={endPlayerTurn}>PASS TURN</button>
               </div>
               <p className="pb-0.5 text-center text-[9px] tracking-[0.14em] text-[#9fd0b8]/45 shrink-0">
-                TAP CARDS TO SELECT · TAP PLACED MELD TO TAKE BACK
+                FIXED SET/RUN · 2 COMPUTER SEATS · 30s AUTO MOVE OR PASS · NO TIMEOUT LOSS
               </p>
             </motion.section>
           )}
@@ -756,7 +873,7 @@ export default function RummyGame() {
                 </li>
                 <li>
                   <span className="font-bold text-[#f6e3a1]">2 · Arrange:</span> Tap cards to select them, then press{" "}
-                  <span className="font-bold text-[#f6e3a1]">ADD MELD</span>. A{" "}
+                  <span className="font-bold text-[#f6e3a1]">PLACE MELD</span>, or drag the selected cards onto the table. A{" "}
                   <span className="font-bold text-[#f6e3a1]">SET</span> is 3–4 cards of the same rank. A{" "}
                   <span className="font-bold text-[#f6e3a1]">RUN</span> is 3+ consecutive cards of the same suit (Ace is high only).
                 </li>
@@ -774,6 +891,8 @@ export default function RummyGame() {
                   <span className="font-bold text-[#b23a2c]">FORFEIT</span> to surrender and deal the next hand.
                 </li>
                 <li>Correct declaration is required; forfeiting a winning hand still pays zero.</li>
+                <li>Two computer-controlled seats take short arranging turns between yours; they are not online players and place no wallet bets. Your turn lasts 30 seconds. On timeout, a valid selected/available meld is placed, otherwise the turn passes without an extra stake or automatic loss.</li>
+                <li>Win the joined level to unlock the next one. Unlocks are verified and saved to your account. Cards stay in the existing fixed SET/RUN game; no deck draw/discard is added.</li>
               </ol>
               <button
                 type="button"

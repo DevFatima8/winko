@@ -46,6 +46,43 @@ function table(game, players = users) {
   return { s, accept, act, balance: userId => s.users.get(userId).balance };
 }
 
+test("Rummy levels unlock only on a verified win, persist per account and replay without skipping levels", async () => {
+  const t = table("rummy", ["alice", "bob"]);
+  const cycleId = "rummy:bet-wins-30-of-100:v1";
+  t.s.data.multiplayerrooms.push({ _id: cycleId, remaining: [true] });
+  const wagerId = randomUUID();
+  await t.accept("alice", wagerId, 10);
+  const before = structuredClone(t.s.data);
+  await assert.rejects(t.act("alice", wagerId, "deal", { level: 2 }), /unlock/);
+  assert.deepEqual(t.s.data, before, "locked table cannot consume a winning opportunity");
+  const dealt = await t.act("alice", wagerId, "deal", { level: 1 });
+  assert.equal(dealt.outcome.view.level, 1);
+  const groups = rummy.solve(dealt.outcome.view.hand).map(group => group.cards.map(card => card.id));
+  const operation = randomUUID();
+  const beforeWin = structuredClone(t.s.data);
+  t.s.failNext("multiplayerrooms");
+  await assert.rejects(t.act("alice", wagerId, "declare", { groups }, operation), /Injected/);
+  assert.deepEqual(t.s.data, beforeWin, "failed progress save must roll back wallet settlement");
+  const won = await t.act("alice", wagerId, "declare", { groups }, operation);
+  assert.equal(won.outcome.view.unlockedLevel, 2);
+  assert.equal(won.outcome.payout, 20);
+  const replay = await t.act("alice", wagerId, "declare", { groups }, operation);
+  assert.equal(replay.replay, true);
+  assert.equal(replay.outcome.view.unlockedLevel, 2);
+  assert.equal(t.balance("alice"), 1010);
+  const recovered = await t.act("alice", wagerId, "state");
+  assert.equal(recovered.outcome.view.unlockedLevel, 2);
+  const second = randomUUID();
+  await t.accept("alice", second, 10);
+  const levelTwo = await t.act("alice", second, "deal", { level: 2 });
+  assert.equal(levelTwo.outcome.view.level, 2);
+  const folded = await t.act("alice", second, "forfeit");
+  assert.equal(folded.outcome.view.unlockedLevel, 2);
+  const bob = randomUUID();
+  await t.accept("bob", bob, 10);
+  await assert.rejects(t.act("bob", bob, "deal", { level: 2 }), /unlock/);
+});
+
 /**
  * Qualifying strategies: the documented play that converts an assigned winning slot into a profit.
  * Each returns the final reply; the money assertions are made against the wallet itself.

@@ -1,4 +1,5 @@
 "use client";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 import { gameSfx } from "@/lib/gameSfx";
 import { GameOverOverlay } from "@/components/GameOverOverlay";
 
@@ -179,7 +180,7 @@ export default function TowerGame() {
   const adjustBet = (f: number) => {
     if (playing) return;
     const v = Math.max(0, (parseFloat(betInput) || 0) * f);
-    setBetInput(Math.min(v, balance).toFixed(2));
+    setBetInput(Math.min(MAX_GAME_BET, v, balance).toFixed(2));
   };
 
   return (

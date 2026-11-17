@@ -1,6 +1,7 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { LOCAL_GAMES_CONNECTED, LOCAL_GAMES_UNAVAILABLE } from "@/lib/gameAvailability";
 import { WIN_CHANCE, roundMoney, type Bet, type Side } from "@/components/tai-xiu-game/lib/game";
+import { gameBetError } from "@/lib/gameBetLimits";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,9 +18,11 @@ export async function POST(request: Request) {
     return Response.json({ error: "Please send a valid bet." }, { status: 400 });
   }
   const { side, stake } = input as { side?: unknown; stake?: unknown };
-  if ((side !== "tai" && side !== "xiu") || typeof stake !== "number" || !Number.isFinite(stake) || stake < 1 || Math.abs(roundMoney(stake) - stake) > 0.000001) {
-    return Response.json({ error: "Choose a side and a stake of at least 1 coin (up to two decimal places)." }, { status: 400 });
+  if ((side !== "tai" && side !== "xiu") || typeof stake !== "number" || !Number.isFinite(stake) || Math.abs(roundMoney(stake) - stake) > 0.000001) {
+    return Response.json({ error: "Choose a side and a valid stake (up to two decimal places)." }, { status: 400 });
   }
+  const limitError = gameBetError(stake);
+  if (limitError) return Response.json({ error: limitError }, { status: 400 });
 
   const won = randomInt(100) < WIN_CHANCE;
   const resultSide: Side = won ? side : side === "tai" ? "xiu" : "tai";

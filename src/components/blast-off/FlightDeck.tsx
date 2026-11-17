@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useImperativeHandle, forwardRef } from "react";
 import type { Phase } from "./lib/engine";
+import { BLAST_OFF_MAX_CRASH } from "@/lib/blastOffRules";
 
 export type DrawState = {
   phase: Phase;
@@ -10,6 +11,7 @@ export type DrawState = {
   crashPoint: number;
   countdown: number;
   betPlaced: boolean;
+  maxMultiplier?: number;
 };
 
 export type FlightDeckHandle = {
@@ -58,6 +60,8 @@ const FlightDeck = forwardRef<FlightDeckHandle, { reduced: boolean }>(function F
   const camRef = useRef({ x: 0, y: 0 });
   const lastPhase = useRef<Phase>("betting");
   const rafRef = useRef<number>(0);
+  const sampledAtRef = useRef(0);
+  const flightTimeRef = useRef(0);
   const stateRef = useRef<DrawState>({
     phase: "betting",
     t: 0,
@@ -69,6 +73,7 @@ const FlightDeck = forwardRef<FlightDeckHandle, { reduced: boolean }>(function F
 
   useImperativeHandle(ref, () => ({
     draw(s: DrawState) {
+      if (s.phase !== "flying" || lastPhase.current !== "flying") flightTimeRef.current = s.t;
       if (s.phase === "crashed" && lastPhase.current !== "crashed") flashRef.current = 1;
       if (s.phase === "betting" && lastPhase.current !== "betting") {
         // new launch window — reset the chase camera to the pad
@@ -77,6 +82,7 @@ const FlightDeck = forwardRef<FlightDeckHandle, { reduced: boolean }>(function F
       }
       lastPhase.current = s.phase;
       stateRef.current = s;
+      sampledAtRef.current = performance.now();
     },
   }));
 
@@ -116,9 +122,22 @@ const FlightDeck = forwardRef<FlightDeckHandle, { reduced: boolean }>(function F
 
     let last = performance.now();
     const frame = (now: number) => {
-      const dt = Math.min(0.05, (now - last) / 1000);
+      const elapsed = Math.max(0, (now - last) / 1000);
+      const dt = Math.min(0.05, elapsed);
       last = now;
-      render(ctx, canvas, stateRef.current, starsRef.current, bgRef.current, flashRef, camRef.current, dt, reduced);
+      const sampled = stateRef.current;
+      let current = sampled;
+      if (sampled.phase === "flying") {
+        // Advance between transport-clock samples without moving backwards on resync.
+        const target = sampled.t + Math.max(0, now - sampledAtRef.current) / 1000;
+        const predicted = flightTimeRef.current + elapsed;
+        const corrected = predicted + (target - predicted) * (1 - Math.exp(-9 * dt));
+        const maxMultiplier = sampled.maxMultiplier ?? BLAST_OFF_MAX_CRASH;
+        const t = Math.min(Math.log(maxMultiplier) / 0.155, Math.max(flightTimeRef.current + elapsed * 0.5, corrected));
+        flightTimeRef.current = t;
+        current = { ...sampled, t, multiplier: Math.min(maxMultiplier, Math.exp(0.155 * t)) };
+      }
+      render(ctx, canvas, current, starsRef.current, bgRef.current, flashRef, camRef.current, dt, reduced);
       rafRef.current = requestAnimationFrame(frame);
     };
     rafRef.current = requestAnimationFrame(frame);

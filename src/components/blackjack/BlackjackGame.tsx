@@ -1,4 +1,5 @@
 "use client";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 import { gameSfx } from "@/lib/gameSfx";
 import { GameOverOverlay } from "@/components/GameOverOverlay";
 
@@ -396,12 +397,12 @@ export default function BlackjackGame({ backHref = "/player" }: { backHref?: str
 
   function adjustBet(amount: number) {
     if (status !== "idle" || idleRound.watching) return;
-    setBet((current) => Math.min(credits, Math.max(MIN_BET, current + amount)));
+    setBet((current) => Math.min(MAX_GAME_BET, credits, Math.max(MIN_BET, current + amount)));
   }
 
   function chooseBet(amount: number) {
     if (status !== "idle" || idleRound.watching) return;
-    setBet(Math.min(credits, Math.max(MIN_BET, amount)));
+    setBet(Math.min(MAX_GAME_BET, credits, Math.max(MIN_BET, amount)));
   }
 
   return (

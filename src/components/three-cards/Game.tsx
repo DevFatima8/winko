@@ -1,4 +1,5 @@
 "use client";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 import { gameSfx } from "@/lib/gameSfx";
 import { isThreeCardsBrowserDeal } from "@/lib/browserCardGuards";
 import { GameOverOverlay } from "@/components/GameOverOverlay";
@@ -235,7 +236,7 @@ export default function Home() {
             onChange={(e) => setBet(Math.max(0, Math.floor(Number(e.target.value))))}
             className="h-11 min-w-0 w-full px-2 text-center bg-black/50 border border-yellow-500/50 rounded-lg font-bold text-sm text-yellow-300 outline-none"
           />
-          <button aria-label="Double bet" disabled={busy} onClick={() => setBet((b) => Math.min(balance, b * 2))} className="h-11 min-w-0 bg-white/10 rounded-lg text-sm font-bold hover:bg-white/20 active:scale-95 disabled:opacity-50">2x</button>
+          <button aria-label="Double bet" disabled={busy} onClick={() => setBet((b) => Math.min(MAX_GAME_BET, balance, b * 2))} className="h-11 min-w-0 bg-white/10 rounded-lg text-sm font-bold hover:bg-white/20 active:scale-95 disabled:opacity-50">2x</button>
         </div>
         <button
           onClick={play}

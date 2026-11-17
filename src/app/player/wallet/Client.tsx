@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowLeft, RefreshCw, Headset, History } from "lucide-react";
 import { DepositFlow } from "@/components/DepositFlow";
 import { WithdrawRequest } from "@/components/WithdrawRequest";
+import { OpenSupportButton } from "@/components/OpenSupport";
 import { ReferralCommissionCard } from "@/components/ReferralCommissionCard";
 import { useI18n } from "@/lib/i18n/client";
 import { getCurrentUser } from "@/lib/auth";
@@ -62,7 +63,7 @@ export default function WalletPageClient({ mode = "deposit", params, searchParam
           <Link href="/player" aria-label="Back" className="absolute left-0 p-2 text-slate-300"><ArrowLeft size={20} /></Link>
           <h1 className="text-xl font-medium text-white">{t("deposit")}</h1>
           <div className="absolute right-0 flex gap-4 text-[#ffc933]">
-            <button type="button" aria-label="Deposit support" onClick={() => window.dispatchEvent(new CustomEvent("wx:open-support"))}><Headset size={23} /></button>
+            <OpenSupportButton className=""><Headset size={23} /></OpenSupportButton>
             <Link href="/player/records?type=deposit" aria-label="Deposit history"><History size={23} /></Link>
           </div>
         </header>

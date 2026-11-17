@@ -5,6 +5,8 @@ import ts from "typescript";
 
 export function createLegacyScene(userIds = ["alice", "bob"], { poolEnabled = false, realFlight = false } = {}) {
   let now = 100000, readDelay = 0, wagerReadDelay = 0, failure = null, chain = Promise.resolve();
+  let queryHook = async () => {};
+  const queries = [], reads = [];
   const data = Object.fromEntries([
     "users", "games", "multiplayerrooms", "gameresults", "aviatorrounds", "cardrounds", "cardbets", "winholds", "multiplayerrequests", "dailypools", "dailypoolentries", "chickengames", "chickendashes",
   ].map((name) => [name, []]));
@@ -22,10 +24,14 @@ export function createLegacyScene(userIds = ["alice", "bob"], { poolEnabled = fa
     now: async () => now,
     async find(table, field, value, limit = 100) { return clone(data[table].filter(row => row[field] === value).slice(0, limit)); },
     async get(table, id) {
+      reads.push({ table, id });
       if (table === "users") now += readDelay;
       return clone(data[table]?.find((row) => row._id === id) ?? null);
     },
-    async findWhere(table, filter, limit = 100, sort) {
+    async findWhere(table, filter, limit = 100, sort, readOnly = false) {
+      const query = { table, filter: clone(filter), sort, readOnly };
+      queries.push(query);
+      await queryHook(query);
       if (table === "gameresults" && filter.roundNo !== undefined) now += wagerReadDelay;
       const rows = data[table].filter((row) => Object.entries(filter).every(([key, value]) => row[key] === value));
       if (sort) rows.sort((a, b) => {
@@ -115,7 +121,14 @@ export function createLegacyScene(userIds = ["alice", "bob"], { poolEnabled = fa
       if (specifier === "./mongo") return { dbConnect: async () => {} };
       if (specifier === "./gameAccess") return { checkGameAccess: async () => null };
       if (specifier === "./dailyPoolConfig") return { dailyPoolEnabled: () => poolEnabled };
-      if (specifier === "./multiplayer-store") return { mysqlMultiplayerStore: store };
+      if (specifier === "./multiplayer-store") return {
+        mysqlMultiplayerStore: store,
+        readMultiplayer: fn => fn({
+          now: tx.now,
+          get: tx.get,
+          findWhere: (table, filter, limit, sort) => tx.findWhere(table, filter, limit, sort, true),
+        }),
+      };
       if (specifier === "./winHold") return { heldPortion: (gross) => Math.round(gross * 2) / 100 };
       if (specifier.startsWith("./")) return load(specifier.slice(2));
       throw new Error(`Unexpected legacy table import ${specifier}`);
@@ -136,13 +149,14 @@ export function createLegacyScene(userIds = ["alice", "bob"], { poolEnabled = fa
   }
   return {
     get multiplayer() { return load("multiplayer").createMultiplayerService(store); },
-    flight: load("aviator"), cards: load("cards"), pool: load("dailyPool"), poolRules: load("dailyPoolRules"), get chicken() { return load("dailyPoolChicken"); }, get browser() { return load("dailyPoolBrowser"); }, get poolService() { return load("dailyPoolService"); }, get slot() { return load("slot777"); }, get limbo() { return load("limbo"); }, get plinko() { return load("plinko"); }, store, data, changes,
+    flight: load("aviator"), cards: load("cards"), pool: load("dailyPool"), poolRules: load("dailyPoolRules"), get chicken() { return load("dailyPoolChicken"); }, get browser() { return load("dailyPoolBrowser"); }, get poolService() { return load("dailyPoolService"); }, get slot() { return load("slot777"); }, get limbo() { return load("limbo"); }, get plinko() { return load("plinko"); }, store, data, changes, queries, reads,
     get crashLanes() { return load("crashLane"); },
     get users() { return new Map(data.users.map((user) => [user._id, user])); },
     at(value) { now = value; },
     setPoolEnabled(value) { poolEnabled = value; },
     setReadDelay(value) { readDelay = value; },
     setWagerReadDelay(value) { wagerReadDelay = value; },
+    setQueryHook(hook) { queryHook = hook; },
     failNext(table) { failure = table; },
     async rawCardRound(table) { await load("sharedLegacyTables").sharedCardState(null, table); return clone(data.cardrounds.at(-1)); },
   };

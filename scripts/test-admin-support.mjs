@@ -25,6 +25,7 @@ async function supportFixture() {
   };
   models.SupportThread.updateOneAtomic = models.SupportThread.updateOne.bind(models.SupportThread);
   let session = { id: "staff", role: "admin", dbRole: "admin", level: 2, name: "Staff" };
+  const notifications = [];
   const server = load("src\\lib\\supportServer.ts", {
     "node:crypto": { randomUUID: () => "guest" },
     "next/headers": { cookies: async () => ({ get: () => ({ value: "guest" }) }) },
@@ -32,7 +33,7 @@ async function supportFixture() {
     "./platform": { getSettings: async () => ({ support: {} }), supportOnline: () => true },
     "./mongo": { dbConnect: async () => {} },
     "./serverAuth": { getServerSessionUser: async () => session },
-    "./notifications": { notifyAdmins: async () => {} },
+    "./notifications": { notifyAdmins: async () => {}, notifyUser: async (...args) => { notifications.push(args); } },
   });
   const route = load("src\\app\\api\\admin\\support\\route.ts", {
     "next/server": { NextResponse: { json: Response.json } },
@@ -44,8 +45,88 @@ async function supportFixture() {
     assert.equal(response.headers.get("Cache-Control"), "no-store");
     return (await response.json()).unread;
   };
-  return { ...server, ...models, route, count, setSession: value => { session = value; } };
+  return { ...server, ...models, route, count, notifications, setSession: value => { session = value; } };
 }
+
+test("admin replies notify only the thread owner and remain unread until the player opens support", async () => {
+  const fixture = await supportFixture();
+  const thread = await fixture.SupportThread.create({ userId: "player" });
+  await fixture.replyAsAdmin(thread._id, "Hello");
+  assert.deepEqual(fixture.notifications, [["player", "Support replied", "Support has replied to your message.", "info", { href: "/help?support=1" }]]);
+  fixture.setSession({ id: "other", role: "client", name: "Other" });
+  assert.equal((await fixture.getClientSupportUnread()).unread, 0);
+  fixture.setSession({ id: "player", role: "client", name: "Player" });
+  assert.equal((await fixture.getClientSupportUnread()).unread, 1);
+  assert.equal((await fixture.getClientSupportUnread()).unread, 1);
+  assert.equal((await fixture.getClientSupportState()).data.messages.at(-1).text, "Hello");
+  assert.equal((await fixture.getClientSupportUnread()).unread, 0);
+});
+
+test("unauthorized staff cannot reply or notify a player", async () => {
+  const fixture = await supportFixture();
+  const thread = await fixture.SupportThread.create({ userId: "player", assignedTo: "someone-else" });
+  fixture.setSession({ id: "staff", role: "admin", dbRole: "subadmin", level: 1, name: "Staff" });
+  assert.equal((await fixture.replyAsAdmin(thread._id, "Not allowed")).status, 403);
+  assert.equal(fixture.notifications.length, 0);
+  assert.equal((await fixture.SupportThread.findById(thread._id).lean()).unreadForUser, 0);
+});
+
+test("guest replies retain their own unread indicator without creating a user notification", async () => {
+  const fixture = await supportFixture();
+  const thread = await fixture.SupportThread.create({ guestId: "guest" });
+  await fixture.replyAsAdmin(thread._id, "Guest reply");
+  assert.equal(fixture.notifications.length, 0);
+  fixture.setSession(null);
+  assert.equal((await fixture.getClientSupportUnread()).unread, 1);
+  assert.equal((await fixture.getClientSupportState()).data.messages.at(-1).text, "Guest reply");
+  assert.equal((await fixture.getClientSupportUnread()).unread, 0);
+});
+
+test("the player unread endpoint does not mark the conversation as read", async () => {
+  const fixture = await supportFixture();
+  const thread = await fixture.SupportThread.create({ userId: "player", unreadForUser: 2 });
+  fixture.setSession({ id: "player", role: "client", name: "Player" });
+  const route = load("src\\app\\api\\support\\route.ts", {
+    "next/server": { NextResponse: { json: Response.json } },
+    "@/lib/supportServer": fixture,
+  });
+  const response = await route.GET(new Request("http://localhost/api/support?unread=1"));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  assert.deepEqual(await response.json(), { unread: 2 });
+  assert.equal((await fixture.SupportThread.findById(thread._id).lean()).unreadForUser, 2);
+});
+
+test("player chat shows the latest messages and does not clear a reply arriving during the read", async () => {
+  const fixture = await supportFixture();
+  const thread = await fixture.SupportThread.create({ userId: "player", unreadForUser: 1 });
+  for (let i = 0; i < 201; i++) {
+    await fixture.SupportMessage.create({ threadId: thread._id, from: "agent", text: String(i), createdAt: new Date(i * 1000) });
+  }
+  const find = fixture.SupportMessage.find.bind(fixture.SupportMessage);
+  let arrive = true;
+  fixture.SupportMessage.find = (...args) => {
+    const query = find(...args), lean = query.lean.bind(query);
+    query.lean = async () => {
+      const messages = await lean();
+      if (arrive) {
+        arrive = false;
+        await fixture.SupportMessage.create({ threadId: thread._id, from: "agent", text: "new reply" });
+        await fixture.SupportThread.updateOneAtomic({ _id: thread._id }, { $inc: { unreadForUser: 1 }, $set: { lastMessageAt: new Date() } });
+      }
+      return messages;
+    };
+    return query;
+  };
+  fixture.setSession({ id: "player", role: "client", name: "Player" });
+  const first = await fixture.getClientSupportState();
+  assert.equal(first.data.messages.length, 200);
+  assert.equal(first.data.messages[0].text, "1");
+  assert.equal(first.data.messages.at(-1).text, "200");
+  assert.equal((await fixture.getClientSupportUnread()).unread, 2);
+  assert.equal((await fixture.getClientSupportState()).data.messages.at(-1).text, "new reply");
+  assert.equal((await fixture.getClientSupportUnread()).unread, 0);
+});
 
 test("support count sums messages beyond the 150-chat inbox limit and preserves team/assignment visibility", async () => {
   const fixture = await supportFixture();
@@ -76,7 +157,7 @@ test("incoming messages increment the badge total and reading one chat leaves ot
   fixture.setSession({ id: "staff", role: "admin", dbRole: "admin", level: 2 });
   assert.equal(await fixture.count(), 6);
   const messages = await fixture.getAdminSupportMessages(playerThread._id);
-  assert.deepEqual(messages.messages.map(message => message.text), ["first", "second"]);
+  assert.deepEqual(messages.messages.map(message => message.text).sort(), ["first", "second"]);
   assert.equal(await fixture.count(), 4);
   await fixture.getAdminSupportMessages(other._id);
   assert.equal(await fixture.count(), 0);
@@ -161,6 +242,99 @@ function browserFixture() {
   globalThis.clearInterval = window.clearInterval;
   return { intervals, timeouts, restore: () => Object.assign(globalThis, previous) };
 }
+
+test("closed player support polls unread replies, updates the dot, and ignores stale responses", async () => {
+  const browser = browserFixture();
+  const previousTimeout = globalThis.setTimeout, previousClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = window.setTimeout;
+  globalThis.clearTimeout = window.clearTimeout;
+  window.location = { href: "http://localhost/" };
+  window.history = { state: null, replaceState() {} };
+  const effects = [], requests = [];
+  let notificationRefreshes = 0;
+  window.addEventListener("wx:notification-local", () => { notificationRefreshes++; });
+  const react = {
+    useState: initial => [initial, () => {}],
+    useEffect: effect => effects.push(effect),
+    useCallback: fn => fn,
+    useRef: initial => ({ current: initial }),
+    useSyncExternalStore: (_subscribe, getSnapshot) => getSnapshot(),
+  };
+  const unread = load("src\\components\\SupportUnread.tsx", { react, "react/jsx-runtime": { jsx } });
+  const { SupportWidget } = load("src\\components\\SupportWidget.tsx", {
+    react, "react/jsx-runtime": { jsx, jsxs: jsx },
+    "next/navigation": { usePathname: () => "/" },
+    "@/lib/i18n/client": { useI18n: () => ({ t: key => key }) },
+    "@/components/Icons": {}, "./SupportUnread": unread,
+  });
+  globalThis.fetch = url => {
+    assert.equal(url, "/api/support?unread=1");
+    return new Promise(resolve => requests.push(resolve));
+  };
+  const cleanups = [];
+  try {
+    SupportWidget({});
+    for (const effect of effects) cleanups.push(effect());
+    [...browser.timeouts.values()][0]();
+    requests[0](Response.json({ unread: 1 }));
+    await settle();
+    assert.equal(unread.SupportUnreadDot().props["aria-label"], "Unread support reply");
+    assert.equal(notificationRefreshes, 1);
+    [...browser.intervals.values()][0].fn();
+    window.dispatchEvent(new Event("wx:player-support-reply"));
+    requests[2](Response.json({ unread: 0 }));
+    await settle();
+    requests[1](Response.json({ unread: 2 }));
+    await settle();
+    assert.equal(unread.SupportUnreadDot(), null);
+    assert.equal(notificationRefreshes, 1);
+  } finally {
+    cleanups.forEach(cleanup => cleanup?.());
+    globalThis.setTimeout = previousTimeout;
+    globalThis.clearTimeout = previousClearTimeout;
+    browser.restore();
+  }
+});
+
+test("notification link opens support even when effects are restarted", () => {
+  const browser = browserFixture();
+  const previousTimeout = globalThis.setTimeout, previousClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = window.setTimeout;
+  globalThis.clearTimeout = window.clearTimeout;
+  window.location = { href: "http://localhost/help?support=1" };
+  window.history = { state: null, replaceState: (_state, _title, url) => { window.location.href = String(url); } };
+  const effects = [], state = [];
+  const react = {
+    useState: initial => {
+      const index = state.length;
+      state.push(initial);
+      return [initial, next => { state[index] = next; }];
+    },
+    useEffect: effect => effects.push(effect),
+    useCallback: fn => fn,
+    useRef: initial => ({ current: initial }),
+  };
+  const { SupportWidget } = load("src\\components\\SupportWidget.tsx", {
+    react, "react/jsx-runtime": { jsx, jsxs: jsx },
+    "next/navigation": { usePathname: () => "/help" },
+    "@/lib/i18n/client": { useI18n: () => ({ t: key => key }) },
+    "@/components/Icons": {}, "./SupportUnread": {},
+  });
+  try {
+    SupportWidget({});
+    const deepLinkEffect = effects.at(-1);
+    deepLinkEffect()();
+    const cleanup = deepLinkEffect();
+    [...browser.timeouts.values()].at(-1)();
+    assert.equal(state[0], true);
+    assert.equal(window.location.href, "http://localhost/help");
+    cleanup();
+  } finally {
+    globalThis.setTimeout = previousTimeout;
+    globalThis.clearTimeout = previousClearTimeout;
+    browser.restore();
+  }
+});
 
 function startCounts(harness) {
   const polling = load("src\\components\\admin\\useAdminCounts.ts", { react: harness.react });

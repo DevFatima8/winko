@@ -27,6 +27,7 @@ function route({ enabled = true, user = { id: "alice", role: "client" }, noActiv
       "@/lib/aviator": { isTable: table => ["aviator", "aviator-x"].includes(table), placeBet: record("flight"), cashOut: record("flight-cashout"), cancelBet: record("flight-cancel"), flightStatistics: record("flight-stats") },
       "@/lib/cards": { isTable: table => ["dragon-tiger", "andar-bahar"].includes(table), placeBet: record("card-bet") },
       "@/lib/slot777": { spin: record("slot-spin") },
+      "@/lib/plinko": { drop: record("plinko-drop") },
       "@/lib/chicken": { startGame: record("legacy-road"), step: record("legacy-road-step"), cashOut: record("legacy-road-cashout") },
       "@/lib/chickendash": { startGame: record("legacy-dash"), step: record("legacy-dash-step"), cashOut: record("legacy-dash-cashout") },
       "@/lib/serverAuth": { getServerSessionUser: async () => user },
@@ -39,6 +40,18 @@ function route({ enabled = true, user = { id: "alice", role: "client" }, noActiv
   };
 }
 const post = (url, body = {}) => new Request(`https://fixture.invalid${url}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+test("instant Plinko drops require login but not daily-pool consent in either global mode", async () => {
+  const body = { amount: 100, risk: "medium", rows: 12, requestId: "plinko-api-request" };
+  for (const enabled of [true, false]) {
+    const f = route({ enabled });
+    assert.equal((await f.POST(post("/api/plinko/drop", body))).status, 200);
+    assert.deepEqual(f.calls, [{ name: "plinko-drop", args: ["alice", 100, "medium", 12, body.requestId] }]);
+    const guest = route({ enabled, user: null });
+    assert.equal((await guest.POST(post("/api/plinko/drop", body))).status, 401);
+    assert.deepEqual(guest.calls, []);
+  }
+});
 
 test("flight statistics require login and scope players without exposing other players' totals", async () => {
   const guest = route({ user: null });

@@ -1,4 +1,5 @@
 "use client";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 import { gameSfx } from "@/lib/gameSfx";
 import { visibleAnimationFrame } from "@/lib/visibleAnimationFrame";
 
@@ -507,7 +508,7 @@ export default function CrashGame() {
 
   /* ----------------------------- UI helpers ----------------------------- */
   const amt = parseFloat(amount) || 0;
-  const setAmt = (v: number) => setAmount(String(Math.max(10, floor2(v))));
+  const setAmt = (v: number) => setAmount(String(Math.min(MAX_GAME_BET, Math.max(10, floor2(v)))));
 
   const multColor =
     phase === "crashed"

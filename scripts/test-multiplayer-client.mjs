@@ -61,7 +61,7 @@ function scene(game = "baccarat", resultRevealDelay) {
     };
     if (name === "./dailyPoolConsent") return { dailyPoolConsent: () => undefined };
     if (name === "./gameResultNotice") return { notifyGameResult: (...args) => notices.push(args) };
-    if (name === "./cardGameRules" || name === "./rouletteGameRules") {
+    if (name === "./cardGameRules" || name === "./rouletteGameRules" || name === "./gameBetLimits") {
       const module = { exports: {} };
       const rules = ts.transpileModule(readFileSync(`src\\lib\\${name.slice(2)}.ts`, "utf8"), {
         compilerOptions: { module: ts.ModuleKind.CommonJS },
@@ -118,6 +118,26 @@ const state = (overrides = {}) => ({
   game: "baccarat", serverNow: 10000, balance: 1000,
   round: { roundNo: 71, phase: "betting", bettingEndsAt: 20000, resultAt: 24000, endsAt: 29000, result: null },
   bets: [], queuedBets: [], myBets: [], myQueuedBets: [], history: [], ...overrides,
+});
+
+test("live client rejects below-minimum, above-maximum and combined over-limit wagers before sending", async () => {
+  const s = scene();
+  await s.respond(0, state({
+    balance: 1_000_000,
+    myBets: [{ id: "existing", roundNo: 71, status: "pending", amount: 99_990, payout: 0 }],
+  }));
+  try {
+    for (const amount of [9.99, 100_000.01, 20]) {
+      const reply = await s.view.place("player", amount);
+      assert.match(reply.error, amount < 10 ? /Minimum/ : /100,000/);
+      assert.equal(s.calls.length, 1, "invalid wagers must not create a POST");
+    }
+    const pending = s.view.place("player", 10);
+    assert.equal(s.calls.length, 2, "exact remaining capacity may be submitted");
+    await s.respond(1, { ok: true });
+    await s.respond(2, state({ balance: 900_000 }));
+    assert.equal((await pending).ok, true);
+  } finally { s.unmount(); }
 });
 
 test("live delayed card reveals hide winnings from the table and global wallet until the final card", async () => {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { formatMoney, formatMultiplier } from "./lib/crash";
 import { useDailyPoolMode } from "@/lib/walletSync";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 
 export interface BetPanelProps {
   index: number;
@@ -75,7 +76,7 @@ export function BetPanel({
   const commitAmount = (raw: string) => {
     const next = Number(raw.replace(/[^0-9.]/g, ""));
     if (Number.isFinite(next) && next > 0) {
-      onAmountChange(Math.round(next * 100) / 100);
+      onAmountChange(Math.min(MAX_GAME_BET, Math.max(10, Math.round(next * 100) / 100)));
     }
     setEditing(null);
   };
@@ -140,6 +141,7 @@ export function BetPanel({
           <button
             type="button"
             title="Edit bet amount"
+            disabled={placed}
             onClick={(e) => {
               e.stopPropagation();
               setDraftAmount(String(amount));
@@ -150,6 +152,21 @@ export function BetPanel({
             {formatMoney(amount)}
           </button>
         </div>
+      </div>
+
+      <div aria-label="Bet amount presets" className="mt-2 grid grid-cols-5 gap-1">
+        {BET_PRESETS.map((value) => (
+          <button
+            key={value}
+            type="button"
+            disabled={placed}
+            aria-pressed={amount === value}
+            onClick={() => onAmountChange(value)}
+            className="min-w-0 break-all rounded-md bg-[#eaf2fa] px-0.5 py-1.5 text-[10px] font-bold text-[#1b4f86] hover:bg-[#dbeaf8] aria-pressed:bg-[#2f92dd] aria-pressed:text-white disabled:opacity-50"
+          >
+            {value}
+          </button>
+        ))}
       </div>
 
       {/* status line */}
@@ -211,7 +228,7 @@ export function BetPanel({
                 <button
                   type="button"
                   onClick={() => {
-                    const next = Math.max(0.1, Math.round((amount / 2) * 100) / 100);
+                    const next = Math.max(10, Math.round((amount / 2) * 100) / 100);
                     onAmountChange(next);
                     setDraftAmount(String(next));
                   }}
@@ -246,6 +263,7 @@ export function BetPanel({
                   <button
                     key={q}
                     type="button"
+                    disabled={placed}
                     onClick={() => {
                       onAmountChange(q);
                       setDraftAmount(String(q));
@@ -258,7 +276,7 @@ export function BetPanel({
                 <button
                   type="button"
                   onClick={() => {
-                    const next = Math.floor(balance * 100) / 100;
+                    const next = Math.min(MAX_GAME_BET, Math.floor(balance * 100) / 100);
                     onAmountChange(next);
                     setDraftAmount(String(next));
                   }}

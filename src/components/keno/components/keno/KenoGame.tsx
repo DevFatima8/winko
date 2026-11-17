@@ -1,4 +1,5 @@
 "use client";
+import { gameBetError, MAX_GAME_BET } from "@/lib/gameBetLimits";
 
 import { useEffect, useRef, useState } from "react";
 import { GameOverOverlay } from "@/components/GameOverOverlay";
@@ -171,7 +172,7 @@ export default function KenoGame() {
   const betValue = Math.max(0, Number(bet) || 0);
   const topMultiplier = picks > 0 ? getMultiplier(risk, picks, picks) : 0;
   const profitOnWin = betValue * topMultiplier - betValue;
-  const canBet = picks > 0 && betValue > 0 && betValue <= balance && !busy;
+  const canBet = picks > 0 && betValue >= 10 && betValue <= MAX_GAME_BET && betValue <= balance && !busy;
 
   function toggleTile(tile: number) {
     if (autoRef.current) return;
@@ -201,12 +202,13 @@ export default function KenoGame() {
   }
 
   function clampBet(value: number) {
-    return Math.max(0.01, Math.round(value * 100) / 100);
+    return Math.min(MAX_GAME_BET, Math.max(10, Math.round(value * 100) / 100));
   }
 
   function validate(amount: number): string | null {
     if (stateRef.current.selected.length === 0) return "Select at least 1 tile";
-    if (!amount || amount <= 0) return "Enter a bet amount";
+    const limitError = gameBetError(amount);
+    if (limitError) return limitError;
     if (amount > balanceRef.current) return "Insufficient balance";
     return null;
   }
@@ -421,7 +423,7 @@ export default function KenoGame() {
                 }}
                 onHalve={() => setBet(clampBet((Number(bet) || 0) / 2).toFixed(2))}
                 onDouble={() => setBet(clampBet((Number(bet) || 0) * 2).toFixed(2))}
-                onMax={() => setBet(Math.max(0, balance).toFixed(2))}
+                onMax={() => setBet(Math.min(MAX_GAME_BET, Math.max(10, balance)).toFixed(2))}
                 risk={risk}
                 onRiskChange={(r) => {
                   setRisk(r);

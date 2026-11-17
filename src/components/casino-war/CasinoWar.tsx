@@ -291,6 +291,7 @@ export default function CasinoWar() {
     roundBusy.current = true;
     const back = Math.floor(bets.ante / 2);
     if (!await pool.cardAction("surrender", {})) { roundBusy.current = false; return; }
+    roundBusy.current = false;
     pool.announce();
     setMessage({
       text: pool.enabled ? "DAILY PAYOUT PENDING" : "SURRENDERED",

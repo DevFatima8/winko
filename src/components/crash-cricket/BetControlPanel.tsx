@@ -1,4 +1,5 @@
 "use client";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 
 import React, { useState } from "react";
 import { GamePhase } from "./lib/crashEngine";
@@ -54,7 +55,7 @@ export default function BetControlPanel({
   const setStakeSafe = (val: number) => {
     if (isLocked || state.isBetQueued) return;
     soundEngine.playClick();
-    const clamped = Math.max(10, Math.round(val));
+    const clamped = Math.min(MAX_GAME_BET, Math.max(10, Math.round(val)));
     onUpdateState(panelId, (prev) => ({ ...prev, stake: clamped }));
   };
 

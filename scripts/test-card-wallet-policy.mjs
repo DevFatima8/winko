@@ -45,6 +45,7 @@ test("balance API selects instant mode for every new card wager even with the gl
     "@/lib/mongo": {}, "@/lib/dailyPoolConfig": config,
     "@/lib/cardGameRules": cardRules, "@/lib/rouletteGameRules": rouletteRules, "@/lib/slotGameRules": slotRules, "@/lib/dailyPoolRules": rules,
     "@/lib/winOpportunityRules": opportunityRules,
+    "@/lib/gameBetLimits": load("src\\lib\\gameBetLimits.ts"),
     "@/lib/browserCardActions": { actBrowserCard: lifecycle },
     "@/lib/multiplayer-store": { mysqlMultiplayerStore: { transact: async (_lock, fn) => fn({}) } },
     "@/lib/dailyPoolBrowser": { isBrowserPoolGame: () => true, browserPoolLifecycle: lifecycle },
@@ -92,7 +93,7 @@ test("pool status preserves old card pool entries while reporting instant mode f
     const response = await route.GET(new Request(`https://fixture.invalid/api/player/daily-pool?game=${game}`));
     assert.equal(response.status, 200);
     const body = await response.json();
-    assert.equal(body.enabled, !cardRules.isCardGame(game) && !rouletteRules.isRouletteGame(game) && !rouletteRules.isWheelGame(game) && !slotRules.isSlotGame(game) && game !== "thai-hi-lo", game);
+    assert.equal(body.enabled, !cardRules.isCardGame(game) && !rouletteRules.isRouletteGame(game) && !rouletteRules.isWheelGame(game) && !slotRules.isSlotGame(game) && game !== "thai-hi-lo" && game !== "plinko", game);
     assert.deepEqual(body.entries, entries);
     assert.equal(body.balance, 990);
   }

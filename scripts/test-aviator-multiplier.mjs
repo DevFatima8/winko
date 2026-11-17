@@ -15,10 +15,12 @@ const loaded = { exports: {} };
 const imports = new Set([
   "react/jsx-runtime", "next/link", "@/lib/client", "@/lib/gameAudio", "@/lib/gameSfx",
   "@/lib/walletSync", "@/lib/betPresets", "react", "./AviatorScenicView", "@/lib/aviatorScenery",
-  "@/lib/aviatorRules",
+  "@/lib/aviatorRules", "@/lib/gameBetLimits", "@/lib/aviatorFlight",
 ]);
 new Function("require", "module", "exports", code)(name => {
   assert.ok(imports.has(name), `Unexpected dependency: ${name}`);
+  if (name === "@/lib/gameBetLimits") return { gameBetError: () => null, MAX_GAME_BET: 100000 };
+  if (name === "@/lib/aviatorFlight") return { AVIATOR_STATE_POLL_MS: 1500 };
   return {};
 }, loaded, loaded.exports);
 const { aviatorDisplayMultiplier, aviatorDisplayFrame, aviatorTakeoffAt } = loaded.exports;
@@ -72,13 +74,13 @@ test("Aviator: bet confirmation releases the button before a slow refresh and bl
   const refreshRead = new Promise(resolve => { resolveRefresh = resolve; });
   const place = new Function(
     "panelsRef", "pendingBets", "stRef", "targetClockOffset", "setPanel", "api", "table", "showToast",
-    "acceptedRefresh", "refreshSequence", "aviatorApplyBet", "setState", "broadcastBalanceUpdate", "refresh",
+    "acceptedRefresh", "refreshSequence", "aviatorApplyBet", "setState", "broadcastBalanceUpdate", "refresh", "gameBetError",
     `${js}\nreturn handler;`,
   )(
     { current: panels }, pending, stRef, { current: 0 },
     (slot, patch) => Object.assign(panels[slot], patch),
     async (_url, init) => { calls++; assert.equal(JSON.parse(init.body).queueIfClosed, true); return new Promise(resolve => { resolveApi = resolve; }); },
-    "aviator", () => {}, accepted, sequence, aviatorApplyBet, () => {}, () => {}, () => refreshRead,
+    "aviator", () => {}, accepted, sequence, aviatorApplyBet, () => {}, () => {}, () => refreshRead, () => null,
   );
   const request = place(0);
   assert.equal(panels[0].busy, true);
@@ -567,12 +569,12 @@ function refreshFixture() {
   const js = ts.transpileModule(source.replace("  if (!state) {", "  capture({ refresh, refreshMounted, stRef, flightSnapshot });\n  if (!state) {"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
-  const module = { exports: {} };
+  const loadedModule = { exports: {} };
   new Function("require", "module", "exports", "capture", "setTimeout", "clearTimeout", "setInterval", "clearInterval", "requestAnimationFrame", "cancelAnimationFrame", "console", js)(
     name => {
       assert.ok(imports.has(name), name);
       return hookImports[name] ?? {};
-    }, module, module.exports,
+    }, loadedModule, loadedModule.exports,
     value => { captured = value; },
     (fn, delay) => { const id = ++nextId; timers.set(id, { fn, delay }); return id; },
     id => timers.delete(id),
@@ -581,7 +583,7 @@ function refreshFixture() {
     () => 1, () => {},
     { warn: (...args) => warnings.push(args), error: (...args) => errors.push(args) },
   );
-  module.exports.AviatorGame({});
+  loadedModule.exports.AviatorGame({});
   const cleanups = effects.map(fn => fn()).filter(Boolean);
   return {
     captured, warnings, errors, timers, flightRequests,

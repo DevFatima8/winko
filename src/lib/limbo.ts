@@ -7,6 +7,7 @@ import { dedicatedTransaction } from "./dailyPoolDedicated";
 import { cents } from "./dailyPool";
 import type { MultiplayerTransaction } from "./multiplayer-store";
 import { nextBetWin } from "./playerWinCycle";
+import { MAX_GAME_BET } from "./gameBetLimits";
 
 /** browser/node-safe random hex (provably-fair style seed) */
 function randomHex(bytes = 32) {
@@ -15,7 +16,7 @@ function randomHex(bytes = 32) {
   return Array.from(arr, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export const MIN_BET = 10, MAX_BET = Number.MAX_SAFE_INTEGER, MAX_WIN = Number.MAX_SAFE_INTEGER;
+export const MIN_BET = 10, MAX_BET = MAX_GAME_BET, MAX_WIN = Number.MAX_SAFE_INTEGER;
 export const RTP = 0.99; // Stake Limbo: 99% RTP (1% house edge)
 export const MIN_TARGET = 1.01, MAX_TARGET = MAX_MULTIPLIER;
 
@@ -85,6 +86,7 @@ export async function getState(userId: string | null) {
 export async function play(userId: string, amount: number, target: number, requestId = "") {
   await dbConnect();
   if (!Number.isFinite(amount) || amount < MIN_BET) return { error: `Minimum bet Rs. ${MIN_BET} hai.` };
+  const exceedsLimit = amount > MAX_BET;
   target = Math.floor(Number(target) * 100) / 100;
   if (!Number.isFinite(target) || target < MIN_TARGET || target > MAX_TARGET) return { error: `Target ${MIN_TARGET}x se ${MAX_TARGET.toLocaleString()}x ke darmiyan ho.` };
   amount = Math.floor(amount);
@@ -103,6 +105,7 @@ export async function play(userId: string, amount: number, target: number, reque
       if (!saved || !user) throw new Error("Limbo replay record is incomplete.");
       return { ...previous.response, payout: saved.winAmount, poolPending: saved.poolPending, poolClaim: saved.poolClaim, balance: user.balance };
     }
+    if (exceedsLimit) return { error: "Maximum bet per player per round is Rs. 100,000." };
     if (!user || !user.isActive || user.role !== "client" || user.blockedGames?.includes("limbo")) return { error: "This account cannot bet on this game." };
     if (cents(user.balance) < cents(amount)) return { error: "Insufficient balance." };
     const { result, hash, won, data } = await nextOutcome(tx, target);

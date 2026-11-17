@@ -7,10 +7,11 @@ import { usePoolLifecycle } from "@/lib/walletSync";
 import type { BirdsBeastsOutcome } from "@/lib/multiplayer-rules";
 import type { MultiplayerBet, MultiplayerState } from "@/lib/multiplayer-types";
 import {
-  ANIMALS, MIN_BET, SLOT_COUNT, TIMES_UP_MS, WHEEL,
+  ANIMALS, MIN_BET, WHEEL,
   evaluateBets, formatMoney, isBetKey, slotsCoveredBy, totalOf, type BetKey, type Bets,
 } from "./lib/game-config";
 import { useSounds } from "./hooks/useSounds";
+import { useWheelAnimation } from "./hooks/useWheelAnimation";
 import Wheel from "./Wheel";
 import BetBoard from "./BetBoard";
 import ChipRail from "./ChipRail";
@@ -73,16 +74,13 @@ export default function BirdsBeasts({ backHref = "/player" }: { backHref?: strin
   const bets = useMemo(() => selections(state?.myBets ?? []), [state?.myBets]);
   const totalBet = totalOf(bets);
   const now = live.now;
+  const wheel = useWheelAnimation(round, now);
   const phase: Phase = !round || round.phase === "betting" ? "betting"
     : round.phase === "result" ? "result"
-      : now < round.bettingEndsAt + TIMES_UP_MS ? "closed" : "spinning";
+      : wheel.started ? "spinning" : "closed";
   const secondsLeft = round ? Math.max(0, Math.ceil((round.bettingEndsAt - now) / 1000)) : 0;
   const outcome = round?.result;
-  const progress = round ? Math.max(0, Math.min(1,
-    (now - round.bettingEndsAt - TIMES_UP_MS) / (round.resultAt - round.bettingEndsAt - TIMES_UP_MS),
-  )) : 0;
-  const activeSlot = phase === "spinning" && outcome
-    ? Math.floor((2 * SLOT_COUNT + outcome.slot) * (1 - Math.pow(1 - progress, 3))) % SLOT_COUNT : null;
+  const activeSlot = phase === "spinning" ? wheel.activeSlot : null;
   const result = phase === "result" && round && outcome ? record(round.roundNo, outcome, bets) : null;
   const history = (state?.history ?? []).map(item =>
     lastResult?.round === item.roundNo ? lastResult : record(item.roundNo, item.result),

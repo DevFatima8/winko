@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useI18n } from "@/lib/i18n/client";
 import { HeadsetIcon, XIcon, SendIcon, WhatsAppIcon, TelegramIcon } from "@/components/Icons";
+import { getSupportUnread, setSupportUnread } from "./SupportUnread";
 
 type M = { id: string; from: "user" | "agent" | "system"; text: string; agentName: string | null; at: string };
 type S = { online: boolean; hours: string; welcome: string; offlineMessage: string; links: { whatsapp?: string; telegram?: string; whatsappChannel?: string; telegramChannel?: string }; threadId: string | null; messages: M[] };
@@ -17,7 +18,24 @@ export function SupportWidget({ userName }: { userName?: string }) {
   const [error, setError] = useState<string | null>(null);
   const retryAt = useRef(0);
   const endRef = useRef<HTMLDivElement>(null);
+  const unreadSequence = useRef(0);
 
+  const loadUnread = useCallback(async () => {
+    const sequence = ++unreadSequence.current;
+    try {
+      const response = await fetch("/api/support?unread=1", { cache: "no-store" });
+      if (!response.ok) throw new Error("Unread support count load nahi ho saka.");
+      const data: { unread: number } = await response.json();
+      if (!Number.isSafeInteger(data.unread) || data.unread < 0) throw new Error("Invalid unread support count.");
+      if (sequence === unreadSequence.current) {
+        const increased = data.unread > getSupportUnread();
+        setSupportUnread(data.unread);
+        if (increased) window.dispatchEvent(new Event("wx:notification-local"));
+      }
+    } catch (e) {
+      console.error("[support:unread]", e);
+    }
+  }, []);
   const load = useCallback(async () => {
     if (Date.now() < retryAt.current) return;
     try {
@@ -29,19 +47,42 @@ export function SupportWidget({ userName }: { userName?: string }) {
       const j: S = await r.json();
       setS(j);
       setError(null);
+      void loadUnread();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Support abhi load nahi ho saka.");
     }
-  }, []);
+  }, [loadUnread]);
 
   useEffect(() => {
-    if (!open) return;
-    const initial = setTimeout(() => void load(), 0);
-    const id = setInterval(() => { if (!document.hidden) void load(); }, 5000);
-    return () => { clearTimeout(initial); clearInterval(id); };
-  }, [load, open]);
+    if (inGame) return;
+    const sequence = unreadSequence;
+    const refresh = () => { if (!document.hidden) void (open ? load() : loadUnread()); };
+    const initial = setTimeout(refresh, 0);
+    const id = setInterval(refresh, open ? 5000 : 10000);
+    window.addEventListener("wx:player-support-reply", refresh);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      clearTimeout(initial); clearInterval(id);
+      window.removeEventListener("wx:player-support-reply", refresh);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+      sequence.current++;
+    };
+  }, [inGame, load, loadUnread, open]);
   useEffect(() => { if (open) { setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 50); } }, [open, s?.messages.length]);
   useEffect(() => { const h = () => setOpen(true); window.addEventListener("wx:open-support", h); return () => window.removeEventListener("wx:open-support", h); }, []);
+  useEffect(() => {
+    if (inGame) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("support") !== "1") return;
+    const timer = setTimeout(() => {
+      url.searchParams.delete("support");
+      window.history.replaceState(window.history.state, "", url);
+      setOpen(true);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [inGame]);
 
   const send = async () => {
     const t = text.trim(); if (!t) return;

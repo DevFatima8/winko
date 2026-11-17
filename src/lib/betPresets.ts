@@ -1,5 +1,7 @@
+import { MAX_GAME_BET } from "./gameBetLimits";
+
 export const DEFAULT_BET_PRESETS = [10, 20, 50, 100, 200] as const;
-export const MAX_BET_PRESET = 50_000;
+export const MAX_BET_PRESET = MAX_GAME_BET;
 export type BetPresetValues = [number, number, number, number, number];
 
 const ACTIVE_USER_KEY = "wx:active-bet-preset-user";
@@ -47,7 +49,7 @@ export function activateBetPresets(userId: string, values: unknown) {
 
 export function saveBetPresets(userId: string, values: unknown) {
   const presets = normalizeBetPresets(values);
-  if (!presets) throw new Error("Enter five different amounts from 10 to 50,000.");
+  if (!presets) throw new Error("Enter five different amounts from 10 to 100,000.");
   activeUserId = userId;
   if (typeof window !== "undefined") {
     window.localStorage.setItem(ACTIVE_USER_KEY, userId);

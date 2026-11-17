@@ -111,7 +111,7 @@ function harness({ poolPending = true } = {}) {
       if (specifier === "./walletReveal") return reveal.exports;
       if (specifier === "./dailyPoolConsent") return { dailyPoolConsent: () => "daily-pool-v1" };
       if (specifier === "./gameResultNotice") return noticeModule.exports;
-      if (specifier === "./cardGameRules" || specifier === "./browserCardGames" || specifier === "./rouletteGameRules" || specifier === "./slotGameRules") {
+      if (specifier === "./cardGameRules" || specifier === "./browserCardGames" || specifier === "./rouletteGameRules" || specifier === "./slotGameRules" || specifier === "./gameBetLimits") {
         const helper = { exports: {} };
         new Function("exports", ts.transpileModule(readFileSync(`src\\lib\\${specifier.slice(2)}.ts`, "utf8"), {
           compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
@@ -146,6 +146,23 @@ function harness({ poolPending = true } = {}) {
     },
   };
 }
+
+test("browser and projectile clients reject new out-of-range stakes without persisting or sending wagers", async () => {
+  const h = harness();
+  try {
+    const client = h.mount();
+    const pool = client.usePoolLifecycle("crash-bonus");
+    const wager = client.useBrowserWager("rock-paper-scissors");
+    for (const amount of [9.99, 100_000.01]) {
+      assert.equal(await pool.start(amount, () => {}), false);
+      await assert.rejects(wager.playServer(amount, { choice: "rock" }), /Minimum|100,000/);
+      assert.equal(await client.concurrentBrowserWager("fishing-arcade", "accept", randomUUID(), amount), null);
+    }
+    assert.equal(h.requests.length, 0);
+    assert.equal(h.wagers.size, 0);
+    assert.equal(h.balance, 1000);
+  } finally { h.restore(); }
+});
 
 function toucanSpin(pool) {
   const source = ts.createSourceFile("FortuneToucanGame.tsx",
@@ -742,7 +759,7 @@ test("independent projectile recovery preserves each sampled hit and miss after 
     const snapshot = { fish: [{ id: 1, species: "Shark", x: 12, y: 14 }], bullets: [{ wagerId: missId, win: false }], pending: { wagerId: hitId } };
     h.lose("accept");
     assert.equal(await original.acceptBrowserProjectile("fishing-arcade", hitId, 10, { target: "Shark" }, snapshot), null);
-    const miss = await original.acceptBrowserProjectile("fishing-arcade", missId, 5, { target: null }, snapshot);
+    const miss = await original.acceptBrowserProjectile("fishing-arcade", missId, 10, { target: null }, snapshot);
     assert.ok(miss);
     h.lose("complete");
     assert.equal(await original.completeBrowserProjectile("fishing-arcade", hitId, 70), null);
@@ -752,7 +769,7 @@ test("independent projectile recovery preserves each sampled hit and miss after 
     assert.deepEqual(recovered.activeIds, [missId]);
     assert.equal(h.wagers.get(missId).closed, false, "an in-flight shot has no fabricated terminal claim");
     await reloaded.completeBrowserProjectile("fishing-arcade", missId, 0);
-    assert.equal(h.balance, 985);
+    assert.equal(h.balance, 980);
     assert.equal(h.wagers.size, 2);
     assert.deepEqual([...h.wagers.values()].map(wager => wager.claim).sort((a, b) => a - b), [0, 70]);
     assert.ok([...h.wagers.values()].every(wager => wager.closed));

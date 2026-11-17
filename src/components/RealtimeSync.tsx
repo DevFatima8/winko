@@ -47,6 +47,7 @@ export function RealtimeSync({ children }: { children: ReactNode }) {
         window.dispatchEvent(new CustomEvent("wx:data-refresh"));
       }
       if (item.title === "New support message") window.dispatchEvent(new CustomEvent("wx:support-update"));
+      if (item.title === "Support replied" && item.href === "/help?support=1") window.dispatchEvent(new CustomEvent("wx:player-support-reply"));
     });
     stream.addEventListener("refresh", () => { window.dispatchEvent(new CustomEvent("wx:data-refresh")); });
     stream.addEventListener("announcement", (event) => {

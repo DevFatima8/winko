@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
 import type { MultiplayerGame } from "./multiplayer-types";
 import { evaluateBets, isBetKey, type AnimalId } from "@/components/birds-beasts/lib/game-config";
+import { BLAST_OFF_MODEL, BLAST_OFF_PREVIOUS_MODEL, BLAST_OFF_MAX_CRASH, BLAST_OFF_SAMPLE_SPACE, blastOffCrashFromSample, type BlastOffModel } from "./blastOffRules";
 
 export type Suit = "♠" | "♥" | "♦" | "♣";
 export type Card = { rank: string; value: number; suit: Suit };
@@ -16,7 +17,7 @@ export type DiceOutcome = { dice: [number, number, number]; total: number; side:
 export type SevenOutcome = { dice: [number, number]; total: number };
 export type CricketMatch = { innings: 1 | 2; batting: 0 | 1; runs: number; wickets: number; balls: number; target: number | null; thisOver: CricketOutcome["outcome"][] };
 export type CricketOutcome = { outcome: "dot" | "single" | "two" | "four" | "six" | "wicket"; match?: CricketMatch };
-export type BlastOutcome = { crashPoint: number };
+export type BlastOutcome = { crashPoint: number; model?: BlastOffModel };
 export type BirdsBeastsOutcome = { slot: number; animal: AnimalId; outcome: string };
 export type MultiplayerOutcome = BaccaratOutcome | SpeedBaccaratOutcome | FootballOutcome | Cards32Outcome | RouletteOutcome | DreamOutcome | DiceOutcome | SevenOutcome | CricketOutcome | BlastOutcome | BirdsBeastsOutcome;
 
@@ -142,7 +143,7 @@ export function validateOption(game: MultiplayerGame, option: string): boolean {
 }
 
 /** Cryptographic randomness; no bets, player identity, or stake enter outcome generation. */
-export function createOutcome(game: MultiplayerGame): MultiplayerOutcome {
+export function createOutcome(game: MultiplayerGame, legacyBlast: boolean | typeof BLAST_OFF_PREVIOUS_MODEL = false): MultiplayerOutcome {
   switch (game) {
     // The existing quota schedule is consumed once, under the table lock, after bets close.
     case "birds-beasts": return { slot: -1, animal: "chicken", outcome: "idle" };
@@ -210,12 +211,13 @@ export function createOutcome(game: MultiplayerGame): MultiplayerOutcome {
       return { outcome: pick(bag) };
     }
     case "blast-off":
-      // The neutral idle-flight distribution, independent of all cashout targets.
-      return { crashPoint: cents(1 + Math.pow(randomInt(0x1000000) / 0x1000000, 2.1) * 14) };
+      if (legacyBlast === true) return { crashPoint: cents(1 + Math.pow(randomInt(0x1000000) / 0x1000000, 2.1) * 14) };
+      if (legacyBlast === BLAST_OFF_PREVIOUS_MODEL) return { crashPoint: blastOffCrashFromSample(randomInt(BLAST_OFF_SAMPLE_SPACE), BLAST_OFF_PREVIOUS_MODEL), model: BLAST_OFF_PREVIOUS_MODEL };
+      return { crashPoint: blastOffCrashFromSample(randomInt(BLAST_OFF_SAMPLE_SPACE)), model: BLAST_OFF_MODEL };
   }
 }
 
-export const multiplierAt = (seconds: number) => Math.min(250, Math.exp(0.155 * Math.max(0, seconds)));
+export const multiplierAt = (seconds: number, max = BLAST_OFF_MAX_CRASH) => Math.min(max, Math.exp(0.155 * Math.max(0, seconds)));
 export const flightMs = (crashPoint: number) => Math.log(Math.max(1, crashPoint)) / 0.155 * 1000;
 export function advanceCricketMatch(outcome: CricketOutcome["outcome"], previous?: CricketMatch): CricketMatch {
   const m: CricketMatch = previous ?? { innings: 1, batting: 0, runs: 86, wickets: 2, balls: 57, target: null, thisOver: ["single", "dot", "four"] };
@@ -229,7 +231,7 @@ export function advanceCricketMatch(outcome: CricketOutcome["outcome"], previous
 export function timings(game: MultiplayerGame, version: 1 | 2 = 2) {
   const legacyBettingMs = game === "blast-off" ? 6000 : game === "speed-baccarat" ? 9000 : game === "7-up-down" ? 13000 : game === "football-studio" || game === "nine-wickets" ? 12000 : game === "auto-roulette" ? 20000 : game === "lightning-roulette" ? 25000 : 15000;
   return { bettingMs: version === 1 ? legacyBettingMs : 10000,
-    runningMs: game === "birds-beasts" ? 11000 : game === "blast-off" ? Math.ceil(flightMs(250)) : game === "dream-catcher" ? 12000 : game.includes("roulette") ? 8000 : 5000,
+    runningMs: game === "birds-beasts" ? 11000 : game === "blast-off" ? Math.ceil(flightMs(BLAST_OFF_MAX_CRASH)) : game === "dream-catcher" ? 12000 : game.includes("roulette") ? 8000 : 5000,
     resultMs: game === "blast-off" ? 3200 : 5000 };
 }
 

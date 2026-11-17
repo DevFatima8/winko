@@ -20,7 +20,9 @@ const birdConfig = load(join("src", "components", "birds-beasts", "lib", "game-c
 const birdRounds = load(join("src", "lib", "birdsBeastsRounds.ts"), {
   "node:crypto": crypto, "@/components/birds-beasts/lib/game-config": birdConfig,
 });
-const rules = load(join("src", "lib", "multiplayer-rules.ts"), { "node:crypto": crypto, "@/components/birds-beasts/lib/game-config": birdConfig });
+const blastRules = load(join("src", "lib", "blastOffRules.ts"));
+const betLimits = load(join("src", "lib", "gameBetLimits.ts"));
+const rules = load(join("src", "lib", "multiplayer-rules.ts"), { "node:crypto": crypto, "@/components/birds-beasts/lib/game-config": birdConfig, "./blastOffRules": blastRules });
 const poolRules = load(join("src", "lib", "dailyPoolRules.ts"), { "./gameCatalog": load(join("src", "lib", "gameCatalog.ts")), "./multiplayer-types": types });
 const pool = load(join("src", "lib", "dailyPool.ts"), { "./dailyPoolRules": poolRules, "node:crypto": crypto });
 const rouletteRules = load(join("src", "lib", "rouletteGameRules.ts"));
@@ -83,7 +85,13 @@ function fixture(overrides = {}, poolEnabled = false) {
   };
   const backend = load(backendPath, {
     "node:crypto": crypto, "./multiplayer-types": types,
-    "./multiplayer-rules": { ...rules, createOutcome: game => structuredClone(overrides[game] ?? fixed[game] ?? rules.createOutcome(game)) },
+    "./multiplayer-rules": { ...rules, createOutcome: (game, legacyBlast) => {
+      const outcome = structuredClone(overrides[game] ?? fixed[game] ?? rules.createOutcome(game, legacyBlast));
+      if (game === "blast-off" && legacyBlast === blastRules.BLAST_OFF_PREVIOUS_MODEL) outcome.model = blastRules.BLAST_OFF_PREVIOUS_MODEL;
+      else if (game === "blast-off" && !legacyBlast) outcome.model = blastRules.BLAST_OFF_MODEL;
+      else if (game === "blast-off") delete outcome.model;
+      return outcome;
+    } },
     "./multiplayer-store": { mysqlMultiplayerStore: store },
     "./dailyPool": pool, "./dailyPoolRules": poolRules, "./dailyPoolConfig": { dailyPoolEnabled: () => poolEnabled },
     "./cardGameRules": cardRules,
@@ -93,6 +101,7 @@ function fixture(overrides = {}, poolEnabled = false) {
     "./privateRouletteTables": privateRoulettes, "./playerWinCycle": cycles,
     "./privateDiceTables": { isPrivateDiceTable: () => false },
     "./birdsBeastsRounds": birdRounds, "@/components/birds-beasts/lib/game-config": birdConfig,
+    "./blastOffRules": blastRules, "./gameBetLimits": betLimits,
   });
   return {
     ...backend, service: backend.createMultiplayerService(store),
@@ -211,7 +220,7 @@ test("non-card multiplayer games record accepted stakes, close claims, and pay e
     "auto-roulette": "n:1", "lightning-roulette": "n-1", "sic-bo": "small", "blast-off": "main",
     "nine-wickets": "boundary", "7-up-down": "down", "tai-xiu": "tai", "32-cards": "A", "birds-beasts": "owl" };
   for (const game of types.MULTIPLAYER_GAMES) {
-    if (cardRules.isCardGame(game) || rouletteRules.isWheelGame(game)) continue;
+    if (cardRules.isCardGame(game) || rouletteRules.isWheelGame(game) || game === "blast-off") continue;
     const f = fixture({}, true);
     f.at(Date.parse("2026-10-24T08:00:00Z"));
     const initial = await f.service.read(game, "u1");
@@ -633,7 +642,7 @@ test("Flight auto cashouts run on server deadlines without browser actions; no c
   f.at(start.round.bettingEndsAt + rules.flightMs(2) + 1);
   const flight = await f.service.read("blast-off", "u1");
   assert.equal(flight.round.result, null);
-  assert.equal(flight.balance, 10096);
+  assert.equal(flight.balance, 10100);
   assert.equal(flight.myBets[0].cashoutMultiplier, 2);
   assert.equal(JSON.parse(f.rows("gameresults")[0].resultData).result, null);
   f.at(start.round.bettingEndsAt + rules.flightMs(3));
@@ -698,8 +707,240 @@ test("Manual flight cashout ignores client multiplier and timestamps; reserve/cr
   await f.second.act("blast-off", "u1", cashout);
   const state = await f.service.read("blast-off", "u1");
   assert.equal(state.myBets[0].cashoutMultiplier, 1.5);
-  assert.equal(state.balance, 10047);
+  assert.equal(state.balance, 10050);
   await rejects(f.service.act("blast-off", "u1", action("cashout", 1)), 409);
+});
+
+test("Blast Off has 30% theoretical gross RTP at every allowed cent target through 99.98x", () => {
+  const { BLAST_OFF_SAMPLE_SPACE: size, BLAST_OFF_RTP: rtp, blastOffCrashFromSample: crash } = blastRules;
+  assert.equal(crash(0), 99.99);
+  assert.equal(crash(size - 1), 1);
+  for (let targetCents = 101; targetCents <= 9998; targetCents++) {
+    const target = targetCents / 100;
+    let low = 0, high = size;
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2);
+      if (crash(mid) > target) low = mid + 1;
+      else high = mid;
+    }
+    const expectedReturn = target * low / size;
+    assert.ok(expectedReturn <= rtp + 1e-14 && rtp - expectedReturn <= target / size + 1e-14, `${target}x: ${expectedReturn}`);
+  }
+  for (const sample of [-1, size, 1.5, NaN, Infinity]) assert.throws(() => crash(sample), /Invalid Blast Off/);
+});
+
+test("Blast Off uses a fresh crypto sample, independent of target and stake", () => {
+  const samples = [0, blastRules.BLAST_OFF_SAMPLE_SPACE - 1, 0], calls = [];
+  const actual = load(join("src", "lib", "multiplayer-rules.ts"), {
+    "node:crypto": { randomInt: max => { calls.push(max); return samples.shift(); } },
+    "@/components/birds-beasts/lib/game-config": birdConfig, "./blastOffRules": blastRules,
+  });
+  assert.deepEqual(actual.createOutcome("blast-off"), { crashPoint: 99.99, model: blastRules.BLAST_OFF_MODEL });
+  assert.deepEqual(actual.createOutcome("blast-off"), { crashPoint: 1, model: blastRules.BLAST_OFF_MODEL });
+  assert.deepEqual(actual.createOutcome("blast-off", blastRules.BLAST_OFF_PREVIOUS_MODEL), { crashPoint: 250.01, model: blastRules.BLAST_OFF_PREVIOUS_MODEL });
+  assert.deepEqual(calls, Array(3).fill(blastRules.BLAST_OFF_SAMPLE_SPACE));
+});
+
+test("Blast Off payout includes stake once, rounds down to paisa and permits returns above the stake cap", () => {
+  assert.equal(blastRules.blastOffPayout(100, 2), 200);
+  assert.equal(blastRules.blastOffPayout(10.99, 1.01), 11.09);
+  assert.equal(blastRules.blastOffPayout(100000, 99.98), 9998000);
+  assert.equal(blastRules.blastOffPayout(100000, 250, blastRules.BLAST_OFF_PREVIOUS_MODEL), 25000000);
+  for (const [stake, target] of [[NaN, 2], [0, 2], [10.001, 2], [10, 99.99], [10, 100], [10, 250], [10, 1.001]]) {
+    assert.throws(() => blastRules.blastOffPayout(stake, target), /Invalid Blast Off/);
+  }
+});
+
+for (const pooled of [false, true]) {
+  test(`Blast Off credits auto cashout only at its target, without pool or hold (global pool ${pooled})`, async () => {
+    const f = fixture({ "blast-off": { crashPoint: 99.99 } }, pooled);
+    const start = await f.service.read("blast-off", "u1"), input = bet(1, "main", 100, { autoCashout: 99.98 });
+    await f.service.act("blast-off", "u1", input);
+    await f.second.act("blast-off", "u1", input);
+    const targetAt = start.round.bettingEndsAt + rules.flightMs(99.98);
+    f.at(Math.ceil(targetAt) - 1);
+    assert.equal((await f.service.read("blast-off", "u1")).balance, 9900);
+    assert.equal(f.rows("gameresults").length, 0);
+    f.at(targetAt);
+    const won = await f.second.read("blast-off", "u1");
+    assert.equal(won.round.phase, "running");
+    assert.equal(won.myBets[0].payout, 9998);
+    assert.equal(won.balance, 19898);
+    assert.equal(won.round.result, null);
+    assert.equal(won.round.resultAt, 0);
+    f.at(Math.ceil(start.round.bettingEndsAt + rules.flightMs(99.99)));
+    await f.service.read("blast-off", "u1");
+    assert.equal(f.document("users", "u1").balance, 19898);
+    assert.equal(f.rows("gameresults").length, 1);
+    assert.equal(f.rows("dailypoolentries").length + f.rows("winholds").length, 0);
+    assert.ok(!won.myBets[0].poolPending);
+  });
+
+  test(`Blast Off preserves old pooled and unpooled reservations (global pool ${pooled})`, async () => {
+    const f = fixture({}, pooled), start = await f.service.read("blast-off", "u1");
+    const oldInput = bet(1, "main", 100, { autoCashout: 2 });
+    if (pooled) await seedOldCardPoolWager(f, "blast-off", oldInput);
+    else await f.service.act("blast-off", "u1", oldInput);
+    const old = structuredClone(f.document("multiplayerrooms", "blast-off"));
+    delete old.outcome.model;
+    delete old.bets[0].blastModel;
+    f.seed("multiplayerrooms", "blast-off", old);
+    await f.service.act("blast-off", "u1", oldInput);
+    await assert.rejects(f.service.act("blast-off", "u2", bet(1, "main")), /Previously accepted/);
+    f.at(Math.ceil(start.round.bettingEndsAt + rules.flightMs(2)));
+    const won = await f.service.read("blast-off", "u1");
+    assert.equal(won.myBets[0].payout, pooled ? 0 : 196);
+    assert.equal(won.balance, pooled ? 9900 : 10096);
+    assert.equal(f.rows("winholds").length, pooled ? 0 : 1);
+    if (pooled) {
+      assert.equal(won.myBets[0].poolPending, true);
+      assert.equal(won.myBets[0].poolClaim, 200);
+      assert.equal(f.rows("dailypoolentries")[0].status, "closed");
+    }
+    await f.service.read("blast-off", "u1");
+    assert.equal(f.document("users", "u1").balance, won.balance);
+    f.at(start.round.bettingEndsAt + rules.flightMs(3) + rules.timings("blast-off").resultMs);
+    const next = await f.service.read("blast-off", "u2");
+    await f.service.act("blast-off", "u2", bet(next.round.roundNo, "main"));
+    assert.equal(f.document("multiplayerrooms", "blast-off").bets[0].blastModel, blastRules.BLAST_OFF_MODEL);
+    if (pooled) {
+      f.at(Date.parse("1970-01-01T19:00:00Z"));
+      await f.service.read("blast-off", "u1");
+      await f.service.read("blast-off", "u1");
+      assert.equal(f.document("users", "u1").balance, 9935, "The accepted legacy pool pays its original 35% once at midnight");
+      const oldResult = f.rows("gameresults").find(result => result.userId === "u1");
+      assert.equal(oldResult.winAmount, 35);
+      assert.equal(oldResult.poolPending, false);
+    }
+  });
+}
+
+test("Blast Off never reaches 100x and roughly 85% of rounds crash strictly before 2x", () => {
+  const { BLAST_OFF_SAMPLE_SPACE: size, blastOffCrashFromSample: crash } = blastRules;
+  let low = 0, high = size;
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    if (crash(mid) >= 2) low = mid + 1;
+    else high = mid;
+  }
+  const belowTwo = 1 - low / size;
+  assert.ok(belowTwo > 0.849 && belowTwo < 0.851, `Probability before 2x: ${belowTwo}`);
+  for (let i = 0; i <= 1024; i++) {
+    const value = crash(Math.min(size - 1, Math.floor(size * i / 1024)));
+    assert.ok(value >= 1 && value <= 99.99 && value < 100);
+  }
+});
+
+test("Blast Off rejects cashout targets at or above its crash cap before any wallet debit", async () => {
+  const f = fixture();
+  await f.service.read("blast-off", "u1");
+  for (const target of [99.99, 100, 250]) {
+    await assert.rejects(f.service.act("blast-off", "u1", bet(1, "main", 100, { autoCashout: target })), /between 1.01 and 99.98/);
+  }
+  assert.equal(f.document("users", "u1").balance, 10000);
+  assert.equal(f.rows("gameresults").length, 0);
+  assert.equal(f.document("multiplayerrooms", "blast-off").bets.length, 0);
+  await f.service.act("blast-off", "u1", bet(1, "main", 100, { autoCashout: 99.98 }));
+  assert.equal(f.document("users", "u1").balance, 9900);
+});
+
+test("Blast Off preserves an accepted old 250x auto cashout and its receipt without opening new old-model bets", async () => {
+  const f = fixture({}, true), start = await f.service.read("blast-off", "u1");
+  const input = bet(1, "main", 100, { autoCashout: 99.98 });
+  await f.service.act("blast-off", "u1", input);
+  const room = structuredClone(f.document("multiplayerrooms", "blast-off"));
+  room.outcome = { crashPoint: 250.01, model: blastRules.BLAST_OFF_PREVIOUS_MODEL };
+  Object.assign(room.bets[0], { autoCashout: 250, blastModel: blastRules.BLAST_OFF_PREVIOUS_MODEL });
+  f.seed("multiplayerrooms", "blast-off", room);
+  input.autoCashout = 250;
+  const requestKey = crypto.createHash("sha256").update(`blast-off:u1:${input.requestId}`).digest("hex");
+  const receipt = structuredClone(f.document("multiplayerrequests", requestKey));
+  receipt.fingerprint = JSON.stringify(["bet", 1, "main", 100, 250, null]);
+  f.seed("multiplayerrequests", requestKey, receipt);
+  await f.second.act("blast-off", "u1", input);
+  await assert.rejects(f.service.act("blast-off", "u2", bet(1, "main")), /Previously accepted/);
+  f.at(start.round.bettingEndsAt + rules.flightMs(250));
+  const won = await f.service.read("blast-off", "u1");
+  assert.equal(won.myBets[0].payout, 25000);
+  assert.equal(won.balance, 34900);
+  assert.equal(won.round.flightModel, blastRules.BLAST_OFF_PREVIOUS_MODEL);
+  await f.service.read("blast-off", "u1");
+  assert.equal(f.document("users", "u1").balance, 34900);
+  assert.equal(f.rows("winholds").length + f.rows("dailypoolentries").length, 0);
+});
+
+test("Blast Off previously accepted 30% queued wagers retain the old capped model and full payout", async () => {
+  const f = fixture(), start = await f.service.read("blast-off", "u1");
+  await f.service.act("blast-off", "u1", bet(1, "main", 100, { autoCashout: 2 }));
+  const room = structuredClone(f.document("multiplayerrooms", "blast-off"));
+  const wager = room.bets.pop();
+  Object.assign(wager, { roundNo: 2, blastModel: blastRules.BLAST_OFF_PREVIOUS_MODEL });
+  room.queuedBets.push(wager);
+  f.seed("multiplayerrooms", "blast-off", room);
+  f.at(start.round.bettingEndsAt + 1);
+  await assert.rejects(f.service.act("blast-off", "u2", bet(2, "main")), /Previously accepted/);
+  f.at(start.round.bettingEndsAt + rules.flightMs(3) + rules.timings("blast-off").resultMs);
+  const next = await f.service.read("blast-off", "u1");
+  assert.equal(next.round.flightModel, blastRules.BLAST_OFF_PREVIOUS_MODEL);
+  assert.equal(f.document("multiplayerrooms", "blast-off").outcome.model, blastRules.BLAST_OFF_PREVIOUS_MODEL);
+  f.at(next.round.bettingEndsAt + rules.flightMs(2));
+  assert.equal((await f.service.read("blast-off", "u1")).myBets[0].payout, 200);
+});
+
+test("Blast Off legacy queued wagers retain their crash model and prevent mixed-contract new stakes", async () => {
+  const f = fixture(), start = await f.service.read("blast-off", "u1");
+  const input = bet(1, "main", 100, { autoCashout: 2 });
+  await f.service.act("blast-off", "u1", input);
+  const room = structuredClone(f.document("multiplayerrooms", "blast-off"));
+  const wager = room.bets.pop();
+  delete wager.blastModel;
+  wager.roundNo = 2;
+  room.queuedBets.push(wager);
+  f.seed("multiplayerrooms", "blast-off", room);
+  f.at(start.round.bettingEndsAt + 1);
+  await assert.rejects(f.service.act("blast-off", "u2", bet(2, "main")), /Previously accepted/);
+  f.at(start.round.bettingEndsAt + rules.flightMs(3) + rules.timings("blast-off").resultMs);
+  const next = await f.service.read("blast-off", "u1");
+  assert.equal(next.round.roundNo, 2);
+  assert.equal(f.document("multiplayerrooms", "blast-off").outcome.model, undefined);
+  await assert.rejects(f.service.act("blast-off", "u2", bet(2, "main")), /Previously accepted/);
+  f.at(Math.ceil(next.round.bettingEndsAt + rules.flightMs(2)));
+  assert.equal((await f.service.read("blast-off", "u1")).myBets[0].payout, 196);
+});
+
+test("Blast Off instant crash loses once; queued new wagers adopt the 30% model", async () => {
+  const f = fixture({ "blast-off": { crashPoint: 1 } }, true);
+  const start = await f.service.read("blast-off", "u1");
+  await f.service.act("blast-off", "u1", bet(1, "main", 100, { autoCashout: 1.01 }));
+  f.at(start.round.bettingEndsAt);
+  const crash = await f.service.read("blast-off", "u1");
+  assert.equal(crash.round.phase, "result");
+  assert.equal(crash.myBets[0].status, "lose");
+  assert.equal(crash.balance, 9900);
+  await f.service.act("blast-off", "u2", bet(2, "main", 100, { autoCashout: 2 }));
+  f.at(start.round.bettingEndsAt + rules.timings("blast-off").resultMs);
+  const next = await f.service.read("blast-off", "u2");
+  assert.equal(next.myBets[0].status, "pending");
+  assert.equal(f.document("multiplayerrooms", "blast-off").outcome.model, blastRules.BLAST_OFF_MODEL);
+  assert.equal(f.rows("gameresults").length, 1);
+  assert.equal(f.rows("dailypoolentries").length, 0);
+});
+
+test("Blast Off pool status hides new-pool consent while retaining old entries", async () => {
+  const entries = [{ id: "old-entry", status: "closed", stake: 100, claim: 200 }];
+  const route = load(join("src", "app", "api", "player", "daily-pool", "route.ts"), {
+    "next/server": { NextResponse: { json: data => data } },
+    "@/lib/serverAuth": { getServerSessionUser: async () => ({ id: "u1", role: "client" }) },
+    "@/lib/dailyPoolRules": poolRules,
+    "@/lib/dailyPoolService": { playerPoolStatus: async () => ({ balance: 9900, entries }) },
+    "@/lib/dailyPoolConfig": { dailyPoolEnabled: () => true },
+    "@/lib/cardGameRules": cardRules, "@/lib/rouletteGameRules": rouletteRules,
+    "@/lib/slotGameRules": { isSlotGame: () => false },
+  });
+  const status = await route.GET(new Request("http://test.local/api/player/daily-pool?game=blast-off"));
+  assert.equal(status.enabled, false);
+  assert.deepEqual(status.entries, entries);
+  assert.equal((await route.GET(new Request("http://test.local/api/player/daily-pool?game=nine-wickets"))).enabled, true);
 });
 
 test("Cricket persists complete shared match snapshots beyond bounded round history", async () => {

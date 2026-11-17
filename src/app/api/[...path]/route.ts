@@ -38,7 +38,7 @@ async function dispatch(request: Request) {
             ["/api/aviator/bet", "/api/chicken/start", "/api/chickendash/start", "/api/plinko/drop", "/api/limbo", "/api/slot777", "/api/cards/bet"].includes(path) ||
             path === "/api/mines" && body.action === "start");
         if (!LOCAL_GAMES_CONNECTED && startsLocalBet) return errorResponse(LOCAL_GAMES_UNAVAILABLE, 403);
-        if (method === "POST" && (["/api/chicken/start", "/api/chickendash/start", "/api/plinko/drop", "/api/limbo"].includes(path) || path === "/api/mines" && body.action === "start") && dailyPoolEnabled()) {
+        if (method === "POST" && (["/api/chicken/start", "/api/chickendash/start", "/api/limbo"].includes(path) || path === "/api/mines" && body.action === "start") && dailyPoolEnabled()) {
             if (!requirePlayer()) return errorResponse("Khelne ke liye Login / Register karein.", 401);
             if (body.poolRulesVersion !== DAILY_POOL_VERSION) return errorResponse("Read and accept the daily-pool rules before placing a new bet.", 400);
         }

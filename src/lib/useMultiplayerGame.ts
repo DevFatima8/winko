@@ -8,6 +8,7 @@ import { dailyPoolConsent } from "./dailyPoolConsent";
 import { notifyGameResult } from "./gameResultNotice";
 import { isCardGame } from "./cardGameRules";
 import { isRouletteGame } from "./rouletteGameRules";
+import { gameBetError } from "./gameBetLimits";
 
 export function useMultiplayerGame<R = unknown>(
   game: MultiplayerGame,
@@ -160,6 +161,15 @@ export function useMultiplayerGame<R = unknown>(
   }, [refresh, revealKey, resultRevealDelay]);
 
   const send = useCallback(async (action: Omit<MultiplayerAction, "requestId">): Promise<MultiplayerReply> => {
+    if (action.action === "bet") {
+      const snapshot = stateRef.current;
+      const bets = action.roundNo === snapshot?.round.roundNo ? snapshot.myBets : snapshot?.myQueuedBets ?? [];
+      const limitError = gameBetError(action.amount ?? NaN, bets.filter(bet => bet.status !== "cancelled").reduce((sum, bet) => sum + bet.amount, 0));
+      if (limitError) {
+        setError(limitError);
+        return { error: limitError };
+      }
+    }
     if (actionController.current) {
       const message = "A request is already in progress. Please wait.";
       setError(message);

@@ -70,6 +70,7 @@ function loader(env, overrides = {}) {
       if (name === "@/lib/visibleAnimationFrame") return load("src\\lib\\visibleAnimationFrame.ts");
       if (name === "@/lib/gameSfx") return load("src\\lib\\gameSfx.ts");
       if (name === "@/lib/crashCashoutLimit") return load("src\\lib\\crashCashoutLimit.ts");
+      if (name === "@/lib/gameBetLimits") return load("src\\lib\\gameBetLimits.ts");
       if (name === "./lib/soundEngine") return load("src\\components\\crash-cricket\\lib\\soundEngine.ts");
       if (name.endsWith(".css")) return {};
       if (name.startsWith(".")) return load(path.join(path.dirname(file), name + ".ts"));
@@ -187,7 +188,7 @@ test("shared crash effects close queued tones and remain silent on a hidden page
   gameSfx.stop();
 });
 
-function componentHarness(file, saved = null) {
+function componentHarness(file, saved = null, captureTree = false) {
   const env = environment(), effects = [], cleanups = [], writes = [];
   const react = {
     useState(value) { return [typeof value === "function" ? value() : value, () => {}]; },
@@ -202,7 +203,9 @@ function componentHarness(file, saved = null) {
   const stub = () => null;
   const load = loader(env, {
     react: { ...react, default: react },
-    "react/jsx-runtime": { jsx: stub, jsxs: stub, Fragment: stub },
+    "react/jsx-runtime": captureTree
+      ? { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: stub }
+      : { jsx: stub, jsxs: stub, Fragment: stub },
     "@/lib/walletSync": { useGameBalance: () => [1000, () => {}], usePoolLifecycle: () => pool,
       usePoolRoundState: (_game, key, initial) => [key === "machine" ? saved : initial, () => {}] },
     "@/lib/betPresets": { BET_PRESETS: [10, 20, 50, 100, 200] },
@@ -218,13 +221,44 @@ function componentHarness(file, saved = null) {
     "lucide-react": new Proxy({}, { get: () => stub }),
   });
   const loaded = load(file);
-  (loaded.default ?? loaded.CrashGoal)();
+  const tree = (loaded.default ?? loaded.CrashGoal)();
   for (const effect of effects) {
     const cleanup = effect();
     if (typeof cleanup === "function") cleanups.push(cleanup);
   }
-  return { ...env, writes, pool, unmount() { for (const cleanup of cleanups) cleanup(); }, load };
+  return { ...env, writes, pool, tree, unmount() { for (const cleanup of cleanups) cleanup(); }, load };
 }
+
+test("Crash Goal sends the selected stake and ignores changes while it is being accepted", async () => {
+  const env = componentHarness("src\\components\\crash-goal\\CrashGoal.tsx", null, true);
+  const nodes = [];
+  const visit = node => {
+    if (Array.isArray(node)) return node.forEach(visit);
+    if (!node || typeof node !== "object") return;
+    nodes.push(node);
+    visit(node.props?.children);
+  };
+  visit(env.tree);
+  const panel = nodes.find(node => node.props?.onAmountChange && node.props?.onPrimaryAction);
+  assert.ok(panel);
+  let machine;
+  env.pool.checkpoint = saved => { machine = saved.machine; };
+  panel.props.onAmountChange(200);
+  let finish;
+  env.pool.start = amount => {
+    env.writes.push(["start", amount]);
+    env.pool.busy = true;
+    return new Promise(resolve => { finish = resolve; });
+  };
+  const pending = panel.props.onPrimaryAction();
+  panel.props.onAmountChange(50);
+  env.pool.busy = false;
+  finish(true);
+  await pending;
+  assert.deepEqual(env.writes, [["start", 200]]);
+  assert.equal(machine.slots[0].amount, 200);
+  env.unmount();
+});
 
 for (const [game, file] of [
   ["bonus", "src\\components\\crash-bonus\\CrashGame.tsx"],
@@ -290,6 +324,95 @@ test("leaving while cricket settles a round cannot start a queued or automatic b
   assert.deepEqual(env.writes, []);
   assert.equal(env.frames.size, 0);
   assert.equal(env.timers.size, 0);
+});
+
+test("Blast Off advances on every frame between live samples, smooths resync and freezes at crash", () => {
+  let now = 0, nextId = 0;
+  const frames = new Map(), cleanups = [], rendered = [], resizeObservers = [];
+  const handle = { current: null };
+  const gradient = { addColorStop() {} };
+  const ctx = new Proxy({
+    createLinearGradient: () => gradient, createRadialGradient: () => gradient,
+    measureText: () => ({ width: 40 }),
+  }, { get: (obj, key) => obj[key] ?? (() => {}) });
+  const canvas = { width: 800, height: 500, getContext: () => ctx,
+    getBoundingClientRect: () => ({ width: 800, height: 500 }) };
+  let refIndex = 0;
+  const react = {
+    useRef: value => ({ current: refIndex++ === 0 ? canvas : value }),
+    useImperativeHandle: (ref, factory) => { ref.current = factory(); },
+    useEffect: effect => { cleanups.push(effect()); },
+    forwardRef: fn => fn,
+  };
+  const file = "src\\components\\blast-off\\FlightDeck.tsx";
+  let source = readFileSync(file, "utf8");
+  const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const render = ast.statements.find(n => ts.isFunctionDeclaration(n) && n.name?.text === "render");
+  const at = render.body.statements[0].getStart(ast);
+  source = source.slice(0, at) + "__capture(s);\n" + source.slice(at);
+  const output = ts.transpileModule(source, { compilerOptions: {
+    module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020,
+  } }).outputText;
+  const loaded = { exports: {} };
+  const blastRules = loader(environment())("src\\lib\\blastOffRules.ts");
+  new Function("require", "module", "exports", "window", "performance", "Image", "ResizeObserver",
+    "requestAnimationFrame", "cancelAnimationFrame", "__capture", output)(
+    name => {
+      if (name === "react") return react;
+      if (name === "react/jsx-runtime") return { jsx: () => null };
+      if (name === "@/lib/blastOffRules") return blastRules;
+      throw new Error(`Unexpected FlightDeck dependency: ${name}`);
+    }, loaded, loaded.exports, { devicePixelRatio: 1 }, { now: () => now },
+    class { complete = false; },
+    class { constructor() { resizeObservers.push(this); } observe() {} disconnect() { this.disconnected = true; } },
+    fn => { frames.set(++nextId, fn); return nextId; }, id => frames.delete(id),
+    state => rendered.push({ ...state }),
+  );
+  loaded.exports.default({ reduced: false }, handle);
+  const sample = (phase, t, multiplier = Math.exp(0.155 * t), maxMultiplier) => {
+    handle.current.draw({ phase, t, multiplier, crashPoint: multiplier, countdown: 0, betPlaced: true, maxMultiplier });
+  };
+  const frame = time => {
+    now = time;
+    const batch = [...frames.values()];
+    frames.clear();
+    for (const fn of batch) fn(now);
+    return rendered.at(-1);
+  };
+  sample("flying", 0);
+  let previous = 0;
+  for (const time of [16, 32, 48, 64, 80]) {
+    const current = frame(time);
+    assert.ok(current.t > previous, "Every frame must advance even without another transport sample");
+    assert.ok(Math.abs(current.t - time / 1000) < 1e-9);
+    assert.equal(current.multiplier, Math.exp(0.155 * current.t));
+    previous = current.t;
+  }
+  sample("flying", 0.02);
+  for (const time of [96, 112, 128, 144]) {
+    const current = frame(time);
+    assert.ok(current.t > previous, "A backward clock correction must not freeze or reverse the plane");
+    assert.ok(current.t - previous < 0.017);
+    previous = current.t;
+  }
+  const capped = frame(60000);
+  assert.equal(capped.t, Math.log(99.99) / 0.155, "Stale transport must not move the curve to 100x");
+  assert.ok(Math.abs(capped.multiplier - 99.99) < 1e-10);
+  assert.ok(capped.multiplier < 100);
+  sample("crashed", 0.1, 1.02);
+  assert.equal(frame(60016).t, 0.1);
+  assert.equal(frame(60500).multiplier, 1.02);
+  sample("betting", 0, 1);
+  assert.equal(frame(60516).t, 0);
+  sample("flying", 0);
+  assert.ok(Math.abs(frame(60532).t - 0.016) < 1e-9, "A new round resets the flight clock");
+  sample("betting", 0, 1);
+  frame(60548);
+  sample("flying", 0, 1, 250.01);
+  assert.ok(Math.abs(frame(120000).multiplier - 250.01) < 1e-10, "Only a previously accepted flight keeps its old display cap");
+  for (const cleanup of cleanups) cleanup();
+  assert.equal(frames.size, 0);
+  assert.ok(resizeObservers.every(observer => observer.disconnected));
 });
 
 test("crash rounds end once 20% of the round's players have cashed out", () => {

@@ -79,7 +79,8 @@ export function MinesGame({ backHref = "/player" }: { backHref?: string }) {
   const poolMode = active ? g.poolPending : st.dailyPoolEnabled;
   const amt = Number(amount) || 0;
   const nextM = mult(mines, (g?.revealed.length ?? 0) + 1, st.limits.rtp);
-  const setAmt = (v: number) => setAmount(Math.max(10, Math.min(Math.max(10, Math.floor(st.balance)), v)).toFixed(2));
+  const maxBet = Math.min(st.limits.max, Math.max(10, Math.floor(st.balance)));
+  const setAmt = (v: number) => setAmount(Math.max(10, Math.min(maxBet, v)).toFixed(2));
 
   return (
     <div className="h-full w-full flex flex-col justify-between overflow-y-auto overflow-x-hidden lg:overflow-hidden rounded-xl sm:rounded-2xl border border-[#1b3560] select-none" style={{ backgroundColor: C.bg, backgroundImage: 'url("/inner-games/mines.png")', backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat", color: C.text }}>
@@ -158,7 +159,7 @@ export function MinesGame({ backHref = "/player" }: { backHref?: string }) {
               ))}
             </div>
             <div className="mt-1.5 flex items-center gap-1.5 rounded-lg px-2 py-1 bg-[#0b1a30] border border-[#1b3560]">
-              <input type="number" min={10} max={Math.max(10, Math.floor(st.balance))} value={customAmount} onChange={(e) => setCustomAmount(Math.max(10, Math.min(Math.max(10, Math.floor(st.balance)), Number(e.target.value) || 50)))} className="w-14 bg-transparent text-center text-[10px] font-bold text-white outline-none" />
+              <input type="number" min={10} max={maxBet} value={customAmount} onChange={(e) => setCustomAmount(Math.max(10, Math.min(maxBet, Number(e.target.value) || 50)))} className="w-14 bg-transparent text-center text-[10px] font-bold text-white outline-none" />
               <button onClick={() => setAmt(customAmount)} className={`rounded-md px-2.5 py-0.5 text-[9px] font-black transition cursor-pointer ${Number(amount) === customAmount ? "bg-[#16a34a] text-white" : "bg-[#2563eb] hover:bg-[#1d4ed8] text-white"}`}>Custom</button>
             </div>
           </div>

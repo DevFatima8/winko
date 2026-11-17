@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
-import { getClientSupportState, sendClientSupportMessage, setGuestCookie } from "@/lib/supportServer";
+import { getClientSupportState, getClientSupportUnread, sendClientSupportMessage, setGuestCookie } from "@/lib/supportServer";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
     try {
+        if (new URL(request.url).searchParams.get("unread") === "1") {
+            const { unread, guestIdToSet } = await getClientSupportUnread();
+            return setGuestCookie(NextResponse.json({ unread }, { headers: { "Cache-Control": "no-store" } }), guestIdToSet);
+        }
         const { data, guestIdToSet } = await getClientSupportState();
         return setGuestCookie(NextResponse.json(data, { headers: { "Cache-Control": "no-store" } }), guestIdToSet);
     } catch (error) {

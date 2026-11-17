@@ -1,6 +1,8 @@
 import type { AviatorRoundDoc } from "@/models";
 import { AVIATOR_LEGACY_MAX_CRASH, aviatorReachAt } from "./aviatorRules";
 
+export const AVIATOR_STATE_POLL_MS = 1500;
+
 /** Read-only animation state. Never publish an unreached crash point or alter a wager. */
 export function flightAnimationSnapshot(round: AviatorRoundDoc, now: number, growth: number, maxMult: number) {
   const startsAt = new Date(round.startsAt).getTime();

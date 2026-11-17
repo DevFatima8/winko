@@ -1,4 +1,5 @@
 "use client";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useGameBalance, usePoolLifecycle, usePoolRoundState } from "@/lib/walletSync";
@@ -187,13 +188,13 @@ export default function TeenPattiGame() {
       setDealerHandName(null);
       setDealerFaceDown(true);
       setCoins([]);
-      setBet(Math.min(Math.max(0, balance), value));
+      setBet(Math.min(MAX_GAME_BET, Math.max(0, balance), value));
       setPhase("betting");
       return;
     }
     if (phase !== "betting") return;
     sfx.chip();
-    setBet(Math.min(Math.max(0, balance), value));
+    setBet(Math.min(MAX_GAME_BET, Math.max(0, balance), value));
   };
 
   const clearBet = () => {

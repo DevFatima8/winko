@@ -1,4 +1,5 @@
 "use client";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 
 import type { ReactNode } from "react";
 
@@ -50,14 +51,14 @@ export default function BetPanel({
   onStopAuto,
   onSpin,
 }: BetPanelProps) {
-  const clamp = (v: number) => Math.max(MIN_BET, Math.round(v * 100) / 100);
+  const clamp = (v: number) => Math.min(MAX_GAME_BET, Math.max(MIN_BET, Math.round(v * 100) / 100));
 
   const set = (v: number) => {
     sfx.chip();
     onBetChange(clamp(v));
   };
 
-  const disabled = bet > balance || balance < MIN_BET;
+  const disabled = bet > MAX_GAME_BET || bet > balance || balance < MIN_BET;
 
   return (
     <div className="flex flex-col gap-2.5 sm:gap-3.5 rounded-2xl sm:rounded-3xl border border-white/10 bg-[linear-gradient(160deg,rgba(30,40,68,0.9),rgba(12,17,32,0.92))] p-3 sm:p-4 shadow-[0_20px_50px_rgba(0,0,0,0.45)] backdrop-blur">
@@ -89,7 +90,7 @@ export default function BetPanel({
               type="number"
               inputMode="decimal"
               min={MIN_BET}
-              max={Math.max(MIN_BET, Math.floor(balance))}
+              max={Math.min(MAX_GAME_BET, Math.max(MIN_BET, Math.floor(balance)))}
               value={Number.isFinite(bet) ? bet : ""}
               onChange={(e) => onBetChange(Number(e.target.value))}
               onBlur={() => set(bet || MIN_BET)}

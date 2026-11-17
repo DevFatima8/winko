@@ -22,6 +22,13 @@ function scene() {
     if (name === "./dailyPoolRules") return { DAILY_POOL_VERSION: version, dailyPoolLock: slug => `daily-pool:${slug}` };
     if (name === "./outcomes") return { payoutAfterHouseShare: gross => Math.floor(Math.max(0, gross) * 0.98 * 100) / 100 };
     if (name === "./winHold") return { heldPortion: gross => Math.round(Math.max(0, gross) * 0.02 * 100) / 100 };
+    if (name === "./gameBetLimits") {
+      const limits = { exports: {} };
+      new Function("exports", ts.transpileModule(readFileSync("src\\lib\\gameBetLimits.ts", "utf8"), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+      }).outputText)(limits.exports);
+      return limits.exports;
+    }
     throw new Error(`Unexpected dedicated import: ${name}`);
   };
   const code = ts.transpileModule(readFileSync("src\\lib\\dailyPoolDedicated.ts", "utf8"), {
@@ -153,6 +160,7 @@ test("legacy Plinko source and replay keep their saved rows and claim after the 
   assert.equal(source.poolClaim, 20);
   assert.equal(source.payout, 0);
   assert.equal(source.resultId, s.data.gameresults[0]._id);
+  s.setPoolEnabled(false);
   const replay = await s.plinko.drop("alice", 100, "low", 8, "plinko-request-01");
   assert.equal(replay.id, response.id);
   assert.equal(replay.multiplier, .2);
@@ -161,10 +169,15 @@ test("legacy Plinko source and replay keep their saved rows and claim after the 
   assert.match((await s.plinko.drop("alice", 100, "low", 8, "new-plinko-request")).error, /12 rows/);
   assert.equal(s.users.get("alice").balance, 900);
   assert.equal(s.data.plinkobets.length, 1);
+  const fresh = await s.plinko.drop("alice", 10, "medium", 12, "new-instant-plinko");
+  assert.equal(fresh.poolPending, undefined);
+  assert.equal(fresh.payout, s.plinko.plinkoPayout(10, fresh.multiplier));
+  assert.equal(s.data.dailypoolentries.length, 1, "new drops must not change the historical pool");
   s.at(tomorrow);
   await settle(s, "plinko");
   assert.equal(s.data.plinkobets[0].payout, 20, "Plinko pays the server-decided 0.2x claim itself");
   assert.equal(s.data.plinkobets[0].poolPending, false);
+  assert.equal(s.data.plinkobets[1].payout, fresh.payout);
   const settledReplay = await s.plinko.drop("alice", 100, "low", 8, "plinko-request-01");
   assert.equal(settledReplay.multiplier, .2);
   assert.equal(settledReplay.payout, 20);

@@ -67,6 +67,7 @@ interface PendingShot {
 export interface EngineRecovery {
   fish: Fish[]; bullets: (Omit<Bullet, "target"> & { targetId: number | null })[];
   pending: PendingShot | null; nextId: number; time: number; spawnTimer: number;
+  width?: number;
 }
 
 interface Fish extends FishView {
@@ -96,6 +97,11 @@ interface Bullet {
   travelled: number;
   maxDist: number;
   platformCut: boolean;
+  waitingAtImpact?: boolean;
+  impact?: { x: number; y: number };
+  resolving?: boolean;
+  resolved?: boolean;
+  homing?: boolean;
 }
 
 interface Net {
@@ -161,6 +167,8 @@ export class FishingEngine {
   private last = 0;
   private time = 0;
   private destroyed = false;
+  private width = W;
+  private cannon = { ...CANNON };
 
   private fish: Fish[] = [];
   private bullets: Bullet[] = [];
@@ -217,6 +225,7 @@ export class FishingEngine {
     canvas.addEventListener("pointerleave", this.onLeave);
     canvas.addEventListener("contextmenu", this.onContext);
     window.addEventListener("pointerup", this.onUp);
+    window.addEventListener("pointercancel", this.onUp);
     window.addEventListener("blur", this.onUp);
   }
 
@@ -246,31 +255,49 @@ export class FishingEngine {
     this.canvas.removeEventListener("pointerleave", this.onLeave);
     this.canvas.removeEventListener("contextmenu", this.onContext);
     window.removeEventListener("pointerup", this.onUp);
+    window.removeEventListener("pointercancel", this.onUp);
     window.removeEventListener("blur", this.onUp);
   }
 
   private snapshot(): EngineRecovery {
     return {
       fish: this.fish, bullets: this.bullets.map(({ target, ...bullet }) => ({ ...bullet, targetId: target?.id ?? null })),
-      pending: this.pendingShot, nextId: this.nextId, time: this.time, spawnTimer: this.spawnTimer,
+      pending: this.pendingShot, nextId: this.nextId, time: this.time, spawnTimer: this.spawnTimer, width: this.width,
     };
   }
 
   async restore(saved: EngineRecovery, activeIds: string[]) {
+    const width = this.width;
+    this.width = saved.width ?? W;
+    this.cannon.x = this.width / 2;
     const accepted = new Set(activeIds);
     this.fish = saved.fish;
     this.nextId = saved.nextId;
     this.time = saved.time;
     this.spawnTimer = saved.spawnTimer;
     this.bullets = saved.bullets.filter(bullet => accepted.has(bullet.wagerId)).map(({ targetId, ...bullet }) => ({
-      ...bullet, target: this.fish.find(fish => fish.id === targetId) ?? null,
+      ...bullet, resolving: false, resolved: false, target: this.fish.find(fish => fish.id === targetId) ?? null,
     }));
     this.auto = false;
     this.pointer.down = false;
+    this.pendingShot = saved.pending && accepted.has(saved.pending.wagerId) ? saved.pending : null;
+    this.setViewportWidth(width);
     if (saved.pending && accepted.has(saved.pending.wagerId)) {
-      this.pendingShot = saved.pending;
       await this.launchPendingShot();
     }
+  }
+
+  setViewportWidth(width: number) {
+    if (!Number.isFinite(width) || width < 960) throw new Error("Invalid Fishing viewport width.");
+    if (width === this.width) return;
+    const offset = (width - this.width) / 2;
+    this.width = width;
+    this.cannon.x = width / 2;
+    this.canvas.width = Math.round(width * this.dpr);
+    this.pointer.x += offset;
+    for (const object of [...this.fish, ...this.bullets, ...this.nets, ...this.coins, ...this.popups, ...this.particles, ...this.bubbles]) object.x += offset;
+    for (const bullet of this.bullets) if (bullet.impact) bullet.impact.x += offset;
+    if (this.pendingShot) this.pendingShot.tx += offset;
   }
 
   setBetIndex(i: number) {
@@ -312,12 +339,13 @@ export class FishingEngine {
   private toGame(e: PointerEvent) {
     const rect = this.canvas.getBoundingClientRect();
     return {
-      x: ((e.clientX - rect.left) / rect.width) * W,
+      x: ((e.clientX - rect.left) / rect.width) * this.width,
       y: ((e.clientY - rect.top) / rect.height) * H,
     };
   }
 
   private onDown = (e: PointerEvent) => {
+    if (e.isPrimary === false || e.button !== undefined && e.button !== 0) return;
     const p = this.toGame(e);
     this.pointer.x = p.x;
     this.pointer.y = p.y;
@@ -329,6 +357,7 @@ export class FishingEngine {
       const f = this.fish.find((fi) => !fi.dying && this.hitsFish(fi, p.x, p.y, 22));
       if (f) this.locked = f;
     }
+    void this.fire(p.x, p.y);
   };
 
   private onMove = (e: PointerEvent) => {
@@ -340,6 +369,7 @@ export class FishingEngine {
 
   private onLeave = () => {
     this.pointer.inside = false;
+    this.pointer.down = false;
   };
 
   private onUp = () => {
@@ -364,15 +394,33 @@ export class FishingEngine {
   }
 
   private hitsFish(f: Fish, x: number, y: number, pad: number) {
+    return this.fishContact(f, x, y, x, y, pad) !== null;
+  }
+
+  private fishContact(f: Fish, x: number, y: number, endX: number, endY: number, pad = 8) {
     const rx = f.sp.w * f.sp.hit[0] + pad;
     const ry = f.sp.h * f.sp.hit[1] + pad;
-    const dx = (x - f.x) / rx;
-    const dy = (y - f.y) / ry;
-    return dx * dx + dy * dy <= 1;
+    const angle = f.sp.kind === "jelly" ? 0 : f.tilt * f.dir;
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    const local = (px: number, py: number) => ({
+      x: ((px - f.x) * cos + (py - f.y) * sin) / rx,
+      y: (-(px - f.x) * sin + (py - f.y) * cos) / ry,
+    });
+    const start = local(x, y), end = local(endX, endY);
+    const dx = end.x - start.x, dy = end.y - start.y;
+    const c = start.x * start.x + start.y * start.y - 1;
+    if (c <= 0) return 0;
+    const a = dx * dx + dy * dy;
+    if (!a) return null;
+    const b = 2 * (start.x * dx + start.y * dy);
+    const discriminant = b * b - 4 * a * c;
+    if (discriminant < 0) return null;
+    const t = (-b - Math.sqrt(discriminant)) / (2 * a);
+    return t >= 0 && t <= 1 ? t : null;
   }
 
   private eligible(f: Fish) {
-    return !f.dying && !f.claimed && !f.remove && f.x > 25 && f.x < W - 25 && f.y > 40 && f.y < H - 140;
+    return !f.dying && !f.claimed && !f.remove && f.x > 25 && f.x < this.width - 25 && f.y > 40 && f.y < H - 140;
   }
 
   private pickTarget(x: number, y: number): Fish | null {
@@ -406,7 +454,7 @@ export class FishingEngine {
     const dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
     const baseY = rand(95, 505);
     const speed = rand(sp.speed[0], sp.speed[1]);
-    const startX = initial ? rand(120, W - 120) : dir === 1 ? -sp.w * 0.7 : W + sp.w * 0.7;
+    const startX = initial ? rand(120, this.width - 120) : dir === 1 ? -sp.w * 0.7 : this.width + sp.w * 0.7;
     for (let i = 0; i < count; i++) {
       const off = i * (sp.w * 0.9 + rand(0, 18));
       const x = startX - dir * off;
@@ -447,10 +495,10 @@ export class FishingEngine {
   }
 
   private async fire(tx: number, ty: number): Promise<boolean> {
-    if (this.accepting) return false;
+    if (this.destroyed || this.accepting || this.cooldown > 0) return false;
     if (this.pendingShot) return this.launchPendingShot();
     const bet = this.customBet ?? BETS[this.betIdx];
-    if (this.balance < bet) {
+    if (!Number.isFinite(this.balance) || this.balance < bet) {
       this.cooldown = 0.5;
       sfx.error();
       this.auto = false;
@@ -483,30 +531,53 @@ export class FishingEngine {
 
   private async launchPendingShot() {
     const shot = this.pendingShot;
-    if (!shot) return false;
-    const { wagerId, bet, level, tx, ty, platformCut, targetId } = shot;
-    let win = shot.win;
+    if (!shot || this.accepting) return false;
+    const { wagerId, bet, targetId, platformCut } = shot;
     const target = this.fish.find(fish => fish.id === targetId) ?? null;
     this.accepting = true;
-    const accepted = await this.cb.onAccept(wagerId, bet, { win, platformCut, targetId }, this.snapshot());
-    this.accepting = false;
-    if (!accepted) { if (target) target.claimed = false; this.auto = false; this.pointer.down = false; return false; }
-    if (typeof accepted !== "string") win = accepted.win && target !== null;
-    if (!win && target) target.claimed = false;
-    this.pendingShot = null;
-    this.totalBet += bet;
-    this.shots += 1;
+    let bullet = this.bullets.find(bullet => bullet.wagerId === wagerId);
+    if (!bullet) bullet = this.createShotVisual(shot, target);
+    this.cb.onCheckpoint(this.snapshot());
+    try {
+      const accepted = await this.cb.onAccept(wagerId, bet, { win: shot.win, platformCut, targetId }, this.snapshot());
+      if (this.destroyed) return false;
+      if (!accepted) {
+        this.auto = false;
+        this.pointer.down = false;
+        return false;
+      }
+      bullet.win = (typeof accepted === "string" ? shot.win : accepted.win) && bullet.target !== null;
+      if (!bullet.win && bullet.target) bullet.target.claimed = false;
+      this.pendingShot = null;
+      this.totalBet += bet;
+      this.shots += 1;
+      if (!this.destroyed) this.cb.onCheckpoint(this.snapshot());
+      this.emit();
+      return true;
+    } catch (error) {
+      console.error("[fishing acceptance]", error);
+      // An unknown receipt must retry the saved identity, never create another stake.
+      this.auto = false;
+      this.pointer.down = false;
+      return false;
+    } finally {
+      this.accepting = false;
+    }
+  }
 
-    const angle = win && target
-      ? this.clampAngle(Math.atan2(target.y - CANNON.y, target.x - CANNON.x))
-      : this.clampAngle(Math.atan2(ty - CANNON.y, tx - CANNON.x));
+  private createShotVisual(shot: PendingShot, target: Fish | null) {
+    const { wagerId, bet, level, tx, ty, win, platformCut } = shot;
+    const homing = this.auto && this.locked === target && target !== null;
+    const angle = homing
+      ? this.clampAngle(Math.atan2(target.y - this.cannon.y, target.x - this.cannon.x))
+      : this.clampAngle(Math.atan2(ty - this.cannon.y, tx - this.cannon.x));
     this.cannonAngle = angle;
     const muzzle = 66 + level * 4 + 30;
-    const x = CANNON.x + Math.cos(angle) * muzzle;
-    const y = CANNON.y + Math.sin(angle) * muzzle;
+    const x = this.cannon.x + Math.cos(angle) * muzzle;
+    const y = this.cannon.y + Math.sin(angle) * muzzle;
     const dist = Math.hypot(tx - x, ty - y);
 
-    this.bullets.push({
+    const bullet: Bullet = {
       wagerId,
       x,
       y,
@@ -519,7 +590,9 @@ export class FishingEngine {
       travelled: 0,
       maxDist: Math.max(70, dist),
       platformCut,
-    });
+      homing,
+    };
+    this.bullets.push(bullet);
 
     this.cooldown = FIRE_COOLDOWN;
     this.recoil = 12;
@@ -536,21 +609,20 @@ export class FishingEngine {
         color: "rgba(255,255,255,0.7)",
       });
     }
-    this.emit();
-    return true;
+    return bullet;
   }
 
   /* ------------------------------ resolution ------------------------------ */
 
   private async resolveLoss(b: Bullet, x: number, y: number) {
-    if (!await this.cb.onComplete(b.wagerId, 0)) { this.auto = false; this.pointer.down = false; return; }
+    if (!await this.cb.onComplete(b.wagerId, 0)) { this.auto = false; this.pointer.down = false; return false; }
+    if (this.destroyed) return false;
     if (b.platformCut) {
       this.platformCuts += 1;
     } else {
       this.losses += 1;
     }
     const r = 56 + b.level * 8;
-    this.nets.push({ x, y, r, t: 0, life: 0.7, win: false });
     let hit = false;
     for (const f of this.fish) {
       if (f.dying) continue;
@@ -574,12 +646,14 @@ export class FishingEngine {
     if (hit) sfx.hit();
     else sfx.net();
     this.emit();
+    return true;
   }
 
   private async resolveWin(b: Bullet, f: Fish) {
     const mult = f.sp.mult;
     const payout = Math.round(b.bet * mult);
-    if (!await this.cb.onComplete(b.wagerId, payout)) { this.auto = false; this.pointer.down = false; return; }
+    if (!await this.cb.onComplete(b.wagerId, payout)) { this.auto = false; this.pointer.down = false; return false; }
+    if (this.destroyed) return false;
     this.wins += 1;
     this.totalWon += payout;
     this.lastWin = payout;
@@ -589,15 +663,16 @@ export class FishingEngine {
     f.dyingT = 0;
     f.flash = 0;
 
-    this.nets.push({ x: f.x, y: f.y, r: Math.max(86, f.sp.w * 0.58), t: 0, life: 0.9, win: true });
+    const { x, y } = b.impact ?? f;
+    this.nets.push({ x, y, r: Math.max(86, f.sp.w * 0.58), t: 0, life: 0.9, win: true });
 
     const n = Math.max(6, Math.min(22, Math.round(5 + mult * 0.7)));
     for (let i = 0; i < n; i++) {
       const a = rand(0, TAU);
       const s = rand(80, 260);
       this.coins.push({
-        x: f.x + rand(-12, 12),
-        y: f.y + rand(-12, 12),
+        x: x + rand(-12, 12),
+        y: y + rand(-12, 12),
         vx: Math.cos(a) * s,
         vy: Math.sin(a) * s - 140,
         t: -i * 0.03,
@@ -613,8 +688,8 @@ export class FishingEngine {
       const a = rand(0, TAU);
       const s = rand(60, 220);
       this.particles.push({
-        x: f.x,
-        y: f.y,
+        x,
+        y,
         vx: Math.cos(a) * s,
         vy: Math.sin(a) * s,
         t: 0,
@@ -624,8 +699,8 @@ export class FishingEngine {
       });
     }
     this.popups.push({
-      x: f.x,
-      y: f.y - 10,
+      x,
+      y: y - 10,
       text: `+${formatNum(payout)}`,
       size: 30 + Math.min(26, mult * 1.2),
       t: 0,
@@ -639,6 +714,33 @@ export class FishingEngine {
       this.cb.onBigWin({ amount: payout, mult, name: f.sp.name });
     }
     this.emit();
+    return true;
+  }
+
+  private impact(b: Bullet) {
+    if (b.impact) return;
+    b.impact = { x: b.x, y: b.y };
+    b.waitingAtImpact = true;
+    this.nets.push({ ...b.impact, r: 56 + b.level * 8, t: 0, life: 0.7, win: false });
+    if (b.target) b.target.flash = 0.3;
+    sfx.hit();
+  }
+
+  private async settleImpact(b: Bullet) {
+    if (b.resolving) return;
+    b.resolving = true;
+    try {
+      b.resolved = b.win && b.target
+        ? await this.resolveWin(b, b.target)
+        : await this.resolveLoss(b, b.x, b.y);
+    } catch (error) {
+      console.error("[fishing impact]", error);
+      this.auto = false;
+      this.pointer.down = false;
+    } finally {
+      // Failed confirmations stay recoverable, without retrying on every animation frame.
+      if (!this.destroyed) this.cb.onCheckpoint(this.snapshot());
+    }
   }
 
   /* ------------------------------ update ------------------------------ */
@@ -662,7 +764,7 @@ export class FishingEngine {
       aimX = this.locked.x;
       aimY = this.locked.y;
     }
-    const want = this.clampAngle(Math.atan2(aimY - CANNON.y, aimX - CANNON.x));
+    const want = this.clampAngle(Math.atan2(aimY - this.cannon.y, aimX - this.cannon.x));
     this.cannonAngle += (want - this.cannonAngle) * Math.min(1, dt * 16);
 
     // fire
@@ -690,6 +792,7 @@ export class FishingEngine {
         if (f.alpha <= 0) f.remove = true;
         continue;
       }
+      if (this.bullets.some(b => b.target === f && b.impact && (b.win || this.pendingShot?.wagerId === b.wagerId) && !b.resolved)) continue;
       f.x += f.vx * dt;
       f.baseY += f.drift * dt;
       f.baseY = Math.max(90, Math.min(520, f.baseY));
@@ -697,57 +800,61 @@ export class FishingEngine {
       f.y = f.baseY + Math.sin(ang) * f.wobbleAmp;
       f.vy = Math.cos(ang) * f.wobbleAmp * f.wobbleSpeed;
       f.tilt = Math.max(-0.45, Math.min(0.45, Math.atan2(f.vy, Math.abs(f.vx)) * 0.9));
-      if ((f.vx > 0 && f.x > W + f.sp.w) || (f.vx < 0 && f.x < -f.sp.w)) f.remove = true;
+      if ((f.vx > 0 && f.x > this.width + f.sp.w) || (f.vx < 0 && f.x < -f.sp.w)) f.remove = true;
     }
     this.fish = this.fish.filter((f) => !f.remove);
 
     // bullets
     const keep: Bullet[] = [];
     for (const b of this.bullets) {
-      let alive = true;
-      if (b.win) {
-        let tg = b.target;
-        if (!tg || tg.dying || !this.fish.includes(tg)) {
-          tg = this.pickTarget(b.x, b.y);
-          if (tg) {
-            tg.claimed = true;
-            b.target = tg;
-          } else {
-            // no fish left to land on – plain miss
-            b.win = false;
-            b.target = null;
-            b.maxDist = b.travelled + 60;
-          }
-        }
-        if (b.win && tg) {
-          const dx = tg.x - b.x;
-          const dy = tg.y - b.y;
-          const d = Math.hypot(dx, dy) || 1;
-          const step = BULLET_SPEED * dt;
-          b.vx = (dx / d) * BULLET_SPEED;
-          b.vy = (dy / d) * BULLET_SPEED;
-          if (d <= step + 6 || this.hitsFish(tg, b.x, b.y, 8)) {
-            this.resolveWin(b, tg);
-            alive = false;
-          } else {
-            b.x += b.vx * dt;
-            b.y += b.vy * dt;
-            b.travelled += step;
-          }
-        }
+      const awaitingAcceptance = this.pendingShot?.wagerId === b.wagerId;
+      if (b.resolved) continue;
+      if (b.impact || b.waitingAtImpact) {
+        if (!awaitingAcceptance) void this.settleImpact(b);
+        keep.push(b);
+        continue;
       }
-      if (alive && !b.win) {
-        const step = BULLET_SPEED * dt;
-        b.x += b.vx * dt;
-        b.y += b.vy * dt;
-        b.travelled += step;
-        const hitF = this.fish.find((f) => !f.dying && this.hitsFish(f, b.x, b.y, 8));
-        if (hitF || b.travelled >= b.maxDist || b.x < -20 || b.x > W + 20 || b.y < -20) {
-          this.resolveLoss(b, b.x, b.y);
-          alive = false;
-        }
+      const tg = b.target;
+      const homing = b.homing !== false;
+      const step = homing ? BULLET_SPEED * dt : Math.min(BULLET_SPEED * dt, Math.max(0, b.maxDist - b.travelled));
+      if (homing && tg && !tg.dying && this.fish.includes(tg)) {
+        const dx = tg.x - b.x;
+        const dy = tg.y - b.y;
+        const d = Math.hypot(dx, dy) || 1;
+        b.vx = (dx / d) * BULLET_SPEED;
+        b.vy = (dy / d) * BULLET_SPEED;
+      } else if (homing && tg) {
+        b.win = false;
+        b.target = null;
       }
-      if (alive) keep.push(b);
+      const endX = b.x + b.vx / BULLET_SPEED * step, endY = b.y + b.vy / BULLET_SPEED * step;
+      let contact: number | null = null;
+      let touched: Fish | null = null;
+      for (const fish of this.fish) {
+        if (fish.dying || fish.remove || fish.claimed && fish !== b.target) continue;
+        const t = this.fishContact(fish, b.x, b.y, endX, endY);
+        if (t !== null && (contact === null || t < contact)) { contact = t; touched = fish; }
+      }
+      if (touched && touched !== b.target) {
+        if (b.target) b.target.claimed = false;
+        b.target = touched;
+        if (b.win || awaitingAcceptance) touched.claimed = true;
+      }
+      const fraction = contact ?? 1;
+      b.x += (endX - b.x) * fraction;
+      b.y += (endY - b.y) * fraction;
+      b.travelled += step * fraction;
+      const expired = ((!homing || !b.target) && b.travelled >= b.maxDist) || b.x < -20 || b.x > this.width + 20 || b.y < -20;
+      if (contact !== null || expired) {
+        if (contact === null) {
+          if (b.target) b.target.claimed = false;
+          b.target = null;
+          b.win = false;
+        }
+        this.impact(b);
+        if (!awaitingAcceptance) void this.settleImpact(b);
+      }
+      keep.push(b);
     }
     this.bullets = keep;
 
@@ -802,13 +909,13 @@ export class FishingEngine {
       b.x += Math.sin(this.time * 1.5 + b.ph) * 8 * dt;
       if (b.y < -10) {
         b.y = H + 10;
-        b.x = rand(0, W);
+        b.x = rand(0, this.width);
       }
     }
   }
 
   private eligibleOrClaimed(f: Fish) {
-    return f.x > 10 && f.x < W - 10 && f.y > 20 && f.y < H - 120;
+    return f.x > 10 && f.x < this.width - 10 && f.y > 20 && f.y < H - 120;
   }
 
   /* ------------------------------ draw ------------------------------ */
@@ -817,13 +924,13 @@ export class FishingEngine {
     const ctx = this.ctx;
     const t = this.time;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    ctx.clearRect(0, 0, W, H);
+    ctx.clearRect(0, 0, this.width, H);
     ctx.save();
     if (this.shake > 0.4) {
       ctx.translate((Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake);
     }
 
-    ctx.drawImage(this.bg, 0, 0);
+    ctx.drawImage(this.bg, 0, 0, this.width, H);
     drawRays(ctx, t);
     drawSeaweed(ctx, t);
 
@@ -860,9 +967,9 @@ export class FishingEngine {
     }
     ctx.globalAlpha = 1;
 
-    for (const b of this.bullets) drawBullet(ctx, b.x, b.y, b.vx, b.vy, b.level);
+    for (const b of this.bullets) if (!b.waitingAtImpact) drawBullet(ctx, b.x, b.y, b.vx, b.vy, b.level);
 
-    drawCannon(ctx, this.cannonAngle, this.betIdx, this.recoil, t);
+    drawCannon(ctx, this.cannonAngle, this.betIdx, this.recoil, t, this.cannon);
 
     for (const c of this.coins) {
       if (c.t < 0) continue;
@@ -876,7 +983,7 @@ export class FishingEngine {
     }
     ctx.restore();
 
-    ctx.drawImage(this.vignette, 0, 0);
+    ctx.drawImage(this.vignette, 0, 0, this.width, H);
 
     if (this.inputEnabled && this.pointer.inside) drawCrosshair(ctx, this.pointer.x, this.pointer.y);
   }

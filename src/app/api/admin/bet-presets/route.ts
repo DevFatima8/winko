@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => null) as { userId?: unknown; betPresets?: unknown } | null;
     const betPresets = normalizeBetPresets(body?.betPresets);
     if (typeof body?.userId !== "string" || !body.userId.trim() || !betPresets) {
-      return NextResponse.json({ error: "Player ID and five different amounts from 10 to 50,000 are required." }, { status: 400 });
+      return NextResponse.json({ error: "Player ID and five different amounts from 10 to 100,000 are required." }, { status: 400 });
     }
     const player = await User.findById(body.userId, "role referredBy").lean();
     if (!player || isStaff(player.role) || (me.level < 2 && String(player.referredBy ?? "") !== me.id)) {

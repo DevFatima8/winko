@@ -8,6 +8,7 @@ import { isCardGame } from "./cardGameRules";
 import { isRouletteGame, isBrowserRouletteGame, isWheelGame } from "./rouletteGameRules";
 import { isAutoResolveBrowserCardGame, isInteractiveBrowserCardGame } from "./browserCardGames";
 import { isSlotGame } from "./slotGameRules";
+import { gameBetError } from "./gameBetLimits";
 import {
   beginWalletReveal, confirmWalletReveal, finishWalletReveal, presentedWalletBalance,
   recordWalletBalance, setWalletRevealOwner, walletRevealRevision,
@@ -144,6 +145,10 @@ export async function concurrentBrowserWager(
   try {
     const ownerId = await requireWalletOwner();
     const saved = localStorage.getItem(key);
+    if (!saved && action === "accept") {
+      const limitError = gameBetError(amount);
+      if (limitError) throw new Error(limitError);
+    }
     const body = saved ? JSON.parse(saved) : {
       game, action, wagerId, ownerId, amount: Math.round(amount * 100) / 100,
       operationId: crypto.randomUUID(), poolVersion: dailyPoolConsent(game),
@@ -563,6 +568,8 @@ export function useBrowserWager(game: DailyPoolGame, fallbackInitial = 1000) {
     setPending(true);
     try {
       if (localStorage.getItem(key)) throw new Error("A previous wager needs confirmation. Use Retry first.");
+      const limitError = gameBetError(stake);
+      if (limitError) throw new Error(limitError);
       const ownerId = await requireWalletOwner();
       const body: BrowserWagerRequest = {
         action: selection === undefined ? "play" : "server-play", game, wagerId: crypto.randomUUID(), stake, claim, selection, ownerId,
@@ -616,6 +623,10 @@ export function usePoolLifecycle(game: DailyPoolGame, slot = "main") {
       setEnabled(!isCardGame(game) && !isRouletteGame(game) && !isWheelGame(game) && !isSlotGame(game) && game !== "thai-hi-lo" && poolMode);
       const pendingKey = `${key}:request`;
       const pending = localStorage.getItem(pendingKey);
+      if (!pending && action === "accept") {
+        const limitError = gameBetError(amount);
+        if (limitError) throw new Error(limitError);
+      }
       const savedOwner = localStorage.getItem(`${key}:owner`);
       if ((active.current || pending) && savedOwner !== ownerId) throw new Error("This saved round belongs to another account. Sign in to its original account to resume.");
       const planned = JSON.parse(localStorage.getItem(`${key}:terminal`) ?? "null");

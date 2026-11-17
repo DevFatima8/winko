@@ -4,7 +4,7 @@ import { SupportMessage, SupportThread, User, oid } from "@/models";
 import { getSettings, supportOnline } from "./platform";
 import { dbConnect } from "./mongo";
 import { getServerSessionUser } from "./serverAuth";
-import { notifyAdmins } from "./notifications";
+import { notifyAdmins, notifyUser } from "./notifications";
 
 const GUEST_COOKIE = "wx_support_guest";
 const GUEST_TTL_SECONDS = 60 * 60 * 24 * 365;
@@ -47,8 +47,10 @@ export async function getClientSupportState() {
     const identity = await clientIdentity();
     const settings = await getSettings();
     const thread = await findClientThread(identity.userId, identity.guestId, false);
-    const messages = thread ? await SupportMessage.find({ threadId: thread._id }).sort({ createdAt: 1 }).limit(200).lean() : [];
-    if (thread && thread.unreadForUser > 0) await SupportThread.updateOne({ _id: thread._id }, { $set: { unreadForUser: 0 } });
+    const messages = thread ? (await SupportMessage.find({ threadId: thread._id }).sort({ createdAt: -1 }).limit(200).lean()).reverse() : [];
+    if (thread && thread.unreadForUser > 0) {
+        await SupportThread.updateOneAtomic({ _id: thread._id, unreadForUser: thread.unreadForUser, lastMessageAt: thread.lastMessageAt }, { $set: { unreadForUser: 0 } });
+    }
 
     return {
         guestIdToSet: identity.newGuestId,
@@ -62,6 +64,13 @@ export async function getClientSupportState() {
             messages: messages.map((message) => ({ id: String(message._id), from: message.from, text: message.text, agentName: message.agentName, at: message.createdAt })),
         },
     };
+}
+
+export async function getClientSupportUnread() {
+    await dbConnect();
+    const identity = await clientIdentity();
+    const thread = await findClientThread(identity.userId, identity.guestId, false);
+    return { unread: thread?.unreadForUser ?? 0, guestIdToSet: identity.newGuestId };
 }
 
 export async function sendClientSupportMessage(textRaw: string, name?: string) {
@@ -202,6 +211,7 @@ export async function replyAsAdmin(threadId: string, textRaw: string) {
     }
     await SupportMessage.create({ threadId: oid(threadId), from: "agent", text, agentName: me.level >= 3 ? "Support Team" : me.name, agentId: oid(me.id) });
     await SupportThread.updateOneAtomic({ _id: oid(threadId) }, { $set: { lastMessage: text, lastMessageAt: new Date(), status: "open" }, $inc: { unreadForUser: 1 } });
+    if (thread.userId) await notifyUser(String(thread.userId), "Support replied", "Support has replied to your message.", "info", { href: "/help?support=1" });
     return { ok: true };
 }
 

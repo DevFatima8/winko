@@ -3,7 +3,7 @@ export type Dir = "over" | "under";
 export const WIN_RATE = 0.35;
 
 export const MIN_BET = 10;
-export const MAX_BET = 99_999_999;
+export { MAX_GAME_BET as MAX_BET } from "@/lib/gameBetLimits";
 export const START_BALANCE = 1000;
 export const CHIP_REFILL = 1000;
 

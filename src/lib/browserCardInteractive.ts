@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { MultiplayerTransaction } from "./multiplayer-store";
 import { cents } from "./dailyPool";
 import { nextBetWin, nextPlayerWin } from "./playerWinCycle";
+import { rummyUnlockedLevel, unlockRummyLevel } from "./rummyProgress";
 import {
   InteractiveMoveError, isInteractiveBrowserCardGame,
   type CardActionInput, type CardActionReply, type EngineStep, type InteractiveCardEngine,
@@ -18,6 +19,7 @@ type CardResult = {
   _id: string; userId: string; browserGame: string; browserStatus: "active" | "closed" | "refunded";
   browserTotalStake: number; browserCompletedClaim?: number; browserServerRequired?: boolean; poolVersion?: string; poolPending?: boolean;
   browserCardState?: CardState; browserOutcome?: unknown; browserServerInput?: string;
+  browserRummyLevel?: number;
 };
 
 const ID = /^[a-f0-9-]{36}$/i;
@@ -102,6 +104,15 @@ export async function actInteractiveCard(
   {
     if (!saved) {
       if (move !== "deal") throw new InteractiveMoveError("Deal the accepted wager before any table action.");
+      if (game === "rummy") {
+        const selected = input.selection;
+        const level = selected && typeof selected === "object" && "level" in selected ? selected.level : 1;
+        if (typeof level !== "number" || !Number.isInteger(level) || level < 1 || level > 5) {
+          throw new InteractiveMoveError("Select a valid Rummy level.");
+        }
+        if (level > await rummyUnlockedLevel(tx, userId)) throw new InteractiveMoveError("Win the previous Rummy level to unlock this table.");
+        loaded.browserRummyLevel = level;
+      }
       // The winning slot is assigned once, at the deal, and never redrawn by later moves.
       win = game === "rummy" ? await nextBetWin(tx, game, 30) : await nextPlayerWin(tx, game, userId);
       step = engine.start({ stake: loaded.browserTotalStake, selection: input.selection ?? null, win, balance: user.balance });
@@ -130,6 +141,15 @@ export async function actInteractiveCard(
   }
   const result = await tx.get<CardResult>("gameresults", id);
   if (!result) throw new Error("Card wager result is missing.");
+  if (game === "rummy") {
+    result.browserRummyLevel = loaded.browserRummyLevel ?? 1;
+    if (terminal && claim > result.browserTotalStake) {
+      await unlockRummyLevel(tx, userId, result.browserRummyLevel);
+    }
+    if (step.view && typeof step.view === "object") {
+      step.view = { ...step.view, level: result.browserRummyLevel, unlockedLevel: await rummyUnlockedLevel(tx, userId) };
+    }
+  }
   const credited = money((saved?.credited ?? 0) + credit + claim);
   result.browserCardState = {
     v: 1, win, engine: step.state, phase: step.phase, view: step.view,

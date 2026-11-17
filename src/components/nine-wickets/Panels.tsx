@@ -1,4 +1,5 @@
 "use client";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 
 import type { ReactNode } from "react";
 import { BET_PRESETS } from "@/lib/betPresets";
@@ -283,7 +284,7 @@ export function BetSlip({
   onBowlNow: () => void;
   onAddCoins: () => void;
 }) {
-  const clamp = (n: number) => Math.max(0, Math.floor(n));
+  const clamp = (n: number) => Math.min(MAX_GAME_BET, Math.max(0, Math.floor(n)));
   const canBet = phase === "betting" && !bet;
   const insufficient = stake > balance;
   const invalid = !market || stake < MIN_BET || insufficient;

@@ -1,4 +1,5 @@
 "use client";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -664,7 +665,7 @@ export default function FortuneToucanGame({ backHref = "/player" }: { backHref?:
           }}
           onMax={() => {
             audio().click();
-            setBet(Math.max(1, Math.floor(balance)));
+            setBet(Math.min(MAX_GAME_BET, Math.max(10, Math.floor(balance))));
             setOverlay("none");
           }}
           onClose={() => setOverlay("none")}

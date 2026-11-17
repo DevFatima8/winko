@@ -407,7 +407,7 @@ export function CardTable({ table, backHref = "/player" }: { table: Table; backH
                 <input
                   type="number"
                   min={10}
-                  max={Math.max(10, Math.floor(st.balance))}
+                  max={Math.min(st.config.max, Math.max(10, Math.floor(st.balance)))}
                   value={table === "dragon-tiger" ? dragonAmountText : customAmount}
                   onChange={(e) => {
                     setCustomAmount(Number(e.target.value) || 0);

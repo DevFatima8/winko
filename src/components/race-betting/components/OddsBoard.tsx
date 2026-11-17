@@ -54,7 +54,7 @@ export const OddsBoard: React.FC<OddsBoardProps> = ({
             </h3>
           </div>
           <div className="flex items-center gap-4 text-xs font-bold text-slate-300">
-            <span className="hidden sm:inline text-slate-400">Min: Rs. 10 | Max: Rs. 50,000</span>
+            <span className="hidden sm:inline text-slate-400">Min: Rs. 10 | Max: Rs. 100,000</span>
           </div>
         </div>
 

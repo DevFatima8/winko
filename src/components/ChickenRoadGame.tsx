@@ -1,4 +1,5 @@
 "use client";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 
 import { localApi } from "@/lib/client";
 import { playGameSound, speakGameVoice } from "@/lib/gameAudio";
@@ -13,7 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 type Difficulty = "easy" | "medium" | "hard" | "hardcore";
 type G = {
   poolPending?: boolean; poolClaim?: number; poolVersion?: string;
-  id: string; difficulty: Difficulty; bet: number; lanes: number; position: number;
+  id: string; difficulty: Difficulty; bet: number; lanes: number; multipliers: number[]; position: number;
   status: "active" | "cashed" | "dead"; win: number; currentMultiplier: number; nextMultiplier: number | null; crashLane: number | null;
 };
 type Recent = { id: string; difficulty: string; bet: number; win: number; status: string; position: number; multiplier: number };
@@ -477,7 +478,7 @@ export function ChickenRoadGame({ backHref = "/player" }: { backHref?: string })
     if (!loadedRef.current) {
       loadedRef.current = true;
       if (s.game?.status === "active" && s.game.bet > 0) {
-        const v = newVis(s.tables[s.game.difficulty]);
+        const v = newVis(s.game.multipliers);
         applyGame(v, s.game);
         visRef.current = v;
         setGame(s.game); setDiff(s.game.difficulty); setAmount(s.game.bet); setPhase("active");
@@ -539,7 +540,7 @@ export function ChickenRoadGame({ backHref = "/player" }: { backHref?: string })
     setBusyBoth(true); setMsg(null);
     const j = await post("/api/chicken/start", { amount, difficulty: diff });
     if (j.error) { setMsg({ t: "err", m: j.error }); setBusyBoth(false); return; }
-    const v = newVis(s.tables[diff], visRef.current); v.status = "active"; visRef.current = v;
+    const v = newVis(j.game.multipliers, visRef.current); v.status = "active"; visRef.current = v;
     playGameSound("launch"); speakGameVoice("chickenJump");
     setGame(j.game); setPhase("active"); setBusyBoth(false);
     refresh();
@@ -636,7 +637,7 @@ export function ChickenRoadGame({ backHref = "/player" }: { backHref?: string })
   };
 
   const balance = st?.balance ?? 0;
-  const min = st?.limits.min ?? 10, max = Math.max(min, Math.floor(st?.balance ?? 0));
+  const min = st?.limits.min ?? 10, max = Math.min(st?.limits.max ?? MAX_GAME_BET, Math.max(min, Math.floor(st?.balance ?? 0)));
   const potential = game && phase === "active" ? Math.floor(game.bet * game.currentMultiplier * 100) / 100 : 0;
   const nextWin = game && phase === "active" && game.nextMultiplier ? Math.floor(game.bet * game.nextMultiplier * 100) / 100 : 0;
   const lanesInfo = st ? st.difficulties[diff] : null;
@@ -695,7 +696,7 @@ export function ChickenRoadGame({ backHref = "/player" }: { backHref?: string })
                 <li>Har <b className="text-white">GO</b> par chicken agle manhole par jati hai — multiplier barhta hai aur peeche barrier lag jata hai.</li>
                 <li>Kisi bhi lane par gaari aa sakti hai — us se pehle <b className="text-yellow-400">CASH OUT</b> karein.</li>
                 <li>Poori road cross karne par max multiplier automatically mil jata hai.</li>
-                <li>Easy 24 lanes (max 24.5x) · Medium 22 (max 2,254x) · Hard 20 (max 52,067x) · Hardcore 15 (max 3.2M x).</li>
+                <li>Easy 26 steps (max 10x) · Medium 22 (max 32x) · Hard 18 (max 100x) · Hardcore 15 (max 1000x).</li>
               </ul>
               <button onClick={() => setShowRules(false)} className="mt-4 w-full rounded-xl bg-emerald-500 py-2 font-bold text-slate-950 hover:bg-emerald-400">OK</button>
             </div>

@@ -9,6 +9,65 @@ import * as jsxRuntime from "react/jsx-runtime";
 const source = ts.transpileModule(readFileSync("src/lib/betPresets.ts", "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
 }).outputText;
+const limits = {};
+new Function("exports", ts.transpileModule(readFileSync("src\\lib\\gameBetLimits.ts", "utf8"), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+}).outputText)(limits);
+
+test("Crash Goal displays selectable shared presets and locks them for an accepted bet", () => {
+  const code = ts.transpileModule(readFileSync("src\\components\\crash-goal\\BetPanel.tsx", "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  const exports = {};
+  const presets = [10, 25, 50, 100, 100000];
+  new Function("require", "exports", code)(name => {
+    if (name === "react/jsx-runtime") return jsxRuntime;
+    if (name === "react") return { useEffect() {}, useRef: current => ({ current }), useState: initial => [initial, () => {}] };
+    if (name === "@/lib/betPresets") return { BET_PRESETS: presets };
+    if (name === "@/lib/gameBetLimits") return limits;
+    if (name === "@/lib/walletSync") return { useDailyPoolMode: () => false };
+    if (name === "./lib/crash") return { formatMoney: String, formatMultiplier: String };
+    throw new Error(`Unexpected dependency: ${name}`);
+  }, exports);
+  const selected = [];
+  const props = { amount: 10, autoTarget: 2, autoEnabled: false, placed: false, cashedOutAt: null,
+    phase: "betting", balance: 100000, onAmountChange: value => selected.push(value),
+    onTargetChange() {}, onToggleAuto() {}, onPrimaryAction() {} };
+  const getButtons = () => {
+    const root = exports.BetPanel(props);
+    const children = root.props.children;
+    return children.find(child => child?.props?.["aria-label"] === "Bet amount presets").props.children;
+  };
+  assert.deepEqual(getButtons().map(button => button.props.children), presets);
+  for (const button of getButtons()) button.props.onClick();
+  assert.deepEqual(selected, presets);
+  props.placed = true;
+  assert.ok(getButtons().every(button => button.props.disabled));
+});
+
+test("shared custom bet input enforces the 100k ceiling and preserves lower balance limits", () => {
+  const code = ts.transpileModule(readFileSync("src\\components\\BetAmountInput.tsx", "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  const loaded = {};
+  new Function("require", "exports", code)(name => {
+    if (name === "react/jsx-runtime") return jsxRuntime;
+    if (name === "@/lib/gameBetLimits") return limits;
+    assert.equal(name, "react");
+    return { useState: value => [value, () => {}], useEffect() {} };
+  }, loaded);
+  for (const [max, expected] of [[undefined, 100_000], [1_000_000, 100_000], [1000, 1000]]) {
+    const changes = [];
+    const element = loaded.default({ value: 10, max, onChange: value => changes.push(value) });
+    const input = element.props.children[1];
+    assert.equal(input.props.min, 10);
+    assert.equal(input.props.max, expected);
+    input.props.onChange({ target: { value: "9" } });
+    assert.deepEqual(changes, []);
+    input.props.onChange({ target: { value: "100001" } });
+    assert.deepEqual(changes, [expected]);
+  }
+});
 
 test("Three Card Poker displays each actual denomination instead of repeating the fallback five", () => {
   const code = ts.transpileModule(readFileSync("src\\components\\three-card-poker\\ChipButton.tsx", "utf8"), {
@@ -182,7 +241,8 @@ function createStore(seed = []) {
     },
   };
   const loaded = { exports: {} };
-  new Function("module", "exports", "window", "CustomEvent", source)(
+  new Function("require", "module", "exports", "window", "CustomEvent", source)(
+    name => { assert.equal(name, "./gameBetLimits"); return limits; },
     loaded,
     loaded.exports,
     window,
@@ -194,7 +254,8 @@ function createStore(seed = []) {
 test("bet presets default to five requested amounts and reject invalid values", () => {
   const { api } = createStore();
   assert.deepEqual([...api.BET_PRESETS], [10, 20, 50, 100, 200]);
-  assert.deepEqual(api.normalizeBetPresets([10, 20.5, 30, 40, 50000]), [10, 20.5, 30, 40, 50000]);
+  assert.deepEqual(api.normalizeBetPresets([10, 20.5, 30, 40, 100_000]), [10, 20.5, 30, 40, 100_000]);
+  assert.equal(api.normalizeBetPresets([10, 20, 30, 40, 100_000.01]), null);
   assert.equal(api.normalizeBetPresets([5, 10, 20, 50, 100]), null);
   for (const invalid of [[1, 2, 3], [1, 2, 3, 4, 4], [0, 2, 3, 4, 5], [1, 2, 3, 4, 50000.01], [1, 2, 3, 4, 1.005], [true, 2, 3, 4, 5]]) {
     assert.equal(api.normalizeBetPresets(invalid), null);

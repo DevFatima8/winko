@@ -5,11 +5,13 @@ import { addPoolWager, cents, closePoolWager, settleDailyPools, type PoolFields 
 import { DAILY_POOL_VERSION, dailyPoolLock } from "./dailyPoolRules";
 import { payoutAfterHouseShare } from "./outcomes";
 import { heldPortion } from "./winHold";
+import { gameBetError } from "./gameBetLimits";
 
 type Slug = "plinko" | "limbo" | "lucky-777" | "mines";
 type Mine = MinesGameDoc & PoolFields;
 type Instant = {
   claim: number;
+  payout?: number;
   data: string;
   response: Record<string, unknown>;
   plinko?: { risk: "low" | "medium" | "high"; rows: number; path: number[]; bucket: number; multiplier: number };
@@ -60,6 +62,8 @@ export async function acceptDedicatedInstant(slug: Exclude<Slug, "mines">, userI
       if (!result || !user) throw new Error("Daily-pool replay record is incomplete.");
       return { ...previous.response, payout: result.winAmount, poolPending: result.poolPending, poolClaim: result.poolClaim, balance: user.balance };
     }
+    const limitError = gameBetError(amount);
+    if (limitError) return { error: limitError };
     const account = await wallet(tx, userId, slug, amount);
     if ("error" in account) return account;
     const instant = typeof outcome === "function" ? await outcome(tx) : outcome;
@@ -67,23 +71,38 @@ export async function acceptDedicatedInstant(slug: Exclude<Slug, "mines">, userI
     const now = new Date(await tx.now());
     const result = resultDocument(randomUUID(), await gameId(tx, slug, now), userId, amount, now, instant.data);
     const sourceId = instant.plinko ? randomUUID() : undefined;
-    await addPoolWager(tx, slug, result, sourceId ? { sourceTable: "plinkobets", sourceId } : undefined);
-    await closePoolWager(tx, result._id, instant.claim);
-    Object.assign(result, { poolClaim: instant.claim, resultData: `${instant.data} | Pending daily pool settlement` });
-    account.user.balance = (cents(account.user.balance) - cents(amount)) / 100;
+    const pooled = instant.payout === undefined;
+    const payout = instant.payout ?? 0;
+    if (!Number.isFinite(payout) || payout < 0 || payout > instant.claim) throw new Error("Invalid dedicated instant payout.");
+    if (pooled) {
+      await addPoolWager(tx, slug, result, sourceId ? { sourceTable: "plinkobets", sourceId } : undefined);
+      await closePoolWager(tx, result._id, instant.claim);
+      Object.assign(result, { poolClaim: instant.claim, resultData: `${instant.data} | Pending daily pool settlement` });
+    } else {
+      Object.assign(result, { winAmount: payout, outcome: payout > 0 ? "win" : "lose" });
+    }
+    const balanceCents = cents(account.user.balance) - cents(amount) + cents(payout);
+    if (!Number.isSafeInteger(balanceCents)) throw new Error("Dedicated wallet balance exceeds safe precision.");
+    account.user.balance = balanceCents / 100;
     account.user.updatedAt = now;
     await tx.put("users", userId, account.user);
     await tx.insert("gameresults", result._id, result);
     if (sourceId && instant.plinko) {
-      await tx.insert("plinkobets", sourceId, { _id: sourceId, userId, resultId: result._id, betAmount: amount, ...instant.plinko, payout: 0, poolVersion: DAILY_POOL_VERSION, poolPending: true, poolClaim: instant.claim, createdAt: now, updatedAt: now });
+      await tx.insert("plinkobets", sourceId, { _id: sourceId, userId, resultId: result._id, betAmount: amount, ...instant.plinko, payout,
+        ...(pooled ? { poolVersion: DAILY_POOL_VERSION, poolPending: true, poolClaim: instant.claim } : {}),
+        createdAt: now, updatedAt: now });
     }
-    const response = { ...instant.response, ok: true, id: sourceId ?? result._id, payout: 0, poolPending: true, poolClaim: instant.claim, poolDay: result.poolDay, balance: account.user.balance };
+    const response = { ...instant.response, ok: true, id: sourceId ?? result._id, payout,
+      ...(pooled ? { poolPending: true, poolClaim: instant.claim, poolDay: result.poolDay } : {}),
+      balance: account.user.balance };
     await tx.insert("multiplayerrequests", key, { _id: key, fingerprint, response, resultId: result._id, createdAt: now });
     return response;
   });
 }
 
 export async function acceptPoolMines(userId: string, amount: number, mines: number, mineCells: number[], publish: (g: Mine) => unknown, pooled = true) {
+  const limitError = gameBetError(amount);
+  if (limitError) return { error: limitError };
   return dedicatedTransaction("mines", async tx => {
     if ((await tx.findWhere<Mine>("minesgames", { userId, status: "active" }, 1)).length) return { error: "Pehle wali game abhi chal rahi hai." };
     const account = await wallet(tx, userId, "mines", amount);

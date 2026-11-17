@@ -1,4 +1,5 @@
 "use client";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 
 import { useEffect, useRef, useState } from "react";
 import FlightDeck, { type FlightDeckHandle } from "./FlightDeck";
@@ -9,6 +10,7 @@ import { BET_PRESETS } from "@/lib/betPresets";
 import { useMultiplayerGame } from "@/lib/useMultiplayerGame";
 import { LiveMultiplayerBets } from "@/components/LiveMultiplayerBets";
 import type { BlastOutcome } from "@/lib/multiplayer-rules";
+import { BLAST_OFF_MAX_CASHOUT, blastOffMaxCrash } from "@/lib/blastOffRules";
 import type { MultiplayerBet } from "@/lib/multiplayer-types";
 import { gameSfx } from "@/lib/gameSfx";
 import { GameOverOverlay } from "@/components/GameOverOverlay";
@@ -71,7 +73,8 @@ export default function BlastOff() {
   const current = state?.myBets.filter(b => b.status !== "cancelled") ?? [];
   const queued = state?.myQueuedBets.filter(b => b.status === "pending") ?? [];
   const own = (current.find(b => b.status === "pending") ?? current[0]) as (MultiplayerBet & { cashoutMultiplier?: number }) | undefined;
-  const multiplier = phase === "crashed" ? state?.round.result?.crashPoint ?? 1 : phase === "flying" ? Math.min(250, Math.exp(.155 * Math.max(0, live.now - (state?.round.bettingEndsAt ?? live.now)) / 1000)) : 1;
+  const maxMultiplier = blastOffMaxCrash(state?.round.flightModel);
+  const multiplier = phase === "crashed" ? state?.round.result?.crashPoint ?? 1 : phase === "flying" ? Math.min(maxMultiplier, Math.exp(.155 * Math.max(0, live.now - (state?.round.bettingEndsAt ?? live.now)) / 1000)) : 1;
   const bet: BetState | null = own ? { amount: own.amount, target: own.autoCashout ?? 0, auto: own.autoCashout !== undefined,
     active: own.status === "pending", cashed: own.status === "win", cashedAt: own.cashoutMultiplier ?? 0, payout: own.payout, poolPending: own.poolPending, poolClaim: own.poolClaim } : null;
   const stats: Stats = settlements.reduce((s, b) => ({ rounds: s.rounds + 1, wins: s.wins + (b.status === "win" ? 1 : 0),
@@ -118,8 +121,8 @@ export default function BlastOff() {
   }, [state, sound]);
   const betPlaced = !!bet;
   useEffect(() => {
-    deckRef.current?.draw({ phase: e.phase, t: e.t, multiplier: e.multiplier, crashPoint: e.crashPoint, countdown: e.cd, betPlaced });
-  }, [e.phase, e.t, e.multiplier, e.crashPoint, e.cd, betPlaced]);
+    deckRef.current?.draw({ phase: e.phase, t: e.t, multiplier: e.multiplier, crashPoint: e.crashPoint, countdown: e.cd, betPlaced, maxMultiplier });
+  }, [e.phase, e.t, e.multiplier, e.crashPoint, e.cd, betPlaced, maxMultiplier]);
   const activeRef = useRef(false);
   useEffect(() => { activeRef.current = phase === "flying" && !!bet?.active; }, [phase, bet?.active]);
   useEffect(() => {
@@ -420,7 +423,7 @@ export default function BlastOff() {
                   <button
                     type="button"
                     className="chip num py-1 text-[10px] font-bold rounded border border-emerald-500/40 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-500/20"
-                    onClick={() => setStake(Math.max(10, Math.floor(e.balance)))}
+                    onClick={() => setStake(Math.min(MAX_GAME_BET, Math.max(10, Math.floor(e.balance))))}
                   >
                     MAX
                   </button>
@@ -450,7 +453,7 @@ export default function BlastOff() {
                     value={target}
                     onChange={(ev) => {
                       const n = Number(ev.target.value.replace(/[^\d.]/g, ""));
-                      setTarget(Number.isFinite(n) ? Math.min(200, n) : 1.01);
+                      setTarget(Number.isFinite(n) ? Math.min(BLAST_OFF_MAX_CASHOUT, n) : 1.01);
                     }}
                   />
                   <span className="flex items-center rounded border border-hair bg-[#070d18] px-2 text-[12px] text-mist">×</span>

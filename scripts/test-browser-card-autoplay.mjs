@@ -274,10 +274,10 @@ test("Plinko releases each return at landing, not on the drop receipt or a walle
     localApi: async (url, options) => {
       if (options.method === "POST") {
         assert.equal(JSON.parse(options.body).rows, 12);
-        authoritative = 1080;
+        authoritative = 1076.4;
       }
       return { ok: true, status: 200, json: async () => options.method === "POST"
-        ? { balance: 1080, path: Array(12).fill(1), bucket: 12, multiplier: 1.8, payout: 180 }
+        ? { balance: 1076.4, path: Array(12).fill(1), bucket: 12, multiplier: 1.8, payout: 176.4 }
         : url === "/api/player/balance" ? { balance: authoritative }
         : { balance: authoritative, limits: { min: 10, max: 10000 }, rows: [12],
           tables: { medium: { 12: plinkoTable } }, recent: [] },
@@ -289,13 +289,13 @@ test("Plinko releases each return at landing, not on the drop receipt or a walle
     assert.ok(text(f.render()).includes("13 buckets with one center 0x"));
     assert.ok(!text(f.render()).includes("25x"));
     await f.click("Bet");
-    f.pollWallet(1080);
+    f.pollWallet(1076.4);
     assert.equal(f.walletBalance, 900);
     await f.advance(2469);
     assert.equal(f.walletBalance, 900);
     await f.advance(1);
-    assert.equal(f.walletBalance, 1080);
-    assert.ok(text(f.render()).includes("1,080"));
+    assert.equal(f.walletBalance, 1076.4);
+    assert.ok(text(f.render()).includes("1,076.4"));
   } finally { f.unmount(); }
 });
 
@@ -304,31 +304,31 @@ test("overlapping Plinko balls ignore out-of-order balance receipts and reveal s
   const f = fixture("src\\components\\PlinkoGame.tsx", {
     localApi: async (url, options) => {
       if (options.method === "POST") return new Promise(resolve => receipts.push(resolve));
-      return { ok: true, json: async () => url === "/api/player/balance" ? { balance: 1160 }
-        : { balance: receipts.length ? 1160 : 1000, limits: { min: 10, max: 10000 }, rows: [12],
+      return { ok: true, json: async () => url === "/api/player/balance" ? { balance: 1152.8 }
+        : { balance: receipts.length ? 1152.8 : 1000, limits: { min: 10, max: 10000 }, rows: [12],
           tables: { medium: { 12: plinkoTable } }, recent: [] } };
     },
   });
   const receipt = balance => ({ ok: true, status: 200, json: async () => ({
-    balance, path: Array(12).fill(1), bucket: 12, multiplier: 1.8, payout: 180,
+    balance, path: Array(12).fill(1), bucket: 12, multiplier: 1.8, payout: 176.4,
   }) });
   try {
     await f.flush();
     const first = f.find("Bet").props.onClick();
     const second = f.find("Bet").props.onClick();
-    receipts[1](receipt(1160));
+    receipts[1](receipt(1152.8));
     await f.flush();
     await f.advance(100);
-    receipts[0](receipt(1080));
+    receipts[0](receipt(1076.4));
     await Promise.all([first, second]);
     await f.flush();
     assert.equal(f.walletBalance, 800);
     await f.advance(2369);
     assert.equal(f.walletBalance, 800);
     await f.advance(1);
-    assert.equal(f.walletBalance, 980);
+    assert.equal(f.walletBalance, 976.4);
     await f.advance(100);
-    assert.equal(f.walletBalance, 1160);
+    assert.equal(f.walletBalance, 1152.8);
   } finally { f.unmount(); }
 });
 
@@ -402,6 +402,82 @@ test("Casino War does not reuse the previous hand's chips while a rebet is still
     await f.flush();
     assert.equal(ante().props.amount, 100);
     assert.equal(button("DEAL").props.disabled, false);
+  } finally { f.unmount(); }
+});
+
+test("Casino War enables Deal immediately after a surrendered tie and a newly accepted custom ante", async () => {
+  let hands = 0;
+  const f = fixture("src\\components\\casino-war\\CasinoWar.tsx", {
+    cardMove: async move => {
+      if (move === "surrender") return { phase: "result", view: { phase: "result", decision: "surrender" } };
+      hands++;
+      const tie = hands === 1;
+      return { phase: tie ? "tie" : "result", view: { phase: tie ? "tie" : "result", result: tie ? "tie" : "win",
+        player: { rank: 14, suit: "S" }, dealer: { rank: tie ? 14 : 2, suit: "H" }, tiePayout: 0 } };
+    },
+  });
+  const ante = () => f.nodes().find(node => node.props?.label === "ANTE" && node.props.onClick);
+  const button = label => f.nodes().find(node => node.props?.onClick && text(node) === label);
+  const amountInput = () => f.nodes().find(node => node.props?.onChange && node.props.value === 100 && node.type.name === "BetAmountInput");
+  try {
+    await ante().props.onClick();
+    await f.flush();
+    const first = button("DEAL").props.onClick();
+    await f.advance(2300);
+    await first;
+    await button("SURRENDER").props.onClick();
+    await f.flush();
+    amountInput().props.onChange(2345);
+    await f.flush();
+    await ante().props.onClick();
+    await f.flush();
+    assert.equal(ante().props.amount, 2345, "A finished surrender must not retain its in-flight lock");
+    assert.equal(button("DEAL").props.disabled, false, "The next accepted ante needs no review/countdown wait");
+    const second = button("DEAL").props.onClick();
+    await f.advance(2300);
+    await second;
+    assert.equal(hands, 2);
+    assert.deepEqual(f.calls.filter(call => call[0] === "stake"), [["stake", 100], ["stake", 2345]]);
+  } finally { f.unmount(); }
+});
+
+test("Casino War supports repeated custom-stake rounds and only enables Deal after each new ante is confirmed", async () => {
+  let hands = 0;
+  const f = fixture("src\\components\\casino-war\\CasinoWar.tsx", {
+    cardMove: async () => {
+      hands++;
+      const win = hands % 2 === 1;
+      return { phase: "result", view: { phase: "result", result: win ? "win" : "lose",
+        player: { rank: win ? 14 : 2, suit: "S" }, dealer: { rank: win ? 2 : 14, suit: "H" }, tiePayout: 0 } };
+    },
+  });
+  const ante = () => f.nodes().find(node => node.props?.label === "ANTE" && node.props.onClick);
+  const deal = () => f.nodes().find(node => node.props?.onClick && text(node) === "DEAL");
+  const input = () => f.nodes().find(node => node.props?.onChange && node.type.name === "BetAmountInput");
+  try {
+    for (const amount of [10, 1234, 9999, 50, 100, 5000]) {
+      input().props.onChange(amount);
+      await f.flush();
+      let confirm;
+      f.pool.stake = stake => {
+        assert.equal(stake, amount);
+        f.calls.push(["stake", stake]);
+        return new Promise(resolve => { confirm = resolve; });
+      };
+      const placing = ante().props.onClick();
+      await f.flush();
+      assert.equal(deal().props.disabled, true);
+      confirm(true);
+      await placing;
+      await f.flush();
+      assert.equal(ante().props.amount, amount, "Old hand's stakes must not be added to a fresh round");
+      assert.equal(deal().props.disabled, false);
+      const playing = deal().props.onClick();
+      await f.advance(2300);
+      await playing;
+      await f.flush();
+    }
+    assert.equal(hands, 6);
   } finally { f.unmount(); }
 });
 

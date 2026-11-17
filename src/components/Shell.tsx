@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { destroySession } from "@/lib/auth";
 import { SupportWidget } from "./SupportWidget";
+import { OpenSupportButton } from "./OpenSupport";
 import { NotificationBell } from "./NotificationBell";
 import { Marquee } from "./lobby/LobbyClient";
 import { LanguageSwitch } from "./LanguageSwitch";
@@ -82,7 +83,7 @@ export function Shell({ title, nav, userName, badge, children, support = true, h
           </Link>}
         </div>
         {isProfilePage && <div className="flex items-center gap-1">
-          <button type="button" aria-label="Support" onClick={() => window.dispatchEvent(new CustomEvent("wx:open-support"))} className="flex h-8 w-8 items-center justify-center text-white"><HeadsetIcon size={20} /></button>
+          <OpenSupportButton className="flex h-8 w-8 items-center justify-center text-white"><HeadsetIcon size={20} /></OpenSupportButton>
           <NotificationBell loggedIn />
         </div>}
         {!isPlayerProfile && <div className="flex shrink-0 items-center gap-1.5">
@@ -97,7 +98,7 @@ export function Shell({ title, nav, userName, badge, children, support = true, h
       <main className={`wx-main min-w-0 flex-1 ${isDepositPage ? "pb-28 md:p-6" : "p-2 pb-28 sm:p-4 md:pb-6 lg:p-8 2xl:px-12"} ${hideSidebar ? "md:pb-8" : ""}`}>
         <div className={`mx-auto w-full ${hideSidebar ? "max-w-[1300px]" : "max-w-[1600px] 2xl:max-w-[1800px]"}`}>
           {isProfilePage && <div className="mb-3 hidden items-center justify-end gap-1 md:flex">
-            <button type="button" aria-label="Support" onClick={() => window.dispatchEvent(new CustomEvent("wx:open-support"))} className="flex h-8 w-8 items-center justify-center text-white"><HeadsetIcon size={20} /></button>
+            <OpenSupportButton className="flex h-8 w-8 items-center justify-center text-white"><HeadsetIcon size={20} /></OpenSupportButton>
             <NotificationBell loggedIn />
           </div>}
           {support && !hideSidebar && !isPlayerProfile && !isDepositPage && <div className="mb-3 hidden items-center justify-end gap-2 md:flex"><ThemeToggle /><NotificationBell loggedIn /></div>}

@@ -1,4 +1,5 @@
 "use client";
+import { MAX_GAME_BET } from "@/lib/gameBetLimits";
 import { gameSfx } from "@/lib/gameSfx";
 import { isPokerBrowserDeal } from "@/lib/browserCardGuards";
 import { GameOverOverlay } from "@/components/GameOverOverlay";
@@ -118,7 +119,7 @@ export default function PokerGame() {
     setBet((b) => b + v);
   };
   const clearBet = () => phase === "betting" && setBet(0);
-  const allIn = () => phase === "betting" && setBet(balance);
+  const allIn = () => phase === "betting" && setBet(Math.min(MAX_GAME_BET, balance));
 
   const deal = useCallback(async () => {
     if (pool.busy) return;

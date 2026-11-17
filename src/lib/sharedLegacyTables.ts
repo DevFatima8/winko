@@ -1,6 +1,6 @@
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import { Game, type AviatorRoundDoc, type CardBetDoc, type CardRoundDoc, type GameResultDoc, type UserDoc, type WinHoldDoc } from "@/models";
-import { mysqlMultiplayerStore, type MultiplayerTransaction } from "./multiplayer-store";
+import { mysqlMultiplayerStore, readMultiplayer, type MultiplayerTransaction } from "./multiplayer-store";
 import * as flight from "./aviator";
 import * as cards from "./cards";
 import { heldPortion } from "./winHold";
@@ -11,8 +11,10 @@ import { isCardGame } from "./cardGameRules";
 import { nextPlayerWin } from "./playerWinCycle";
 import { AVIATOR_CLIENT_SEED, AVIATOR_LEGACY_MAX_CRASH, AVIATOR_MAX_CASHOUT, AVIATOR_MODEL, aviatorAccounting, aviatorCents, aviatorPayout, aviatorReachAt, isAviatorModel, validAutoCashout } from "./aviatorRules";
 import { flightAnimationSnapshot } from "./aviatorFlight";
+import { gameBetError } from "./gameBetLimits";
 
 const FLIGHT_ROOM = "aviator:shared:v2";
+const FLIGHT_HEAD = `${FLIGHT_ROOM}:head`;
 const LIMIT = 1000;
 const money = (value: number) => Math.round(value * 100) / 100;
 const stamp = (value: Date | string | number) => new Date(value).getTime();
@@ -56,8 +58,8 @@ async function gameId(slug: string, name: string) {
   return game._id;
 }
 
-async function flightBets(tx: Tx, gid: string, roundNo: number, context: FlightContext) {
-  return tx.findWhere<LiveResult>("gameresults", { gameId: gid, roundNo, ...(context.table === "aviator" ? { sharedRoom: context.room } : { userId: context.userId }) }, LIMIT);
+async function flightBets(tx: Pick<Tx, "findWhere">, gid: string, roundNo: number, context: FlightContext, onlyUser?: string) {
+  return tx.findWhere<LiveResult>("gameresults", { gameId: gid, roundNo, ...(context.table === "aviator" ? { sharedRoom: context.room, ...(onlyUser ? { userId: onlyUser } : {}) } : { userId: context.userId }) }, LIMIT);
 }
 
 async function crashAfterCashouts(tx: Tx, gid: string, round: AviatorRoundDoc, context: FlightContext, now: number, multiplier: number) {
@@ -120,9 +122,9 @@ async function saveFlightWallet(tx: Tx, user: UserDoc, bet: LiveResult, delta: n
   });
 }
 
-async function settleFlightAutos(tx: Tx, gid: string, round: AviatorRoundDoc, context: FlightContext, now: number) {
+async function settleFlightAutos(tx: Tx, gid: string, round: AviatorRoundDoc, context: FlightContext, now: number, onlyUser?: string) {
   if (round.fairness && now < stamp(round.startsAt)) return;
-  const bets = await flightBets(tx, gid, round.roundNo, context);
+  const bets = await flightBets(tx, gid, round.roundNo, context, onlyUser);
   for (const bet of bets.filter(bet => isAviatorModel(bet.flightModel))) {
     if (bet.outcome === "pending" && (aviatorCents(bet.betAmount) <= 0 || bet.winAmount !== 0)) {
       throw new Error("Invalid Aviator pending wager.");
@@ -142,10 +144,14 @@ async function settleFlightAutos(tx: Tx, gid: string, round: AviatorRoundDoc, co
   }
 }
 
-async function advanceFlight(tx: Tx, gid: string, context: FlightContext) {
+async function advanceFlight(tx: Tx, gid: string, context: FlightContext, actorOnly = false) {
   const cfg = flight.TABLES[context.table];
   let now = await tx.now();
-  let round = (await tx.findWhere<AviatorRoundDoc>("aviatorrounds", { table: context.room }, 1, { field: "roundNo", direction: "desc" }))[0];
+  const head = context.table === "aviator" ? await tx.get<{ roundId: string }>("multiplayerrooms", FLIGHT_HEAD) : null;
+  let round = head ? await tx.get<AviatorRoundDoc>("aviatorrounds", head.roundId)
+    : (await tx.findWhere<AviatorRoundDoc>("aviatorrounds", { table: context.room }, 1, { field: "roundNo", direction: "desc" }))[0];
+  if (head && (!round || round.table !== context.room)) throw new Error("Aviator current round reference is invalid.");
+  if (round && !head && context.table === "aviator") await tx.put("multiplayerrooms", FLIGHT_HEAD, { roundId: round._id });
   if (!round) {
     const scope = { gameId: gid, ...(context.table === "aviator" ? {} : { userId: context.userId }) };
     const latest = (await tx.findWhere<LiveResult>("gameresults", scope, 1, { field: "roundNo", direction: "desc" }))[0];
@@ -166,9 +172,11 @@ async function advanceFlight(tx: Tx, gid: string, context: FlightContext) {
   for (let guard = 0; guard < 128; guard++) {
     flight.validateFlightRound(round, context.table);
     now = await tx.now();
-    await settleFlightAutos(tx, gid, round, context, now);
     const crashAt = round.fairness ? aviatorReachAt(stamp(round.startsAt), round.crashPoint, cfg.growth)
       : stamp(round.startsAt) + Math.log(round.crashPoint) / cfg.growth * 1000 + 1;
+    // Live actions need only their owner's autos; a crash still settles everyone before advancing.
+    const onlyUser = actorOnly && round.fairness && now < crashAt ? context.userId ?? undefined : undefined;
+    await settleFlightAutos(tx, gid, round, context, now, onlyUser);
     if (round.status !== "crashed" && now >= crashAt) {
       const bets = await flightBets(tx, gid, round.roundNo, context);
       for (const bet of bets) if (bet.outcome === "pending") {
@@ -214,15 +222,15 @@ async function createFlight(tx: Tx, roundNo: number, anchor: number, context: Fl
     createdAt: now, updatedAt: now,
   };
   await tx.insert("aviatorrounds", round._id, round);
+  if (context.table === "aviator") await tx.put("multiplayerrooms", FLIGHT_HEAD, { roundId: round._id });
   return round;
 }
 
-async function withFlight<T>(fn: (tx: Tx, round: AviatorRoundDoc, gid: string, context: FlightContext) => Promise<T>, table: flight.Table = "aviator", userId: string | null = null) {
+async function withFlight<T>(fn: (tx: Tx, round: AviatorRoundDoc, gid: string, context: FlightContext) => Promise<T>, table: flight.Table = "aviator", userId: string | null = null, actorOnly = false) {
   const gid = await flight.getGameId(table);
   const context = { table, userId, room: table === "aviator" ? FLIGHT_ROOM : `${table}:${userId ?? "guest"}` };
   return mysqlMultiplayerStore.transact(dailyPoolLock(table), async (tx) => {
-    await settleDailyPools(tx, table);
-    const round = await advanceFlight(tx, gid, context);
+    const round = await advanceFlight(tx, gid, context, table === "aviator" && actorOnly);
     if (table === "aviator" && !round.fairness && round.status === "running") {
       const now = await tx.now();
       const multiplier = Math.min(round.crashPoint, flight.multiplierAt(table, new Date(round.startsAt), new Date(now), AVIATOR_LEGACY_MAX_CRASH));
@@ -234,10 +242,17 @@ async function withFlight<T>(fn: (tx: Tx, round: AviatorRoundDoc, gid: string, c
 }
 
 export async function sharedFlightState(userId: string | null, table: flight.Table = "aviator") {
-  return withFlight(async (tx, round, gid, context) => {
+  const shared = table === "aviator" ? await withFlight(async (tx, round, gid, context) => {
     const current = await flightBets(tx, gid, round.roundNo, context);
     const queued = userId ? (await flightBets(tx, gid, round.roundNo + 1, context)).filter((bet) => bet.userId === userId && bet.outcome === "pending") : [];
-    const history = await tx.findWhere<AviatorRoundDoc>("aviatorrounds", { table: context.room, status: "crashed" }, 40, { field: "roundNo", direction: "desc" });
+    const me = userId ? await tx.get<UserDoc>("users", userId) : null;
+    return { round, gid, context, current, queued, me, serverNow: await tx.now() };
+  }, table, userId) : null;
+  const present = async (tx: Pick<Tx, "get" | "findWhere" | "now">, round: AviatorRoundDoc, gid: string, context: FlightContext) => {
+    const current = shared?.current ?? await flightBets(tx, gid, round.roundNo, context);
+    const queued = shared?.queued ?? (userId ? (await flightBets(tx, gid, round.roundNo + 1, context)).filter(bet => bet.userId === userId && bet.outcome === "pending") : []);
+    let history = await tx.findWhere<AviatorRoundDoc>("aviatorrounds", { table: context.room, status: "crashed" }, 40, { field: "roundNo", direction: "desc" });
+    if (shared) history = history.filter(row => row.roundNo < round.roundNo || row.roundNo === round.roundNo && round.status === "crashed");
     for (const completed of history) flight.validateFlightRound(completed, table);
     const own = userId ? await tx.findWhere<LiveResult>("gameresults", { gameId: gid, userId }, 30, { field: "createdAt", direction: "desc" }) : [];
     const top = await tx.findWhere<LiveResult>("gameresults", { gameId: gid, outcome: "win" }, 20, { field: "winAmount", direction: "desc" });
@@ -251,10 +266,10 @@ export async function sharedFlightState(userId: string | null, table: flight.Tab
       const match = bet.resultData?.match(/@\s*([0-9.]+)x/i);
       return match ? Number(match[1]) : null;
     };
-    const me = userId ? await tx.get<UserDoc>("users", userId) : null;
+    const me = shared ? shared.me : userId ? await tx.get<UserDoc>("users", userId) : null;
     const cfg = flight.TABLES[table];
     const maxMult = round.fairness ? cfg.maxMult : AVIATOR_LEGACY_MAX_CRASH;
-    const serverNow = await tx.now();
+    const serverNow = shared?.serverNow ?? await tx.now();
     const snapshot = flightAnimationSnapshot(round, serverNow, cfg.growth, maxMult);
     return {
       serverNow, table,
@@ -271,7 +286,10 @@ export async function sharedFlightState(userId: string | null, table: flight.Tab
       top: top.filter(bet => !bet.poolPending && bet.winAmount > 0).map((bet) => ({ name: names.get(bet.userId ?? "") ?? "P***r", bet: bet.betAmount, win: bet.winAmount, mult: mult(bet) ?? 1, round: bet.roundNo })),
       balance: me?.balance ?? 0,
     };
-  }, table, userId);
+  };
+  return shared
+    ? readMultiplayer(reader => present(reader, shared.round, shared.gid, shared.context))
+    : withFlight(present, table, userId);
 }
 
 export async function sharedFlightBet(userId: string, amount: number, slot: number, expectedRound?: number, table: flight.Table = "aviator", queueIfClosed = false, autoCashout?: number) {
@@ -291,6 +309,8 @@ export async function sharedFlightBet(userId: string, amount: number, slot: numb
       bets = await flightBets(tx, gid, target, context);
     }
     if (bets.some((bet) => bet.userId === userId && bet.betSlot === slot)) return { error: "Bet already placed." };
+    const limitError = gameBetError(amount, bets.filter(bet => bet.userId === userId).reduce((sum, bet) => sum + bet.betAmount, 0));
+    if (limitError) return { error: limitError };
     if (table === "aviator-x" && bets.filter(bet => bet.userId === userId).length >= flight.TABLES[table].slots) {
       return { error: "Only two bets are allowed per round." };
     }
@@ -305,7 +325,7 @@ export async function sharedFlightBet(userId: string, amount: number, slot: numb
       bet: { id: _id, slot, bet: amount, win: 0, outcome: "pending", data: null, flightModel, autoCashout },
       serverSeedHash: target === round.roundNo ? round.fairness.serverSeedHash : round.fairness.nextServerSeedHash,
     };
-  }, table, userId);
+  }, table, userId, true);
 }
 
 export async function sharedFlightCancel(userId: string, slot: number, expectedRound?: number, table: flight.Table = "aviator") {
@@ -330,7 +350,7 @@ export async function sharedFlightCashout(userId: string, slot: number, expected
     if (expectedRound !== undefined && expectedRound !== round.roundNo) return { error: "Round changed. Check the current flight." };
     if (round.status !== "running") return { error: round.status === "crashed" ? "Flew away!" : "Round not started." };
     const user = await wallet(tx, userId);
-    const bet = (await flightBets(tx, gid, round.roundNo, context)).find((row) => row.userId === userId && row.betSlot === slot && row.outcome === "pending");
+    const bet = (await flightBets(tx, gid, round.roundNo, context, table === "aviator" ? userId : undefined)).find((row) => row.userId === userId && row.betSlot === slot && row.outcome === "pending");
     if (!bet) return { error: "No active bet." };
     const now = await tx.now();
     if (isAviatorModel(bet.flightModel)) {
@@ -365,7 +385,7 @@ export async function sharedFlightCashout(userId: string, slot: number, expected
     await hold(tx, userId, bet.betAmount * multiplier, now);
     await crashAfterCashouts(tx, gid, round, context, now, multiplier);
     return { ok: true, multiplier, win, netWin };
-  }, table, userId);
+  }, table, userId, true);
 }
 
 async function cardRows(tx: Tx, table: cards.Table, roundNo: number, room?: string) {
@@ -624,11 +644,15 @@ export async function sharedCardBet(userId: string, table: cards.Table, option: 
       if (previous) return previous.fingerprint === fingerprint ? previous.reply : { error: "Request ID was already used for a different wager." };
     }
     if (!context.personal) return { error: "Finish your accepted shared round and queued wagers before starting a personal round." };
+    const amountError = gameBetError(amount);
+    if (amountError) return { error: amountError };
     if (!Object.hasOwn(cards.TABLES[table].options, option) || !Number.isSafeInteger(amount) || amount < cards.MIN_BET) return { error: "Invalid card wager." };
     const target = cards.betTargetFor(round, await tx.now());
     if (target.queued) return { error: "Betting is closed. Wait for the next round to begin." };
     if (expectedRound !== undefined && expectedRound !== target.roundNo) return { error: "Round changed. Check bet status and try again.", roundChanged: true };
     const current = await cardRows(tx, table, target.roundNo, context.room);
+    const limitError = gameBetError(amount, current.filter(bet => bet.userId === userId && bet.status === "pending").reduce((sum, bet) => sum + bet.amount, 0));
+    if (limitError) return { error: limitError };
     if (current.length >= LIMIT - 1) return { error: "This table round is full." };
     const allocation = cards.personalOutcomes(table, [...current.filter(bet => bet.status === "pending"), { option, amount }]);
     if (!allocation.losses.length) return { error: "Covering all outcomes is not allowed: this wager must allow a zero-return result." };

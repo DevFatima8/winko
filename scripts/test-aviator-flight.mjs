@@ -7,15 +7,19 @@ function load(file, imports = {}) {
   const code = ts.transpileModule(readFileSync(file, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  const module = { exports: {} };
+  const commonJsModule = { exports: {} };
   new Function("require", "module", "exports", code)(name => {
     assert.ok(Object.hasOwn(imports, name), name);
     return imports[name];
-  }, module, module.exports);
-  return module.exports;
+  }, commonJsModule, commonJsModule.exports);
+  return commonJsModule.exports;
 }
-const { flightAnimationSnapshot } = load("src\\lib\\aviatorFlight.ts", { "./aviatorRules": load("src\\lib\\aviatorRules.ts") });
+const { flightAnimationSnapshot, AVIATOR_STATE_POLL_MS } = load("src\\lib\\aviatorFlight.ts", { "./aviatorRules": load("src\\lib\\aviatorRules.ts") });
 const tableConfig = { aviator: { growth: 0.06, maxMult: 99.99 }, "aviator-x": { growth: 0.075, maxMult: 99.99 } };
+
+test("Aviator throttles full transactional state reads while keeping lightweight flight samples fast", () => {
+  assert.equal(AVIATOR_STATE_POLL_MS, 1500);
+});
 
 test("accepted legacy flights keep their previous rendering cap while new-model flights stay below 100x", () => {
   const legacy = { roundNo: 1, startsAt: new Date(100000), crashPoint: 150, status: "running" };

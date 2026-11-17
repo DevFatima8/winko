@@ -6,13 +6,14 @@ import { AVIATOR_CLIENT_SEED, AVIATOR_MAX_CASHOUT, AVIATOR_MAX_CRASH, AVIATOR_MO
 import { mysqlMultiplayerStore } from "./multiplayer-store";
 import { dailyPoolLock } from "./dailyPoolRules";
 import { allRows } from "./dailyPool";
+import { gameBetError, MAX_GAME_BET } from "./gameBetLimits";
 
 export const newFlightSeed = () => randomBytes(32).toString("hex");
 export const flightSeedHash = (seed: string) => createHash("sha256").update(seed, "utf8").digest("hex");
 
 export const TABLES = {
-  aviator: { name: "Aviator", waitMs: 10000, pauseMs: 3500, growth: 0.06, houseEdge: 1 - AVIATOR_RTP, maxMult: AVIATOR_MAX_CRASH, maxCashout: AVIATOR_MAX_CASHOUT, slots: 2, minBet: 10, maxBet: Number.MAX_SAFE_INTEGER },
-  "aviator-x": { name: "Aviator X", waitMs: 10000, pauseMs: 3500, growth: 0.075, houseEdge: 1 - AVIATOR_RTP, maxMult: AVIATOR_MAX_CRASH, maxCashout: AVIATOR_MAX_CASHOUT, slots: 2, minBet: 10, maxBet: Number.MAX_SAFE_INTEGER },
+  aviator: { name: "Aviator", waitMs: 10000, pauseMs: 3500, growth: 0.06, houseEdge: 1 - AVIATOR_RTP, maxMult: AVIATOR_MAX_CRASH, maxCashout: AVIATOR_MAX_CASHOUT, slots: 2, minBet: 10, maxBet: MAX_GAME_BET },
+  "aviator-x": { name: "Aviator X", waitMs: 10000, pauseMs: 3500, growth: 0.075, houseEdge: 1 - AVIATOR_RTP, maxMult: AVIATOR_MAX_CRASH, maxCashout: AVIATOR_MAX_CASHOUT, slots: 2, minBet: 10, maxBet: MAX_GAME_BET },
 } as const;
 export type Table = keyof typeof TABLES;
 export const isTable = (t: string): t is Table => Object.prototype.hasOwnProperty.call(TABLES, t);
@@ -67,6 +68,8 @@ export async function getState(userId: string | null, table: Table) {
 export async function placeBet(userId: string, table: Table, amount: number, slot = 0, expectedRound?: number, queueIfClosed = false, autoCashout?: number) {
   const cfg = TABLES[table];
   if (!Number.isFinite(amount) || amount < cfg.minBet) return { error: `Minimum bet Rs. ${cfg.minBet} hai.` };
+  const limitError = gameBetError(amount);
+  if (limitError) return { error: limitError };
   if (!Number.isInteger(slot) || slot < 0 || slot >= cfg.slots) return { error: "Invalid bet panel." };
   amount = table === "aviator" ? Math.round(amount * 100) / 100 : Math.floor(amount);
   if (!Number.isSafeInteger(Math.round(amount * 100)) || amount > Number.MAX_SAFE_INTEGER / 100 / AVIATOR_MAX_CASHOUT) return { error: "Bet exceeds safe wallet precision." };

@@ -8,8 +8,9 @@ import { acceptPoolMines, actPoolMines } from "./dailyPoolDedicated";
 import { DAILY_POOL_VERSION } from "./dailyPoolRules";
 import type { PoolFields } from "./dailyPool";
 import { isMysqlEnabled } from "./mysql";
+import { MAX_GAME_BET } from "./gameBetLimits";
 
-export const MIN_BET = 10, MAX_BET = Number.MAX_SAFE_INTEGER, MAX_WIN = Number.MAX_SAFE_INTEGER;
+export const MIN_BET = 10, MAX_BET = MAX_GAME_BET, MAX_WIN = Number.MAX_SAFE_INTEGER;
 export const RTP = 0.97; // Spribe Mines 97%
 export const CELLS = 25, MIN_MINES = 1, MAX_MINES = 24;
 
@@ -62,6 +63,7 @@ export async function getState(userId: string | null) {
 export async function start(userId: string, amount: number, mines: number) {
   await dbConnect();
   if (!Number.isFinite(amount) || amount < MIN_BET) return { error: `Minimum bet Rs. ${MIN_BET} hai.` };
+  if (amount > MAX_BET) return { error: "Maximum bet per player per round is Rs. 100,000." };
   mines = Math.floor(mines);
   if (!Number.isInteger(mines) || mines < MIN_MINES || mines > MAX_MINES) return { error: `Mines ${MIN_MINES}–${MAX_MINES} ke darmiyan hon.` };
   amount = Math.floor(amount);

@@ -9,8 +9,9 @@ import { cents } from "./dailyPool";
 import type { MultiplayerTransaction } from "./multiplayer-store";
 import { DAILY_POOL_WIN_CAP } from "./dailyPoolRules";
 import { nextPlayerPrize } from "./playerWinCycle";
+import { MAX_GAME_BET } from "./gameBetLimits";
 
-export const MIN_BET = 10, MAX_BET = Number.MAX_SAFE_INTEGER, MAX_WIN = Number.MAX_SAFE_INTEGER;
+export const MIN_BET = 10, MAX_BET = MAX_GAME_BET, MAX_WIN = Number.MAX_SAFE_INTEGER;
 // Classic 3-reel, 1-line "Lucky 777".
 export const SYMBOLS = ["seven", "bar3", "bar2", "bar1", "bell", "cherry", "lemon", "orange", "plum"] as const;
 export type Sym = (typeof SYMBOLS)[number];
@@ -121,6 +122,7 @@ export async function getState(userId: string | null) {
 export async function spin(userId: string, amount: number, requestId = "") {
   await dbConnect();
   if (!Number.isFinite(amount) || amount < MIN_BET) return { error: `Minimum bet Rs. ${MIN_BET} hai.` };
+  const exceedsLimit = amount > MAX_BET;
   amount = Math.floor(amount);
   if (!/^[A-Za-z0-9_-]{16,128}$/.test(requestId)) return { error: "A valid wager request ID is required." };
   const denied = await checkGameAccess(userId, "lucky-777");
@@ -136,6 +138,7 @@ export async function spin(userId: string, amount: number, requestId = "") {
       if (!result || !user) throw new Error("Lucky 777 replay record is incomplete.");
       return { ...previous.response, payout: result.winAmount, poolPending: result.poolPending, poolClaim: result.poolClaim, balance: user.balance };
     }
+    if (exceedsLimit) return { error: "Maximum bet per player per round is Rs. 100,000." };
     if (!user || !user.isActive || user.role !== "client" || user.blockedGames?.includes("lucky-777")) return { error: "This account cannot bet on this game." };
     if (cents(user.balance) < cents(amount)) return { error: "Insufficient balance." };
     const { reels, hit, data } = await nextSpin(tx, userId);

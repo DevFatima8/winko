@@ -36,6 +36,7 @@ export function AviatorScenicView({
   const [menu, setMenu] = useState(false);
   const [expandedHistory, setExpandedHistory] = useState(false);
   const [graphicsError, setGraphicsError] = useState("");
+  const [cashoutEstimates, setCashoutEstimates] = useState<Record<number, number>>({});
   const showCountdown = phase === "waiting" || phase === "crashed" && countdown > 0;
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -114,7 +115,7 @@ export function AviatorScenicView({
               const pending = mine?.outcome === "pending";
               const locked = pending || !!queued;
               const amount = Number(panel.amount) || 0;
-              const setAmount = (value: number) => onPanelChange(slot, { amount: Math.max(state.config.minBet, value).toFixed(2) });
+              const setAmount = (value: number) => onPanelChange(slot, { amount: Math.min(state.config.maxBet, Math.max(state.config.minBet, value)).toFixed(2) });
               const cashout = pending && phase === "running";
               const cancel = !!queued || pending && phase === "waiting";
               const betAmount = mine?.bet ?? amount;
@@ -130,9 +131,15 @@ export function AviatorScenicView({
                 <div className="my-2 grid grid-cols-3 gap-1 md:grid-cols-5">
                   {BET_PRESETS.map(value => <button type="button" key={value} disabled={locked} onClick={() => setAmount(value)} className="min-h-8 min-w-0 break-all rounded-sm border border-[#bfb4b8] px-1 text-xs disabled:opacity-40">{value}</button>)}
                 </div>
-                <button type="button" data-action={cashout ? "cashout" : cancel ? "cancel" : phase === "waiting" ? "bet" : "bet-next"} disabled={panel.busy} onClick={() => cashout ? onCashout(slot) : cancel ? onCancel(slot) : onBet(slot)} className={`flex min-h-11 w-full flex-col items-center justify-center rounded-sm px-1 text-base text-white disabled:opacity-50 ${cashout ? "bg-[#d58a13]" : cancel ? "bg-[#c42c3c]" : "bg-[#209b39]"}`}>
-                  {panel.busy ? "Confirming..." : cashout ? mine?.poolVersion ? "Lock Claim" : "Cash Out" : cancel ? "Cancel" : showCountdown ? "Bet" : "Next"}
-                  {cashout && <span className="text-xs">Rs. {money(potential)}</span>}
+                <button type="button" data-action={cashout ? "cashout" : cancel ? "cancel" : phase === "waiting" ? "bet" : "bet-next"} disabled={panel.busy} onClick={() => {
+                  if (cashout) {
+                    setCashoutEstimates(previous => ({ ...previous, [slot]: potential }));
+                    onCashout(slot);
+                  } else if (cancel) onCancel(slot);
+                  else onBet(slot);
+                }} className={`flex min-h-11 w-full flex-col items-center justify-center rounded-sm px-1 text-base text-white disabled:opacity-50 ${cashout ? "bg-[#d58a13]" : cancel ? "bg-[#c42c3c]" : "bg-[#209b39]"}`}>
+                  {cashout ? mine?.poolVersion ? "Lock Claim" : "Cash Out" : cancel ? "Cancel" : showCountdown ? "Bet" : "Next"}
+                  {cashout && <span className="text-xs">{panel.busy && cashoutEstimates[slot] !== undefined ? "Est. " : ""}Rs. {money(panel.busy ? cashoutEstimates[slot] ?? potential : potential)}</span>}
                 </button>
                 {queued && <div className="mt-1 text-center text-[10px] text-amber-200">Reserved for next round</div>}
                 {mine && mine.outcome !== "pending" && <div className={`mt-1 text-center text-[10px] ${mine.outcome === "win" ? "text-green-300" : "text-red-300"}`}>{mine.poolPending ? `Claim Rs. ${money(mine.poolClaim ?? 0)} · Daily payout pending` : mine.outcome === "win" ? `Paid: Rs. ${money(mine.win)}` : ""}</div>}
