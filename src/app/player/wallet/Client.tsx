@@ -67,7 +67,7 @@ export default function WalletPageClient({ mode = "deposit", params, searchParam
             <Link href="/player/records?type=deposit" aria-label="Deposit history"><History size={23} /></Link>
           </div>
         </header>
-        <Balance initial={me.balance} />
+        <Balance key={me.balance} initial={me.balance} />
         <DepositFlow accounts={accounts} qrAccount={data.qrAccount} initialAmount={initialAmount} minDeposit={minDeposit} firstDepositBonusEligible={data.firstDepositBonusEligible === true} />
       </div>
     );

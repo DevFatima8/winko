@@ -22,9 +22,10 @@ const hand = [
   ...[8, 9, 10].map(rank => ({ id: `${rank}D`, rank, suit: "D" })),
   ...[11, 12, 13, 14].map(rank => ({ id: `${rank}C`, rank, suit: "C" })),
 ];
-function harness(phase = "play", presets = [10, 20, 50, 100, 200], unlockedLevel = 5) {
-  const states = [], refs = [], calls = [], timers = [];
-  let stateIndex = 0, refIndex = 0;
+function harness(phase = "play", presets = [10, 20, 50, 100, 200], unlockedLevel = 5, dealtHand = hand) {
+  const states = [], refs = [], calls = [], timers = [], effects = [], pendingEffects = [];
+  const intervals = new Map(), timeouts = new Map();
+  let stateIndex = 0, refIndex = 0, effectIndex = 0, now = 1000, timerId = 0;
   const useState = initial => {
     const index = stateIndex++;
     if (!(index in states)) states[index] = typeof initial === "function" ? initial() : initial;
@@ -32,7 +33,16 @@ function harness(phase = "play", presets = [10, 20, 50, 100, 200], unlockedLevel
   };
   const pool = { busy: false, announce() {}, start: async amount => { calls.push(["start", amount]); return true; } };
   const imports = {
-    react: { useState, useRef(initial) { return refs[refIndex++] ??= { current: initial }; }, useEffect() {}, useMemo: fn => fn(), useCallback: fn => fn },
+    react: {
+      useState, useRef(initial) { return refs[refIndex++] ??= { current: initial }; },
+      useEffect(fn, deps) {
+        const index = effectIndex++, previous = effects[index];
+        if (!deps || !previous || deps.some((value, i) => !Object.is(value, previous.deps?.[i]))) {
+          pendingEffects.push(() => { previous?.cleanup?.(); effects[index] = { deps, cleanup: fn() }; });
+        }
+      },
+      useMemo: fn => fn(), useCallback: fn => fn,
+    },
     "next/image": { default: "img" },
     "react/jsx-runtime": jsx,
     "@/lib/gameBetLimits": { MAX_GAME_BET: 100000 },
@@ -42,7 +52,7 @@ function harness(phase = "play", presets = [10, 20, 50, 100, 200], unlockedLevel
     "@/lib/walletSync": {
       useGameBalance: () => [10000],
       usePoolLifecycle: () => pool,
-      usePoolRoundState: (_game, key, initial) => useState(key === "phase" ? phase : key === "hand" ? hand : initial),
+      usePoolRoundState: (_game, key, initial) => useState(key === "phase" ? phase : key === "hand" ? dealtHand : initial),
     },
     "@/components/BetAmountInput": { default: "amount-input" },
     "framer-motion": { motion: new Proxy({}, { get: (_, key) => `motion-${String(key)}` }), AnimatePresence: "presence" },
@@ -50,7 +60,7 @@ function harness(phase = "play", presets = [10, 20, 50, 100, 200], unlockedLevel
     "../teen-patti/useIdleCardRound": { useIdleCardRound: () => ({ preview: null, watching: false, countdown: null, claim: () => true, release() {} }) },
     "@/lib/interactiveCardClient": {
       restoreCardRound: async () => null,
-      cardMove: async (_pool, move, selection) => { calls.push(["move", move, selection]); return { phase: "play", view: { hand } }; },
+      cardMove: async (_pool, move, selection) => { calls.push(["move", move, selection]); return { phase: "play", view: { hand: dealtHand } }; },
     },
     "./PlayingCard": { PlayingCard: "playing-card" },
     "./hooks": { usePersistentState: (_key, initial) => useState(initial), useSound: () => new Proxy({}, { get: () => () => {} }) },
@@ -60,13 +70,18 @@ function harness(phase = "play", presets = [10, 20, 50, 100, 200], unlockedLevel
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   const module = { exports: {} };
-  new Function("require", "module", "exports", "setTimeout", source)(
+  new Function("require", "module", "exports", "setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date", source)(
     name => { assert.ok(name in imports, name); return imports[name]; }, module, module.exports,
-    fn => { timers.push(fn); return timers.length; },
+    (fn, delay) => { timers.push(fn); timeouts.set(++timerId, { fn, at: now + delay }); return timerId; },
+    id => timeouts.delete(id),
+    fn => { intervals.set(++timerId, fn); return timerId; },
+    id => intervals.delete(id),
+    class extends Date { static now() { return now; } },
   );
   const render = () => {
     stateIndex = 0;
     refIndex = 0;
+    effectIndex = 0;
     const nodes = [];
     const visit = node => {
       if (Array.isArray(node)) return node.forEach(visit);
@@ -77,12 +92,23 @@ function harness(phase = "play", presets = [10, 20, 50, 100, 200], unlockedLevel
     visit(module.exports.default());
     const zone = nodes.find(node => node.props?.["aria-label"] === "Place selected meld here");
     if (zone) zone.props.ref.current = { getBoundingClientRect: () => ({ left: 0, right: 200, top: 0, bottom: 100 }) };
+    while (pendingEffects.length) pendingEffects.shift()();
     return nodes;
   };
   const cards = () => render().filter(node => node.props?.className?.split(" ").includes("rummy-hand-card"));
   const button = label => render().find(node => node.props?.["aria-label"] === label);
   const nextPlayerTurn = () => { const turn = states.findIndex(value => value && typeof value === "object" && "seat" in value && "until" in value); states[turn] = { seat: 0, until: 0 }; };
-  return { render, cards, button, calls, timers, nextPlayerTurn };
+  const advance = async milliseconds => {
+    render();
+    for (let elapsed = 0; elapsed < milliseconds; elapsed += 100) {
+      now += Math.min(100, milliseconds - elapsed);
+      for (const [id, timer] of [...timeouts]) if (timer.at <= now) { timeouts.delete(id); timer.fn(); }
+      for (const fn of [...intervals.values()]) fn();
+      await Promise.resolve();
+      render();
+    }
+  };
+  return { render, cards, button, calls, timers, nextPlayerTurn, advance };
 }
 
 test("Rummy keeps the header, exposes five exact-stake table choices and does not add a Lobby button", async () => {
@@ -186,4 +212,72 @@ test("Rummy rejects invalid dragged groups, supports place-button selection and 
   place().props.onClick();
   assert.equal(h.cards().length, 10);
   assert.deepEqual(h.calls, []);
+});
+
+const activeComputer = h => h.render().find(node => node.props?.["aria-label"]?.startsWith("Computer-controlled seat") && node.props.className.includes("rummy-seat-active"));
+const playedComputers = h => h.render().filter(node => /^Computer seat \d arranged cards$/.test(node.props?.["aria-label"] ?? ""));
+async function join(h) {
+  h.button("Level 1, stake Rs. 10, join").props.onClick();
+  await new Promise(resolve => setImmediate(resolve));
+  await h.advance(1400);
+}
+
+test("all Rummy seats receive 15 seconds, early placement passes immediately and computer activity never reveals their cards", async () => {
+  const h = harness("bet");
+  await join(h);
+  const containsCards = node => Array.isArray(node)
+    ? node.some(containsCards)
+    : !!node && typeof node === "object" && (node.type === "playing-card" || node.type === "i" || containsCards(node.props?.children));
+  const seats = () => h.render().filter(node => node.props?.["aria-label"]?.startsWith("Computer-controlled seat"));
+  assert.ok(seats().every(node => !containsCards(node)), "computer hands and card backs must stay hidden");
+  for (let i = 0; i < 3; i++) h.cards()[i].props.onClick();
+  h.render().find(node => node.type === "button" && node.props.children?.[0] === "PLACE MELD").props.onClick();
+  assert.equal(activeComputer(h).props["aria-label"], "Computer-controlled seat 1");
+  assert.ok(h.render().some(node => node.type === "small" && node.props.children?.[0] === 15 && node.props.className === "rummy-computer-timer"));
+  await h.advance(6000);
+  assert.equal(playedComputers(h).length, 0, "computer cannot immediately place its cards");
+  await h.advance(6100);
+  assert.equal(playedComputers(h).length, 1);
+  assert.equal(activeComputer(h).props["aria-label"], "Computer-controlled seat 2");
+  await h.advance(12100);
+  assert.equal(playedComputers(h).length, 2);
+  assert.ok(seats().every(node => !containsCards(node)), "computer melds stay hidden after their moves too");
+  assert.equal(activeComputer(h), undefined);
+  assert.ok(h.cards().every(card => !card.props.disabled), "real player gets the next turn");
+  assert.equal(h.cards().length, 10, "computer moves never alter the player's hand");
+  assert.deepEqual(h.calls, [["start", 10], ["move", "deal", { level: 1 }]]);
+});
+
+test("player timeout automatically places an available partial meld at 15 seconds, even from an unsolvable hand", async () => {
+  const partial = [
+    ...hand.slice(0, 3),
+    ...[5, 7, 9, 11, 13].map(rank => ({ id: `${rank}H`, rank, suit: "H" })),
+    ...[6, 8, 10, 12, 14].map(rank => ({ id: `${rank}D`, rank, suit: "D" })),
+  ];
+  assert.equal(engine.solve(partial), null);
+  const h = harness("bet", undefined, 5, partial);
+  await join(h);
+  await h.advance(14800);
+  assert.equal(h.cards().length, 13);
+  await h.advance(200);
+  assert.equal(h.cards().length, 10);
+  assert.ok(activeComputer(h));
+  assert.equal(h.calls.length, 2, "timeout neither accepts another stake nor settles a partial hand");
+});
+
+test("timeout with no valid meld sorts the existing cards then passes without loss or a new wager", async () => {
+  const noMeld = Array.from({ length: 13 }, (_, index) => {
+    const rank = index + 2, suit = index % 2 ? "H" : "S";
+    return { id: `${rank}${suit}`, rank, suit };
+  }).reverse();
+  assert.equal(engine.availableMeld(noMeld), null);
+  const h = harness("bet", undefined, 5, noMeld);
+  await join(h);
+  const before = h.cards().map(node => node.props["aria-label"]);
+  await h.advance(15000);
+  const after = h.cards().map(node => node.props["aria-label"]);
+  assert.deepEqual([...after].sort(), [...before].sort());
+  assert.notDeepEqual(after, before);
+  assert.ok(activeComputer(h));
+  assert.deepEqual(h.calls, [["start", 10], ["move", "deal", { level: 1 }]]);
 });

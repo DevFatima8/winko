@@ -155,6 +155,28 @@ export function solve(cards: Card[]): Group[] | null {
   return dfs(sorted);
 }
 
+export function availableMeld(cards: Card[]): Group | null {
+  const solution = cards.length <= 13 ? solve(cards) : null;
+  if (solution?.length) return solution[0];
+  for (const card of cards) {
+    const same = cards.filter(candidate => candidate.rank === card.rank);
+    if (same.length >= 3) return { type: "set", cards: same };
+  }
+  for (const suit of SUITS) {
+    const suited = cards.filter(card => card.suit === suit).sort((a, b) => a.rank - b.rank);
+    let run: Card[] = [];
+    for (const card of suited) {
+      if (run.length && card.rank !== run[run.length - 1].rank + 1) {
+        if (run.length >= 3) return { type: "run", cards: run };
+        run = [];
+      }
+      run.push(card);
+    }
+    if (run.length >= 3) return { type: "run", cards: run };
+  }
+  return null;
+}
+
 // ── Deal generation ──────────────────────────────────────────
 
 const key = (rank: number, suit: Suit) => `${rank}${suit}`;

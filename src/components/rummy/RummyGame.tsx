@@ -10,7 +10,7 @@ import { useDb, useSession } from "@/lib/useDb";
 import { avatarSrc, isAvatar } from "@/lib/avatars";
 import { AnimatePresence, motion } from "framer-motion";
 import type { Card, Group } from "./engine";
-import { handValue, meldType, RANK_LABEL, SUITS, SUIT_SYMBOL, solve, buildDeck, shuffle } from "./engine";
+import { availableMeld, handValue, meldType, RANK_LABEL, SUITS, SUIT_SYMBOL, solve, buildDeck, shuffle } from "./engine";
 import { useIdleCardRound } from "../teen-patti/useIdleCardRound";
 import { cardMove, restoreCardRound } from "@/lib/interactiveCardClient";
 import { PlayingCard } from "./PlayingCard";
@@ -45,6 +45,19 @@ const CHIP_LABEL: Partial<Record<number, string>> = {
 const MIN_BET = 10;
 const TOP_UP = 10000;
 const MAX_HINTS = 3;
+const TURN_SECONDS = 15;
+type ComputerHand = { cards: Card[]; groups: Group[]; moves: number };
+
+function computerHands(playerCards: Card[]): ComputerHand[] {
+  let deck = shuffle(buildDeck().filter(card => !playerCards.some(playerCard => playerCard.id === card.id)));
+  return [0, 1].map(() => {
+    const meld = availableMeld(deck)?.cards ?? [];
+    const rest = deck.filter(card => !meld.some(played => played.id === card.id));
+    const cards = [...meld, ...rest.slice(0, 13 - meld.length)];
+    deck = rest.slice(13 - meld.length);
+    return { cards, groups: [], moves: 0 };
+  });
+}
 const ENTRY_CARDS: Card[] = [
   { id: "14S", rank: 14, suit: "S" },
   { id: "13H", rank: 13, suit: "H" },
@@ -203,9 +216,9 @@ export default function RummyGame() {
   });
   const [level, setLevel] = useState(1);
   const [dealing, setDealing] = useState(false);
-  const [turn, setTurn] = useState({ seat: 0, until: 0 });
-  const [seconds, setSeconds] = useState(30);
-  const [botMoves, setBotMoves] = useState([0, 0]);
+  const [turn, setTurn] = useState({ seat: 0, until: 0, actAt: 0 });
+  const [seconds, setSeconds] = useState(TURN_SECONDS);
+  const [bots, setBots] = useState<ComputerHand[]>([]);
   const [bet, setBet] = usePersistentState("rr_bet", 500);
   const [stats, setStats] = usePersistentState<Stats>("rr_stats", {
     wins: 0,
@@ -236,7 +249,17 @@ export default function RummyGame() {
   const settledRef = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const turnAction = useRef<() => void>(() => {});
+  const computerAction = useRef<(seat: number) => void>(() => {});
   const dealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startTurn = useCallback((seat: number) => {
+    const now = Date.now();
+    setSeconds(TURN_SECONDS);
+    setTurn({
+      seat,
+      until: now + TURN_SECONDS * 1000,
+      actAt: now + (seat === 0 ? TURN_SECONDS * 1000 : 7000 + Math.floor(Math.random() * 5001)),
+    });
+  }, []);
   const idleRound = useIdleCardRound({
     idle: wagerPhase === "bet", finished: wagerPhase === "result", busy: pool.busy, paused: true,
     frames: () => {
@@ -266,18 +289,17 @@ export default function RummyGame() {
     const timer = setInterval(() => {
       const remaining = Math.max(0, Math.ceil((turn.until - Date.now()) / 1000));
       setSeconds(remaining);
-      if (remaining > 0) return;
+      if (remaining > 0 && Date.now() < turn.actAt) return;
+      if (lockRef.current || settledRef.current) return;
       clearInterval(timer);
       if (turn.seat === 0) turnAction.current();
       else {
-        setBotMoves(previous => previous.map((moves, index) => index === turn.seat - 1 ? moves + 1 : moves));
-        const seat = (turn.seat + 1) % 3;
-        setSeconds(seat === 0 ? 30 : 2);
-        setTurn({ seat, until: Date.now() + (seat === 0 ? 30000 : 1500) });
+        computerAction.current(turn.seat);
+        startTurn((turn.seat + 1) % 3);
       }
     }, 100);
     return () => clearInterval(timer);
-  }, [wagerPhase, dealing, turn]);
+  }, [wagerPhase, dealing, turn, startTurn]);
 
   const placedIds = useMemo(() => {
     const s = new Set<string>();
@@ -289,9 +311,8 @@ export default function RummyGame() {
   const canDeal = !!lobby && balance >= bet && bet >= MIN_BET && bet <= MAX_GAME_BET && !actionBusy;
   const playerTurn = !dealing && turn.seat === 0;
   const endPlayerTurn = useCallback(() => {
-    setSeconds(2);
-    setTurn({ seat: 1, until: Date.now() + 1500 });
-  }, []);
+    startTurn(1);
+  }, [startTurn]);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -311,7 +332,7 @@ export default function RummyGame() {
       setBet(stake);
       setLevel(chosenLevel);
       setDealing(true);
-      setBotMoves([0, 0]);
+      setBots(computerHands(dealt.view.hand));
       const d = { hand: dealt.view.hand };
       settledRef.current = false;
       lockRef.current = true;
@@ -327,8 +348,7 @@ export default function RummyGame() {
       dealTimer.current = setTimeout(() => {
         lockRef.current = false;
         setDealing(false);
-        setSeconds(30);
-        setTurn({ seat: 0, until: Date.now() + 30000 });
+        startTurn(0);
       }, 13 * 45 + 700);
     } finally {
       setActionBusy(false);
@@ -347,7 +367,8 @@ export default function RummyGame() {
       setGroups([]);
       setPhase("play");
       setLevel(round.view.level ?? 1);
-      setTurn({ seat: 0, until: Date.now() + 30000 });
+      setBots(computerHands(round.view.hand));
+      startTurn(0);
     });
     return () => { disposed = true; };
     // Restore once on mount; the wallet lifecycle replays any unconfirmed move first.
@@ -509,14 +530,30 @@ export default function RummyGame() {
 
   useEffect(() => {
     turnAction.current = () => {
-      if (lockRef.current || settledRef.current) {
-        setTurn({ seat: 0, until: Date.now() + 30000 });
-        return;
-      }
+      if (lockRef.current || settledRef.current) return;
+      suppressClick.current = !!pointerDrag.current?.moved;
+      pointerDrag.current = null;
+      setDrag(null);
       const candidate = selected.length >= 3 && meldType(freeCards.filter(card => selected.includes(card.id)))
-        ? selected : solve(freeCards)?.[0]?.cards.map(card => card.id);
+        ? selected : availableMeld(freeCards)?.cards.map(card => card.id);
       if (candidate) addMeld(candidate);
-      else { setSelected([]); endPlayerTurn(); }
+      else {
+        sortHand();
+        showToast("Time up: cards arranged. No valid meld; turn passed.");
+        endPlayerTurn();
+      }
+    };
+    computerAction.current = seat => {
+      const bot = bots[seat - 1];
+      if (!bot) return;
+      const meld = availableMeld(bot.cards);
+      const played = new Set(meld?.cards.map(card => card.id));
+      const cards = bot.cards.filter(card => !played.has(card.id))
+        .sort((a, b) => SUITS.indexOf(a.suit) - SUITS.indexOf(b.suit) || a.rank - b.rank);
+      setBots(previous => previous.map((hand, index) => index === seat - 1
+        ? { cards, groups: meld ? [...hand.groups, meld] : hand.groups, moves: hand.moves + 1 } : hand));
+      if (meld) sfx.place();
+      else sfx.tap();
     };
   });
 
@@ -686,12 +723,15 @@ export default function RummyGame() {
               <div className="rummy-oval-area">
                 <Dealer dealing={dealing} />
                 <div className="rummy-oval">
-                  {[1, 2].map(seat => <div key={seat} className={`rummy-computer-seat rummy-computer-seat-${seat} ${turn.seat === seat && phase === "play" ? "rummy-seat-active" : ""}`} aria-label={`Computer-controlled seat ${seat}`} title="Computer-controlled seat">
-                    <span className="rummy-avatar" aria-hidden="true"><svg viewBox="0 0 40 40"><circle cx="20" cy="14" r="8" fill="currentColor" /><path d="M5 38Q5 23 20 23Q35 23 35 38" fill="currentColor" /></svg></span>
-                    <span className="rummy-computer-cards" aria-label="Computer arranging cards">{[0, 1, 2].map(card => <i key={card} style={{ rotate: `${(card - 1) * 12}deg` }} />)}</span>
-                    <span className="rummy-computer-meld" key={botMoves[seat - 1]}>{botMoves[seat - 1] > 0 ? "SET / RUN" : ""}</span>
+                  {[1, 2].map(seat => {
+                    const bot = bots[seat - 1];
+                    return <div key={seat} className={`rummy-computer-seat rummy-computer-seat-${seat} ${turn.seat === seat && phase === "play" ? "rummy-seat-active" : ""}`} aria-label={`Computer-controlled seat ${seat}`} title="Computer-controlled seat">
+                    <motion.span key={bot?.moves ?? 0} initial={{ scale: .9 }} animate={{ scale: 1 }} className="rummy-avatar" aria-hidden="true"><svg viewBox="0 0 40 40"><circle cx="20" cy="14" r="8" fill="currentColor" /><path d="M5 38Q5 23 20 23Q35 23 35 38" fill="currentColor" /></svg></motion.span>
+                    <span className="rummy-computer-status" role="status" aria-label={bot?.moves ? `Computer seat ${seat} arranged cards` : undefined}>
+                      {turn.seat === seat && phase === "play" ? "Arranging..." : bot?.moves ? "Arranged" : "Waiting"}
+                    </span>
                     {turn.seat === seat && phase === "play" && <small className="rummy-computer-timer">{seconds}s</small>}
-                  </div>)}
+                  </div>;})}
                   <div className="rummy-table-watermark" aria-hidden="true">RUMMY</div>
                   <div className="rummy-table-instruction" role="status">{dealing ? "Dealer is distributing cards" : !playerTurn ? "Computer arranging cards" : groups.length ? "Your turn: place a meld or take a group back" : "Your turn: select cards, then place a SET or RUN"}</div>
                   <div ref={meldZone} className={`rummy-meld-zone ${drag ? "rummy-drop-ready" : ""}`} aria-label="Place selected meld here">
@@ -735,7 +775,7 @@ export default function RummyGame() {
                 )}
                   </div>
                   <div className={`rummy-table-player ${playerTurn && phase === "play" ? "rummy-seat-active" : ""}`}>
-                    <span className="rummy-avatar" style={{ "--turn-progress": `${seconds / 30 * 100}%` } as CSSProperties}>
+                    <span className="rummy-avatar" style={{ "--turn-progress": `${seconds / TURN_SECONDS * 100}%` } as CSSProperties}>
                       {player && isAvatar(player.avatar) ? <Image src={avatarSrc(player.avatar)} alt="Your profile avatar" width={56} height={56} unoptimized /> : "Y"}
                     </span>
                     <div>
@@ -762,6 +802,7 @@ export default function RummyGame() {
                       return (
                         <motion.button
                           key={`${dealKey}-${c.id}`}
+                          layout
                           type="button"
                           initial={{ y: -80, opacity: 0, rotate: -8 }}
                           animate={{ y: isSel ? -16 : 0, opacity: 1, rotate: 0 }}
@@ -818,7 +859,7 @@ export default function RummyGame() {
                 <button type="button" className="rummy-btn-dark rounded-xl px-3 py-1.5 text-xs" disabled={phase !== "play" || !playerTurn} onClick={endPlayerTurn}>PASS TURN</button>
               </div>
               <p className="pb-0.5 text-center text-[9px] tracking-[0.14em] text-[#9fd0b8]/45 shrink-0">
-                FIXED SET/RUN · 2 COMPUTER SEATS · 30s AUTO MOVE OR PASS · NO TIMEOUT LOSS
+                FIXED SET/RUN · 2 COMPUTER SEATS · 15s AUTO ARRANGE · NO TIMEOUT LOSS
               </p>
             </motion.section>
           )}
@@ -891,7 +932,7 @@ export default function RummyGame() {
                   <span className="font-bold text-[#b23a2c]">FORFEIT</span> to surrender and deal the next hand.
                 </li>
                 <li>Correct declaration is required; forfeiting a winning hand still pays zero.</li>
-                <li>Two computer-controlled seats take short arranging turns between yours; they are not online players and place no wallet bets. Your turn lasts 30 seconds. On timeout, a valid selected/available meld is placed, otherwise the turn passes without an extra stake or automatic loss.</li>
+                <li>Each seat has 15 seconds per turn. The two computer seats arrange their own hidden cards after thinking; only their avatars, turn timers and activity are shown. They are not online players and place no wallet bets. Placing your meld passes the turn immediately. On timeout, a valid selected/available meld is placed automatically. If none exists, your cards are sorted and the turn passes without an extra stake or automatic loss.</li>
                 <li>Win the joined level to unlock the next one. Unlocks are verified and saved to your account. Cards stay in the existing fixed SET/RUN game; no deck draw/discard is added.</li>
               </ol>
               <button

@@ -1,5 +1,5 @@
 "use client";
-import { gameBetError, MAX_GAME_BET } from "@/lib/gameBetLimits";
+import { gameBetError, MIN_GAME_BET, MAX_GAME_BET } from "@/lib/gameBetLimits";
 
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -71,11 +71,12 @@ export default function FishingGame({ backHref = "/player" }: { backHref?: strin
   const [snap, setSnap] = useState<Snapshot>({ ...INITIAL, balance });
   const [betIdx, setBetIdx] = useState(2);
   const [customBet, setCustomBet] = useState<number | null>(null);
+  const [editingBet, setEditingBet] = useState<"start" | "game" | null>(null);
   const [started, setStarted] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
   const [auto, setAuto] = useState(false);
   const [showPay, setShowPay] = useState(false);
-  const [noFunds, setNoFunds] = useState(false);
+  const noFunds = started && balance < MIN_GAME_BET;
   const [bigWin, setBigWin] = useState<(BigWinInfo & { key: number }) | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -137,8 +138,7 @@ export default function FishingGame({ backHref = "/player" }: { backHref?: strin
       onBigWin: (info) => setBigWin({ ...info, key: Date.now() }),
       onNoFunds: (bal) => {
         setAuto(false);
-        if (bal < BETS[0]) setNoFunds(true);
-        else showToast("Not enough Rs. for this bet – lower your bet");
+        if (bal >= MIN_GAME_BET) showToast("Not enough Rs. for this bet – lower your bet");
       },
     });
     engine.setBalance(balanceRef.current);
@@ -185,15 +185,6 @@ export default function FishingGame({ backHref = "/player" }: { backHref?: strin
     return () => clearTimeout(id);
   }, [bigWin]);
 
-  // out of coins
-  useEffect(() => {
-    if (!started || snap.balance >= BETS[0]) return;
-    const id = setTimeout(() => {
-      if (balanceRef.current < BETS[0]) setNoFunds(true);
-    }, 2000);
-    return () => clearTimeout(id);
-  }, [snap.balance, started]);
-
   /* ---------- keyboard ---------- */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -211,6 +202,7 @@ export default function FishingGame({ backHref = "/player" }: { backHref?: strin
   const changeBet = (d: number) => {
     initAudio();
     sfx.click();
+    setEditingBet(null);
     setCustomBet(null);
     setBetIdx((i) => Math.max(0, Math.min(BETS.length - 1, i + d)));
   };
@@ -218,6 +210,7 @@ export default function FishingGame({ backHref = "/player" }: { backHref?: strin
   const pickBet = (idx: number) => {
     initAudio();
     sfx.click();
+    setEditingBet(null);
     setCustomBet(null);
     setBetIdx(idx);
   };
@@ -229,12 +222,13 @@ export default function FishingGame({ backHref = "/player" }: { backHref?: strin
       showToast(limitError);
       return;
     }
-    if (!Number.isSafeInteger(stake) || stake < 10 || stake > balanceRef.current) {
+    if (!Number.isSafeInteger(stake) || stake < MIN_GAME_BET || stake > balanceRef.current) {
       showToast("Enter a bet of at least Rs. 10 within your balance.");
       return;
     }
     initAudio();
     sfx.click();
+    setEditingBet(null);
     setStarted(true);
   };
 
@@ -409,9 +403,11 @@ export default function FishingGame({ backHref = "/player" }: { backHref?: strin
                     <div className="text-[10px] font-bold tracking-[0.3em] text-sky-200">BET</div>
                     <div className="mt-1 flex items-center justify-center gap-2 text-[24px] font-black text-yellow-300 tabular-nums drop-shadow-[0_2px_0_rgba(0,0,0,0.6)]">
                       <CoinIcon size={20} />
-                      <input
+                      {editingBet === "game" ? <input
+                        autoFocus
                         type="number"
                         min={10}
+                        max={MAX_GAME_BET}
                         step={1}
                         inputMode="numeric"
                         aria-label="Custom bet amount"
@@ -421,7 +417,12 @@ export default function FishingGame({ backHref = "/player" }: { backHref?: strin
                           setCustomBet(Number.isFinite(n) && n > 0 ? n : null);
                         }}
                         className="w-24 bg-transparent text-center text-[24px] font-black text-yellow-300 tabular-nums outline-none"
-                      />
+                      /> : <output aria-label="Selected bet per shot">{customBet ?? BETS[betIdx]}</output>}
+                      <button type="button" aria-label={editingBet === "game" ? "Done editing bet" : "Edit custom bet"}
+                        onClick={() => setEditingBet(editingBet === "game" ? null : "game")}
+                        className="rounded border border-sky-300/60 px-2 py-1 text-[12px] text-sky-100">
+                        {editingBet === "game" ? "Done" : "Edit"}
+                      </button>
                     </div>
                   </div>
                   <button
@@ -438,6 +439,7 @@ export default function FishingGame({ backHref = "/player" }: { backHref?: strin
                     <button
                       key={b}
                       type="button"
+                      aria-pressed={customBet === null && betIdx === i}
                       onClick={() => pickBet(i)}
                       className={`rounded-full border-2 px-3 py-1 text-[13px] font-black tabular-nums transition-all cursor-pointer ${customBet === null && betIdx === i
                           ? "border-yellow-300 bg-yellow-400 text-[#08244a]"
@@ -486,16 +488,23 @@ export default function FishingGame({ backHref = "/player" }: { backHref?: strin
                   <div className="mt-4 text-[22px] font-black tracking-[0.3em] text-white drop-shadow-[0_3px_0_rgba(0,0,0,0.7)]">
                     SHOOT · CATCH · WIN
                   </div>
-                  <label className="mt-5 flex items-center justify-center gap-3 text-xl font-bold text-white">
+                  <div className="mt-5 flex items-center justify-center gap-3 text-xl font-bold text-white">
                     Bet per shot (Rs.)
-                    <input type="number" min={10} max={MAX_GAME_BET} step={1} inputMode="numeric"
+                    {editingBet === "start" ? <input autoFocus type="number" min={10} max={MAX_GAME_BET} step={1} inputMode="numeric"
                       aria-label="Starting bet per shot" value={customBet ?? BETS[betIdx]}
                       onChange={event => setCustomBet(Math.floor(Number(event.target.value)))}
                       className="w-36 rounded-xl border-2 border-yellow-300 bg-slate-950 px-3 py-2 text-center text-yellow-200" />
-                  </label>
+                      : <output aria-label="Starting bet per shot" className="min-w-24 rounded-xl border-2 border-yellow-300 bg-slate-950 px-3 py-2 text-yellow-200">{customBet ?? BETS[betIdx]}</output>}
+                    <button type="button" aria-label={editingBet === "start" ? "Done editing starting bet" : "Edit starting bet"}
+                      onClick={() => setEditingBet(editingBet === "start" ? null : "start")}
+                      className="rounded-lg border border-sky-300 px-3 py-2 text-sm">
+                      {editingBet === "start" ? "Done" : "Edit"}
+                    </button>
+                  </div>
                   <div className="mt-3 flex justify-center gap-2">
                     {BETS.map((amount, index) => (
                       <button type="button" key={amount} onClick={() => pickBet(index)}
+                        aria-pressed={customBet === null && betIdx === index}
                         className="rounded-lg border border-sky-300 bg-sky-950 px-3 py-2 font-bold text-white">{amount}</button>
                     ))}
                   </div>
@@ -562,7 +571,7 @@ export default function FishingGame({ backHref = "/player" }: { backHref?: strin
                 <div className="fishing-panel w-[560px] px-8 py-8 text-center">
                   <div className="gold-text text-[52px] leading-none">OUT OF Rs.</div>
                   <p className="mt-3 text-[16px] font-bold text-sky-100">
-                    Insufficient balance.
+                    Insufficient balance for the minimum Rs. {MIN_GAME_BET} shot.
                   </p>
                 </div>
               </div>

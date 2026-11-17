@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
+import * as jsx from "react/jsx-runtime";
 
 function harness(onAccept, onComplete = async () => true) {
   const compile = path => ts.transpileModule(readFileSync(path, "utf8"), {
@@ -50,6 +51,129 @@ function harness(onAccept, onComplete = async () => true) {
 }
 
 const flush = () => new Promise(resolve => setImmediate(resolve));
+
+function fishingUI(balance = 1000, presets = [10, 20, 50, 100, 200]) {
+  const states = [], refs = [], effects = [], pendingEffects = [], timers = [];
+  let index = 0, refIndex = 0, effectIndex = 0, walletBalance = balance;
+  const imports = {
+    react: {
+      useState(initial) {
+        const key = index++;
+        if (!(key in states)) states[key] = initial;
+        return [states[key], value => { states[key] = typeof value === "function" ? value(states[key]) : value; }];
+      },
+      useRef: current => refs[refIndex++] ??= { current },
+      useEffect(fn, deps) {
+        const key = effectIndex++, previous = effects[key];
+        if (!deps || !previous || deps.some((value, i) => !Object.is(value, previous.deps?.[i]))) {
+          pendingEffects.push(() => { previous?.cleanup?.(); effects[key] = { deps, cleanup: fn() }; });
+        }
+      },
+      useLayoutEffect() {}, useCallback: fn => fn,
+    },
+    "react/jsx-runtime": jsx, "next/link": { default: "a" },
+    "@/lib/gameBetLimits": { gameBetError: amount => amount < 10 ? "Minimum bet is Rs. 10." : null, MIN_GAME_BET: 10, MAX_GAME_BET: 100000 },
+    "@/lib/walletSync": { useGameBalance: () => [walletBalance, () => {}], useDailyPoolMode: () => false },
+    "./game/config": { BETS: presets, H: 720, W: 1280, START_BALANCE: 1000, SPECIES: [], formatNum: String },
+    "./game/engine": {}, "./FishIcon": { default: "fish-icon" }, "./fishing-arcade.css": {},
+    "./game/sound": { initAudio() {}, setSoundEnabled() {}, sfx: { click() {} } },
+  };
+  const code = ts.transpileModule(readFileSync("src\\components\\fishing-arcade\\FishingGame.tsx", "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  const module = { exports: {} };
+  new Function("require", "module", "exports", "window", "setTimeout", "clearTimeout", code)(name => {
+    assert.ok(name in imports, name);
+    return imports[name];
+  }, module, module.exports, { addEventListener() {}, removeEventListener() {} },
+  callback => { timers.push(callback); return timers.length; }, () => {});
+  const render = () => {
+    index = 0;
+    refIndex = 0;
+    effectIndex = 0;
+    const nodes = [];
+    const visit = node => {
+      if (Array.isArray(node)) return node.forEach(visit);
+      if (!node || typeof node !== "object") return;
+      nodes.push(node); visit(node.props?.children);
+    };
+    visit(module.exports.default({}));
+    while (pendingEffects.length) pendingEffects.shift()();
+    return nodes;
+  };
+  const named = name => render().find(node => node.props?.["aria-label"] === name);
+  const preset = amount => render().find(node => node.type === "button" && node.props.children === amount);
+  const inputs = () => render().filter(node => node.type === "input");
+  return {
+    render, named, preset, inputs,
+    setBalance(value) { walletBalance = value; render(); },
+    runTimers() { for (const callback of timers.splice(0)) callback(); },
+    start() { render().find(node => node.type === "button" && node.props.className?.startsWith("start-btn ")).props.onClick(); render(); },
+    outOfFunds: () => render().some(node => node.props?.children === "OUT OF Rs."),
+  };
+}
+
+test("Fishing presets display the exact stake without a keyboard; only Edit opens custom typing", () => {
+  const { render, named, preset, inputs } = fishingUI();
+  assert.equal(inputs().length, 0);
+  preset(200).props.onClick();
+  assert.equal(named("Starting bet per shot").props.children, 200);
+  assert.equal(named("Selected bet per shot").props.children, 200);
+  assert.equal(inputs().length, 0);
+  named("Edit starting bet").props.onClick();
+  named("Starting bet per shot").props.onChange({ target: { value: "175" } });
+  assert.equal(named("Starting bet per shot").props.value, 175);
+  preset(100).props.onClick();
+  assert.equal(inputs().length, 0);
+  render().find(node => node.type === "button" && node.props.className?.startsWith("start-btn ")).props.onClick();
+  preset(20).props.onClick();
+  assert.equal(named("Selected bet per shot").props.children, 20);
+  assert.equal(inputs().length, 0);
+  named("Edit custom bet").props.onClick();
+  named("Custom bet amount").props.onChange({ target: { value: "125" } });
+  named("Done editing bet").props.onClick();
+  assert.equal(named("Selected bet per shot").props.children, 125);
+});
+
+test("Rs. 541 allows Rs. 50 and Rs. 10 shots even when the first saved preset is Rs. 10,000", () => {
+  const h = fishingUI(541, [10000, 20, 50, 100, 200]);
+  h.preset(50).props.onClick();
+  h.start();
+  h.runTimers();
+  assert.equal(h.outOfFunds(), false);
+  assert.equal(h.named("Selected bet per shot").props.children, 50);
+  h.named("Edit custom bet").props.onClick();
+  h.named("Custom bet amount").props.onChange({ target: { value: "10" } });
+  h.named("Done editing bet").props.onClick();
+  assert.equal(h.named("Selected bet per shot").props.children, 10);
+  h.runTimers();
+  assert.equal(h.outOfFunds(), false);
+
+  h.setBalance(9.99);
+  h.runTimers();
+  assert.equal(h.outOfFunds(), true);
+  h.setBalance(10);
+  assert.equal(h.outOfFunds(), false, "exact minimum balance must dismiss the blocking overlay");
+  h.setBalance(0);
+  h.runTimers();
+  assert.equal(h.outOfFunds(), true);
+  h.setBalance(541);
+  assert.equal(h.outOfFunds(), false, "a wallet credit must not leave the player stuck behind stale insufficient funds");
+});
+
+test("the engine accepts an exact Rs. 10 shot and rejects it only below the selected stake", async () => {
+  const h = harness(async wagerId => ({ wagerId, win: false }));
+  h.engine.setCustomBet(10);
+  h.engine.setBalance(9.99);
+  h.press();
+  assert.equal(h.accepts.length, 0);
+  h.engine.setBalance(10);
+  h.advance(11);
+  h.press();
+  await flush();
+  assert.equal(h.accepts.length, 1);
+  assert.equal(h.accepts[0][1], 10);
+});
 
 test("pointerdown immediately launches one visual while a delayed receipt blocks all settlement and new stakes", async () => {
   let release;

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Copy, Upload, XCircle, Gift, Smartphone, ChevronDown } from "lucide-react";
+import { Copy, Upload, XCircle, Gift, Smartphone, ChevronDown, Clock } from "lucide-react";
 import Image from "next/image";
 import styles from "./DepositFlow.module.css";
 import { depositAction } from "@/lib/clientActions";
@@ -22,8 +22,8 @@ const META: Record<Provider, { name: string; icon: string }> = {
 const input = "w-full border border-white/25 bg-black/40 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-[#ffc933] focus:ring-2 focus:ring-[#ffc933]/20";
 const slide = { initial: { opacity: 0, x: 28 }, animate: { opacity: 1, x: 0 }, exit: { opacity: 0, x: -28 }, transition: { duration: 0.28 } };
 
-function Steps({ step }: { step: 1 | 2 | 3 }) {
-  const items = ["Amount", "Scan & Pay", "Done"];
+function Steps({ step, complete }: { step: 1 | 2 | 3; complete: boolean }) {
+  const items = ["Amount", "Scan & Pay", complete ? "Done" : "Status"];
   return (
     <div className="flex items-center gap-2" aria-label="Deposit steps">
       {items.map((label, i) => {
@@ -60,6 +60,10 @@ export function DepositFlow({ accounts = [], qrAccount = null, initialAmount, mi
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [zoom, setZoom] = useState(false);
+  const [transactionId, setTransactionId] = useState<string | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<"pending" | "approved" | "rejected">("pending");
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [adminNote, setAdminNote] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const account = qrMode ? qrAccount : accounts.find((a) => a.provider === provider) ?? null;
@@ -72,6 +76,47 @@ export function DepositFlow({ accounts = [], qrAccount = null, initialAmount, mi
   const formatted = (value: number) => value.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+
+  useEffect(() => {
+    if (step !== 3 || !transactionId || paymentStatus !== "pending") return;
+    const controller = new AbortController();
+    let checking = false;
+    let finished = false;
+    const check = async () => {
+      if (checking || finished || controller.signal.aborted) return;
+      checking = true;
+      try {
+        const response = await fetch(`/api/player/deposit?id=${encodeURIComponent(transactionId)}`, { cache: "no-store", signal: controller.signal });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Payment status could not be checked.");
+        if (!["pending", "approved", "rejected"].includes(data.status)) throw new Error("Invalid payment status received.");
+        if (controller.signal.aborted) return;
+        setStatusError(null);
+        setPaymentStatus(data.status);
+        setAdminNote(typeof data.adminNote === "string" ? data.adminNote : null);
+        if (data.status !== "pending") {
+          finished = true;
+          window.dispatchEvent(new Event("wx:balance-update"));
+          window.dispatchEvent(new Event("wx:data-refresh"));
+        }
+      } catch (reason) {
+        if (!controller.signal.aborted) setStatusError(reason instanceof Error ? reason.message : "Payment status could not be checked. Retrying automatically.");
+      } finally {
+        checking = false;
+      }
+    };
+    void check();
+    const timer = window.setInterval(() => { void check(); }, 3000);
+    const refresh = () => { void check(); };
+    window.addEventListener("wx:data-refresh", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      controller.abort();
+      window.clearInterval(timer);
+      window.removeEventListener("wx:data-refresh", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [step, transactionId, paymentStatus]);
 
   const goPay = () => {
     setError(null);
@@ -114,7 +159,12 @@ export function DepositFlow({ accounts = [], qrAccount = null, initialAmount, mi
       form.set("proofImage", await (await fetch(dataUrl)).blob(), "proof.jpg");
       const res = await depositAction(undefined, form);
       if (res?.error) setError(res.error);
+      else if (!res?.transactionId) setError("Payment receipt ID was not returned. Check deposit history before submitting again.");
       else {
+        setTransactionId(res.transactionId);
+        setPaymentStatus("pending");
+        setStatusError(null);
+        setAdminNote(null);
         setStep(3);
         window.dispatchEvent(new Event("wx:data-refresh"));
       }
@@ -126,12 +176,13 @@ export function DepositFlow({ accounts = [], qrAccount = null, initialAmount, mi
   };
 
   const reset = () => {
+    setTransactionId(null); setPaymentStatus("pending"); setStatusError(null); setAdminNote(null);
     setStep(1); setFile(null); setPreview(null); setSenderNumber(""); setError(null);
   };
 
   return (
     <div className={`${styles.flow} space-y-5`}>
-      {step !== 1 && <Steps step={step} />}
+      {step !== 1 && <Steps step={step} complete={paymentStatus === "approved"} />}
       <AnimatePresence mode="wait">
         {step === 1 && (
           <motion.div key="s1" {...slide} className="space-y-4">
@@ -272,13 +323,14 @@ export function DepositFlow({ accounts = [], qrAccount = null, initialAmount, mi
         {step === 3 && (
           <motion.div key="s3" {...slide} className="flex flex-col items-center gap-4 py-6 text-center">
             <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 200, damping: 12 }} className="relative flex h-24 w-24 items-center justify-center rounded-full bg-[#ffc933] text-5xl text-black shadow-[0_0_40px_rgba(255,201,51,.4)]">
-              <motion.span aria-hidden className="absolute inset-0 rounded-full border-2 border-[#ffc933]" animate={{ scale: [1, 1.5], opacity: [0.7, 0] }} transition={{ duration: 1.6, repeat: Infinity }} />
-              ✓
+              {paymentStatus === "pending" && <motion.span aria-hidden className="absolute inset-0 rounded-full border-2 border-[#ffc933]" animate={{ scale: [1, 1.5], opacity: [0.7, 0] }} transition={{ duration: 1.6, repeat: Infinity }} />}
+              {paymentStatus === "approved" ? "✓" : paymentStatus === "rejected" ? <XCircle size={48} aria-hidden /> : <Clock size={48} aria-hidden />}
             </motion.div>
-            <div>
-              <div className="text-xl font-black text-white">Done! Payment submit ho gayi</div>
-              <p className="mx-auto mt-1 max-w-sm text-sm text-[#b8a7e6]">Rs. {numAmount.toLocaleString()} ki request admin ko bhej di gayi hai. Admin approve karte hi paisay aapke wallet mein add ho jayenge.</p>
+            <div role="status" aria-live="polite">
+              <div className="text-xl font-black text-white">{paymentStatus === "approved" ? "Your amount is added to the wallet" : paymentStatus === "rejected" ? "Payment was rejected" : "Payment is in process"}</div>
+              <p className="mx-auto mt-1 max-w-sm text-sm text-[#b8a7e6]">{paymentStatus === "approved" ? `Rs. ${numAmount.toLocaleString()} deposit approved.` : paymentStatus === "rejected" ? adminNote || "Please contact support for details." : `Rs. ${numAmount.toLocaleString()} payment is awaiting approval.`}</p>
             </div>
+            {statusError && <p role="alert" className="text-sm text-red-300">{statusError} Retrying automatically.</p>}
             <motion.button whileTap={{ scale: 0.97 }} type="button" onClick={reset} className="btn-gold min-h-[44px] rounded-full px-6 text-sm font-black">Make Another Deposit</motion.button>
           </motion.div>
         )}

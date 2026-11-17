@@ -41,7 +41,7 @@ export async function logoutAction() {
     window.location.assign("/login");
 }
 
-async function submitWalletRequest(endpoint: string, form: FormData, fallback: string): Promise<ActionState> {
+async function submitWalletRequest(endpoint: string, form: FormData, fallback: string): Promise<{ error?: string; success?: string; transactionId?: string }> {
     const response = await fetch(endpoint, { method: "POST", body: form });
     const data = await response.json().catch(() => ({ error: fallback }));
     if (response.ok && typeof window !== "undefined") {
@@ -49,7 +49,7 @@ async function submitWalletRequest(endpoint: string, form: FormData, fallback: s
         window.dispatchEvent(new CustomEvent("wx:session"));
         window.dispatchEvent(new CustomEvent("wx:data-refresh"));
     }
-    return response.ok ? { success: data.success } : { error: data.error ?? fallback };
+    return response.ok ? { success: data.success, transactionId: data.transactionId } : { error: data.error ?? fallback };
 }
 
 export const depositAction = (_: ActionState, form: FormData) => submitWalletRequest("/api/player/deposit", form, "Deposit request submit nahi ho saki.");

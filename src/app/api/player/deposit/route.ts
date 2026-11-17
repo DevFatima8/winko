@@ -4,6 +4,21 @@ import { getServerSessionUser } from "@/lib/serverAuth";
 import { assignPaymentAccounts, getSettings } from "@/lib/platform";
 import { notifyAdmins, notifyUser } from "@/lib/notifications";
 
+export async function GET(request: Request) {
+  try {
+    const me = await getServerSessionUser();
+    if (!me || me.role !== "client") return NextResponse.json({ error: "Login required." }, { status: 401 });
+    const id = new URL(request.url).searchParams.get("id")?.trim();
+    if (!id) return NextResponse.json({ error: "Deposit request ID is required." }, { status: 400 });
+    const transaction = await Transaction.findOne({ _id: oid(id), userId: oid(me.id), type: "deposit" }, "status adminNote").lean();
+    if (!transaction) return NextResponse.json({ error: "Deposit request not found." }, { status: 404 });
+    return NextResponse.json({ status: transaction.status, adminNote: transaction.adminNote ?? null }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    console.error("[player deposit status]", error);
+    return NextResponse.json({ error: "Payment status could not be checked. Retrying automatically." }, { status: 500 });
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const me = await getServerSessionUser();
@@ -48,7 +63,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Payment account assignment changed. Deposit page dobara kholein." }, { status: 409 });
     }
 
-    await Transaction.create({
+    const transaction = await Transaction.create({
       userId: oid(me.id), type: "deposit", provider: account.provider, amount,
       paymentMethod,
       paymentAccountId: account._id, assignedAccountId: account._id, accountName: account.accountTitle,
@@ -58,7 +73,7 @@ export async function POST(request: Request) {
     await notifyAdmins("New deposit request", `${me.name} requested a deposit of Rs. ${amount.toLocaleString()} via ${account.provider}.`, "info", { href: "/admin/deposits?status=pending" });
     const referrer = await User.findById(me.id, "referredBy").lean();
     if (referrer?.referredBy) await notifyUser(String(referrer.referredBy), "New deposit request", `${me.name} requested a deposit of Rs. ${amount.toLocaleString()} via ${account.provider}.`, "info", { href: "/admin/deposits?status=pending" });
-    return NextResponse.json({ success: "Deposit request submit ho gayi. Admin verify kar ke balance add karega." });
+    return NextResponse.json({ success: "Payment is in process", transactionId: String(transaction._id) });
   } catch (error) {
     console.error("[player deposit]", error);
     return NextResponse.json({ error: "Deposit request submit nahi ho saki." }, { status: 500 });

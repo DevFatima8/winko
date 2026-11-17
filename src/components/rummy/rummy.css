@@ -289,9 +289,7 @@
 .rummy-computer-seat-2 { bottom: 10%; }
 .rummy-computer-seat .rummy-avatar { width: clamp(26px, 4cqw, 56px); color: #e8bc83; }
 .rummy-computer-seat svg { width: 90%; height: 90%; }
-.rummy-computer-cards { display: flex; }
-.rummy-computer-cards i { width: clamp(12px, 1.5cqw, 23px); aspect-ratio: 5 / 7; margin-left: -5px; background: repeating-linear-gradient(45deg, #224761 0 2px, #346783 2px 4px); border: 1px solid #efdeb0; border-radius: 2px; }
-.rummy-computer-meld { position: absolute; top: 100%; white-space: nowrap; font-size: 7px; color: #ffe283; }
+.rummy-computer-status { position: absolute; top: 100%; left: 0; color: #ffe283; font-size: clamp(7px, 1cqw, 10px); line-height: 1.2; white-space: nowrap; }
 .rummy-computer-timer { position: absolute; left: 0; top: -12px; font-size: 9px; color: #ffe283; }
 .rummy-seat-active > .rummy-avatar { outline: 3px solid #ffdb55; box-shadow: 0 0 18px #ffcf5288; }
 .rummy-table-player.rummy-seat-active > .rummy-avatar { background: conic-gradient(#ffdf65 var(--turn-progress), #4a2b48 0); padding: 2px; }
