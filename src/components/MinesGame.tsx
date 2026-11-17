@@ -21,7 +21,6 @@ export function MinesGame({ backHref = "/player" }: { backHref?: string }) {
   const [st, setSt] = useState<State | null>(null);
   const [amount, setAmount] = useState("100.00");
   const [customAmount, setCustomAmount] = useState(100);
-  const [mines, setMines] = useState(3);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [flash, setFlash] = useState<{ cell: number; kind: "star" | "mine" } | null>(null);
@@ -31,7 +30,7 @@ export function MinesGame({ backHref = "/player" }: { backHref?: string }) {
   const [autoCashAt, setAutoCashAt] = useState("2.00");
   const [rules, setRules] = useState(false);
 
-  const load = useCallback(async () => { const r = await localApi("/api/mines", { cache: "no-store" }); if (r.ok) { const j: State = await r.json(); setSt(j); if (typeof j.balance === "number") broadcastBalanceUpdate(j.balance, "Mines"); if (j.game) { setMines(j.game.mines); setAmount(j.game.bet.toFixed(2)); } } }, []);
+  const load = useCallback(async () => { const r = await localApi("/api/mines", { cache: "no-store" }); if (r.ok) { const j: State = await r.json(); setSt(j); if (typeof j.balance === "number") broadcastBalanceUpdate(j.balance, "Mines"); if (j.game) setAmount(j.game.bet.toFixed(2)); } }, []);
   useEffect(() => { load(); }, [load]);
   const post = async (body: unknown) => {
     try {
@@ -51,7 +50,7 @@ export function MinesGame({ backHref = "/player" }: { backHref?: string }) {
       return;
     }
     setBusy(true); setErr(null); setBanner(null); setFlash(null);
-    const j = await post({ action: "start", amount: betAmt, mines });
+    const j = await post({ action: "start", amount: betAmt });
     setBusy(false);
     if (!j) return;
     if (j.error) { setErr(j.error); return; }
@@ -76,9 +75,12 @@ export function MinesGame({ backHref = "/player" }: { backHref?: string }) {
 
   if (!st) return <div className="flex h-[60vh] items-center justify-center rounded-2xl text-slate-400" style={{ background: C.bg }}>Loading Mines…</div>;
   const g = st.game; const active = g?.status === "active";
+  const mines = g?.mines ?? st.limits.minMines;
+  const revealed = g?.revealed.length ?? 0;
+  const safeLeft = 25 - mines - revealed;
   const poolMode = active ? g.poolPending : st.dailyPoolEnabled;
   const amt = Number(amount) || 0;
-  const nextM = mult(mines, (g?.revealed.length ?? 0) + 1, st.limits.rtp);
+  const nextM = safeLeft > 0 ? mult(mines, revealed + 1, st.limits.rtp) : null;
   const maxBet = Math.min(st.limits.max, Math.max(10, Math.floor(st.balance)));
   const setAmt = (v: number) => setAmount(Math.max(10, Math.min(maxBet, v)).toFixed(2));
 
@@ -103,16 +105,14 @@ export function MinesGame({ backHref = "/player" }: { backHref?: string }) {
       <div className="flex-1 lg:min-h-0 flex flex-col lg:grid lg:grid-cols-[1fr_310px] xl:grid-cols-[1fr_330px] lg:overflow-hidden">
         {/* grid */}
         <div className="relative shrink-0 lg:shrink lg:flex-1 lg:min-h-0 flex flex-col items-center justify-center p-2 sm:p-4 lg:overflow-hidden">
-          {/* mines selector + multiplier bar */}
+          {/* mine count + multiplier bar */}
           <div className="mb-2 flex w-full max-w-[min(380px,100%)] lg:max-w-[min(380px,50vh)] items-center justify-between gap-2 shrink-0">
-            <label className={`flex items-center gap-2 rounded-full px-2.5 py-1 text-xs ${active ? "opacity-60" : ""}`} style={{ background: C.panel, border: `1px solid ${C.line}` }}>
-              <BombIcon size={14} /><span className="text-slate-300">Mines</span>
-              <select value={mines} disabled={active} onChange={(e) => setMines(Number(e.target.value))} className="bg-transparent font-bold text-white outline-none">
-                {Array.from({ length: st.limits.maxMines }, (_, i) => i + 1).map((n) => <option key={n} value={n} className="bg-[#0f2240]">{n}</option>)}
-              </select>
-            </label>
             <div className="flex items-center gap-2 rounded-full px-2.5 py-1 text-xs" style={{ background: C.panel, border: `1px solid ${C.line}` }}>
-              <StarIcon size={14} /><span className="text-slate-300">Next</span><b className="text-white">{fmt2(nextM)}x</b>
+              <BombIcon size={14} /><span className="text-slate-300">Mines</span>
+              <b className="text-white">{mines}</b>
+            </div>
+            <div className="flex items-center gap-2 rounded-full px-2.5 py-1 text-xs" style={{ background: C.panel, border: `1px solid ${C.line}` }}>
+              <StarIcon size={14} /><span className="text-slate-300">Next</span><b className="text-white">{nextM === null ? "—" : `${fmt2(nextM)}x`}</b>
             </div>
           </div>
 
@@ -204,9 +204,9 @@ export function MinesGame({ backHref = "/player" }: { backHref?: string }) {
 
           <div className="rounded-lg p-2 text-[10px] shrink-0" style={{ background: C.bg }}>
             <div className="mb-1 flex items-center justify-between text-slate-400"><span>Multipliers ({mines} mines)</span><span>{poolMode ? "daily pool" : ""}</span></div>
-            <div className="flex flex-wrap gap-1">{Array.from({ length: Math.min(8, 25 - mines) }, (_, i) => mult(mines, (g?.revealed.length ?? 0) + i + 1, st.limits.rtp)).map((m, i) => <span key={i} className={`rounded-full px-1.5 py-0.5 font-bold ${i === 0 ? "bg-[#28a909] text-white" : "text-slate-200"}`} style={i === 0 ? {} : { background: C.tile }}>{fmt2(m)}x</span>)}</div>
+            <div className="flex flex-wrap gap-1">{Array.from({ length: Math.min(8, safeLeft) }, (_, i) => mult(mines, revealed + i + 1, st.limits.rtp)).map((m, i) => <span key={i} className={`rounded-full px-1.5 py-0.5 font-bold ${i === 0 ? "bg-[#28a909] text-white" : "text-slate-200"}`} style={i === 0 ? {} : { background: C.tile }}>{fmt2(m)}x</span>)}</div>
           </div>
-          <div className="flex items-center justify-between text-[9px] text-slate-500 shrink-0"><span>Provably Fair</span><span>Powered by winkox</span></div>
+          <div className="flex items-center justify-between text-[9px] text-slate-500 shrink-0"><span>Random board</span><span>Powered by winkox</span></div>
         </aside>
       </div>
 
@@ -227,8 +227,9 @@ export function MinesGame({ backHref = "/player" }: { backHref?: string }) {
           <div className="w-full max-w-md rounded-2xl p-4 text-xs text-slate-300" style={{ background: C.panel, border: `1px solid ${C.line}` }} onClick={(e) => e.stopPropagation()}>
             <div className="mb-2 flex items-center justify-between"><h3 className="text-base font-black italic text-white">Mines — How to play</h3><button onClick={() => setRules(false)} className="text-slate-400 hover:text-white font-bold">✕</button></div>
             <ol className="list-decimal space-y-1.5 pl-4">
-              <li>Choose bet amount and number of mines (1–24) hidden in the 5×5 field.</li>
+              <li>Choose your bet amount. Each new 5×5 board has {st.limits.minMines} mines placed randomly before the first reveal.</li>
               <li>Press BET and open tiles. Each star increases your multiplier.</li>
+              <li>Cash out after opening any safe tile, before hitting a mine.</li>
               {/* <li>{poolMode ? "Cash out locks bet × multiplier as a provisional claim, not an immediate wallet payment. A mine ends your round with no successful claim." : "Press CASH OUT any time to collect bet × multiplier. Hit a mine — the bet is lost."}</li>
               <li>{poolMode ? "35% of each game's accepted stakes is shared after the UTC+5 day closes and all wagers finish. If no one succeeds, all accepted stakes share the pool, including losses." : "Auto Cash Out collects automatically at your target multiplier. RTP 97%."}</li> */}
             </ol>

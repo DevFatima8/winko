@@ -72,6 +72,10 @@ test("Rummy levels unlock only on a verified win, persist per account and replay
   assert.equal(t.balance("alice"), 1010);
   const recovered = await t.act("alice", wagerId, "state");
   assert.equal(recovered.outcome.view.unlockedLevel, 2);
+  const repeat = randomUUID();
+  await t.accept("alice", repeat, 10);
+  assert.equal((await t.act("alice", repeat, "deal", { level: 1 })).outcome.view.level, 1);
+  assert.equal((await t.act("alice", repeat, "forfeit")).outcome.view.unlockedLevel, 2);
   const second = randomUUID();
   await t.accept("alice", second, 10);
   const levelTwo = await t.act("alice", second, "deal", { level: 2 });
@@ -81,6 +85,23 @@ test("Rummy levels unlock only on a verified win, persist per account and replay
   const bob = randomUUID();
   await t.accept("bob", bob, 10);
   await assert.rejects(t.act("bob", bob, "deal", { level: 2 }), /unlock/);
+});
+
+test("Rummy can forfeit an accepted but undealt wager without drawing a win slot or refunding the stake", async () => {
+  const t = table("rummy", ["alice"]);
+  const cycle = { _id: "rummy:bet-wins-30-of-100:v1", remaining: [true] };
+  t.s.data.multiplayerrooms.push(cycle);
+  const wager = randomUUID();
+  await t.accept("alice", wager, 10);
+  const operation = randomUUID();
+  const dropped = await t.act("alice", wager, "forfeit", undefined, operation);
+  assert.equal(dropped.status, "closed");
+  assert.equal(dropped.outcome.view.win, false);
+  assert.equal(dropped.claim, 0);
+  assert.equal((await t.act("alice", wager, "forfeit", undefined, operation)).replay, true);
+  assert.equal(t.balance("alice"), 990);
+  assert.deepEqual(t.s.data.multiplayerrooms.find(room => room._id === cycle._id).remaining, [true]);
+  await assert.rejects(t.act("alice", wager, "deal"), /finished/);
 });
 
 /**

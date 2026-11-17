@@ -22,13 +22,13 @@ const hand = [
   ...[8, 9, 10].map(rank => ({ id: `${rank}D`, rank, suit: "D" })),
   ...[11, 12, 13, 14].map(rank => ({ id: `${rank}C`, rank, suit: "C" })),
 ];
-function harness(phase = "play", presets = [10, 20, 50, 100, 200], unlockedLevel = 5, dealtHand = hand) {
+function harness(phase = "play", presets = [10, 20, 50, 100, 200], unlockedLevel = 5, dealtHand = hand, restore = null, opening = false, moveResult) {
   const states = [], refs = [], calls = [], timers = [], effects = [], pendingEffects = [];
   const intervals = new Map(), timeouts = new Map();
   let stateIndex = 0, refIndex = 0, effectIndex = 0, now = 1000, timerId = 0;
   const useState = initial => {
     const index = stateIndex++;
-    if (!(index in states)) states[index] = typeof initial === "function" ? initial() : initial;
+    if (!(index in states)) states[index] = index === 3 ? opening || phase === "bet" : index === 4 ? false : typeof initial === "function" ? initial() : initial;
     return [states[index], next => { states[index] = typeof next === "function" ? next(states[index]) : next; }];
   };
   const pool = { busy: false, announce() {}, start: async amount => { calls.push(["start", amount]); return true; } };
@@ -57,10 +57,14 @@ function harness(phase = "play", presets = [10, 20, 50, 100, 200], unlockedLevel
     "@/components/BetAmountInput": { default: "amount-input" },
     "framer-motion": { motion: new Proxy({}, { get: (_, key) => `motion-${String(key)}` }), AnimatePresence: "presence" },
     "./engine": engine,
-    "../teen-patti/useIdleCardRound": { useIdleCardRound: () => ({ preview: null, watching: false, countdown: null, claim: () => true, release() {} }) },
+    "../teen-patti/useIdleCardRound": { useIdleCardRound: () => ({ preview: null, watching: false, countdown: null }) },
     "@/lib/interactiveCardClient": {
-      restoreCardRound: async () => null,
-      cardMove: async (_pool, move, selection) => { calls.push(["move", move, selection]); return { phase: "play", view: { hand: dealtHand } }; },
+      restoreCardRound: async () => restore ?? (phase === "play" && !opening ? { phase: "play", view: { hand: dealtHand }, stake: 500, payout: 0 } : null),
+      cardMove: async (_pool, move, selection) => {
+        calls.push(["move", move, selection]);
+        if (moveResult && move !== "deal") return moveResult(move);
+        return { phase: move === "deal" ? "play" : "result", view: { hand: dealtHand, win: move === "declare" }, stake: restore?.stake ?? 500, payout: 0 };
+      },
     },
     "./PlayingCard": { PlayingCard: "playing-card" },
     "./hooks": { usePersistentState: (_key, initial) => useState(initial), useSound: () => new Proxy({}, { get: () => () => {} }) },
@@ -115,6 +119,7 @@ test("Rummy keeps the header, exposes five exact-stake table choices and does no
   const h = harness("bet");
   assert.equal(h.render().filter(node => node.type === "header").length, 1);
   assert.ok(h.button("Rules"));
+  await new Promise(resolve => setImmediate(resolve));
   const table = value => h.render().find(node => node.type === "button" && node.props.className?.startsWith("rummy-level ") && node.props.children[3].props.children[1] === value.toLocaleString());
   for (const value of [10, 20, 50, 100, 200]) assert.ok(table(value));
   table(200).props.onClick();
@@ -130,6 +135,7 @@ test("Rummy displays current shared player presets after loading and submits the
   const labels = () => tables().map(node => node.props.children[3].props.children[1]);
   presets.splice(0, presets.length, 10, 250, 1000, 2500, 100000);
   assert.deepEqual(labels(), presets.map(value => value.toLocaleString()));
+  await new Promise(resolve => setImmediate(resolve));
   h.render().find(node => node.props?.["aria-label"] === "Bet amount presets").props.children[3].props.onClick();
   await h.render().find(node => node.type === "button" && node.props.className === "rummy-btn-gold rummy-deal-button").props.onClick();
   assert.deepEqual(h.calls, [["start", 2500], ["move", "deal", { level: 1 }]]);
@@ -217,6 +223,8 @@ test("Rummy rejects invalid dragged groups, supports place-button selection and 
 const activeComputer = h => h.render().find(node => node.props?.["aria-label"]?.startsWith("Computer-controlled seat") && node.props.className.includes("rummy-seat-active"));
 const playedComputers = h => h.render().filter(node => /^Computer seat \d arranged cards$/.test(node.props?.["aria-label"] ?? ""));
 async function join(h) {
+  h.render();
+  await new Promise(resolve => setImmediate(resolve));
   h.button("Level 1, stake Rs. 10, join").props.onClick();
   await new Promise(resolve => setImmediate(resolve));
   await h.advance(1400);
@@ -280,4 +288,70 @@ test("timeout with no valid meld sorts the existing cards then passes without lo
   assert.notDeepEqual(after, before);
   assert.ok(activeComputer(h));
   assert.deepEqual(h.calls, [["start", 10], ["move", "deal", { level: 1 }]]);
+});
+
+test("reopening an active Rummy hand always shows entry first and resumes only on explicit click without a new wager", async () => {
+  const saved = { phase: "play", view: { hand, level: 2 }, stake: 250, payout: 0 };
+  const h = harness("play", undefined, 5, hand, saved, true);
+  assert.ok(h.render().some(node => node.props?.className === "rummy-entry"));
+  assert.equal(h.cards().length, 0);
+  await new Promise(resolve => setImmediate(resolve));
+  await h.advance(30000);
+  assert.equal(h.cards().length, 0, "saved turn cannot play behind the bet-selection screen");
+  assert.deepEqual(h.calls, []);
+  const resume = h.render().find(node => node.props?.children === "RESUME SAVED HAND");
+  await resume.props.onClick();
+  assert.equal(h.cards().length, 13);
+  assert.deepEqual(h.calls, [], "resume must not accept another stake");
+});
+
+test("accepted but undealt saved wagers wait on entry until Resume rather than automatically dealing", async () => {
+  const h = harness("play", undefined, 5, hand, { phase: "accepted", view: {}, stake: 100, payout: 0 }, true);
+  h.render();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.cards().length, 0);
+  assert.deepEqual(h.calls, []);
+  await h.render().find(node => node.props?.children === "RESUME SAVED HAND").props.onClick();
+  assert.equal(h.cards().length, 13);
+  assert.deepEqual(h.calls, [["move", "deal", undefined]]);
+});
+
+test("Rummy can play LV1 again after winning, without locking an already unlocked level", async () => {
+  const h = harness("bet", undefined, 2);
+  await join(h);
+  for (const meld of engine.solve(hand)) {
+    h.nextPlayerTurn();
+    for (const card of meld.cards) {
+      h.cards().find(node => node.props["aria-label"] === `${engine.RANK_LABEL[card.rank]} of ${engine.SUIT_SYMBOL[card.suit]}`).props.onClick();
+    }
+    h.render().find(node => node.type === "button" && node.props.children?.[0] === "PLACE MELD").props.onClick();
+  }
+  await h.advance(1900);
+  h.render().find(node => node.props?.children === "CHOOSE BET & PLAY AGAIN").props.onClick();
+  await join(h);
+  assert.deepEqual(h.calls.map(call => call.slice(0, 2)), [["start", 10], ["move", "deal"], ["move", "declare"], ["start", 10], ["move", "deal"]]);
+  assert.deepEqual(h.calls.at(-1)[2], { level: 1 });
+  assert.equal(h.cards().length, 13);
+});
+
+test("Rummy starts fresh only after a saved hand is confirmed forfeited and a new stake is selected", async () => {
+  let confirmDrop;
+  const saved = { phase: "play", view: { hand, level: 2 }, stake: 250, payout: 0 };
+  const h = harness("play", undefined, 2, hand, saved, true, () => new Promise(resolve => { confirmDrop = resolve; }));
+  h.render();
+  await new Promise(resolve => setImmediate(resolve));
+  const fresh = () => h.render().find(node => node.props?.children === "FORFEIT & START FRESH");
+  const table = () => h.button("Level 1, stake Rs. 10, join");
+  assert.equal(table().props.disabled, true);
+  fresh().props.onClick();
+  fresh().props.onClick();
+  assert.equal(table().props.disabled, true);
+  assert.deepEqual(h.calls, [["move", "forfeit", undefined]]);
+  confirmDrop({ phase: "result", view: { win: false }, stake: 250, payout: 0 });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(fresh(), undefined);
+  assert.equal(table().props.disabled, false);
+  assert.deepEqual(h.calls, [["move", "forfeit", undefined]], "starting fresh is not consent to a new bet");
+  await join(h);
+  assert.deepEqual(h.calls.slice(1), [["start", 10], ["move", "deal", { level: 1 }]]);
 });

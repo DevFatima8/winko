@@ -98,29 +98,32 @@ export async function actInteractiveCard(
   }
   if (move === "state") return reply(loaded, user.balance, wagerId, false);
   if (loaded.browserStatus !== "active" || saved?.closed) throw new InteractiveMoveError("This wager has already finished.");
-  const engine = await engineFor(game);
   let step: EngineStep<unknown>;
   let win: boolean;
-  {
-    if (!saved) {
-      if (move !== "deal") throw new InteractiveMoveError("Deal the accepted wager before any table action.");
-      if (game === "rummy") {
-        const selected = input.selection;
-        const level = selected && typeof selected === "object" && "level" in selected ? selected.level : 1;
-        if (typeof level !== "number" || !Number.isInteger(level) || level < 1 || level > 5) {
-          throw new InteractiveMoveError("Select a valid Rummy level.");
-        }
-        if (level > await rummyUnlockedLevel(tx, userId)) throw new InteractiveMoveError("Win the previous Rummy level to unlock this table.");
-        loaded.browserRummyLevel = level;
+  if (!saved && game === "rummy" && move === "forfeit") {
+    // Leaving before the deal closes the accepted wager without drawing a win slot.
+    win = false;
+    step = { state: null, phase: "result", view: { win: false, groups: [] }, claim: 0 };
+  } else if (!saved) {
+    if (move !== "deal") throw new InteractiveMoveError("Deal the accepted wager before any table action.");
+    if (game === "rummy") {
+      const selected = input.selection;
+      const level = selected && typeof selected === "object" && "level" in selected ? selected.level : 1;
+      if (typeof level !== "number" || !Number.isInteger(level) || level < 1 || level > 5) {
+        throw new InteractiveMoveError("Select a valid Rummy level.");
       }
-      // The winning slot is assigned once, at the deal, and never redrawn by later moves.
-      win = game === "rummy" ? await nextBetWin(tx, game, 30) : await nextPlayerWin(tx, game, userId);
-      step = engine.start({ stake: loaded.browserTotalStake, selection: input.selection ?? null, win, balance: user.balance });
-    } else {
-      if (move === "deal") throw new InteractiveMoveError("This wager is already dealt.");
-      win = saved.win;
-      step = engine.act(saved.engine, move, { selection: input.selection ?? null, stake: loaded.browserTotalStake, balance: user.balance });
+      if (level > await rummyUnlockedLevel(tx, userId)) throw new InteractiveMoveError("Win the previous Rummy level to unlock this table.");
+      loaded.browserRummyLevel = level;
     }
+    const engine = await engineFor(game);
+    // The winning slot is assigned once, at the deal, and never redrawn by later moves.
+    win = game === "rummy" ? await nextBetWin(tx, game, 30) : await nextPlayerWin(tx, game, userId);
+    step = engine.start({ stake: loaded.browserTotalStake, selection: input.selection ?? null, win, balance: user.balance });
+  } else {
+    if (move === "deal") throw new InteractiveMoveError("This wager is already dealt.");
+    const engine = await engineFor(game);
+    win = saved.win;
+    step = engine.act(saved.engine, move, { selection: input.selection ?? null, stake: loaded.browserTotalStake, balance: user.balance });
   }
   const debit = checkAmount(step.debit, "stake");
   const credit = checkAmount(step.credit, "award");

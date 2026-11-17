@@ -42,6 +42,54 @@ const publish = g => structuredClone(g);
 const multiplier = (_mines, safe) => 1 + safe;
 const settle = (s, slug) => s.dedicated.dedicatedTransaction(slug, async () => {});
 
+test("new Mines rounds save seven random-position bombs before revealing and allow cashout after one gem", async () => {
+  const s = scene();
+  let chooseLast = false;
+  const mines = { exports: {} };
+  const imports = {
+    "node:crypto": { randomInt: max => chooseLast ? max - 1 : 0 },
+    "./mongo": { dbConnect: async () => {} },
+    "@/models": { oid: id => id, MinesGame: { exists: async () => false } },
+    "./gameAccess": { checkGameAccess: async () => null },
+    "./outcomes": { MAX_MULTIPLIER: 10000 },
+    "./winHold": { holdWinShare: async () => assert.fail("Expected transactional settlement") },
+    "./dailyPoolConfig": { dailyPoolEnabled: () => false },
+    "./dailyPoolDedicated": s.dedicated,
+    "./dailyPoolRules": { DAILY_POOL_VERSION: version },
+    "./mysql": { isMysqlEnabled: () => true },
+    "./gameBetLimits": { MAX_GAME_BET: 100000 },
+  };
+  const compiled = ts.transpileModule(readFileSync("src\\lib\\mines.ts", "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+  }).outputText;
+  new Function("require", "exports", compiled)(name => {
+    assert.ok(name in imports, name);
+    return imports[name];
+  }, mines.exports);
+
+  const alice = await mines.exports.start("alice", 100);
+  chooseLast = true;
+  const bob = await mines.exports.start("bob", 100);
+  assert.equal(alice.game.mines, 7);
+  assert.equal(alice.game.mineCells, null);
+  assert.equal(bob.game.mineCells, null);
+  const [aliceBoard, bobBoard] = s.data.minesgames.map(round => [...round.mineCells]);
+  for (const board of [aliceBoard, bobBoard]) {
+    assert.equal(board.length, 7);
+    assert.equal(new Set(board).size, 7);
+    assert.ok(board.every(cell => Number.isInteger(cell) && cell >= 0 && cell < 25));
+  }
+  assert.notDeepEqual(aliceBoard, bobBoard);
+  const safe = Array.from({ length: 25 }, (_, i) => i).find(cell => !aliceBoard.includes(cell));
+  assert.equal((await mines.exports.reveal("alice", safe)).event, "gem");
+  const cashed = await mines.exports.cashOut("alice");
+  assert.equal(cashed.game.status, "cashed");
+  assert.deepEqual(cashed.game.mineCells, aliceBoard);
+  const hit = await mines.exports.reveal("bob", bobBoard[0]);
+  assert.equal(hit.event, "mine");
+  assert.deepEqual(hit.game.mineCells, bobBoard);
+});
+
 test("instant Mines accepts and settles atomically; concurrent cashouts cannot double-pay", async () => {
   const s = scene();
   for (const table of ["users", "gameresults", "minesgames"]) {

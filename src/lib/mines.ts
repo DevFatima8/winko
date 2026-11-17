@@ -1,7 +1,8 @@
+import { randomInt } from "node:crypto";
 import { dbConnect } from "./mongo";
 import { Game, GameResult, MinesGame, User, oid, type ObjectId } from "@/models";
 import { checkGameAccess } from "./gameAccess";
-import { payoutAfterHouseShare, isWinOutcome, MAX_MULTIPLIER } from "./outcomes";
+import { payoutAfterHouseShare, MAX_MULTIPLIER } from "./outcomes";
 import { holdWinShare } from "./winHold";
 import { dailyPoolEnabled } from "./dailyPoolConfig";
 import { acceptPoolMines, actPoolMines } from "./dailyPoolDedicated";
@@ -12,7 +13,8 @@ import { MAX_GAME_BET } from "./gameBetLimits";
 
 export const MIN_BET = 10, MAX_BET = MAX_GAME_BET, MAX_WIN = Number.MAX_SAFE_INTEGER;
 export const RTP = 0.97; // Spribe Mines 97%
-export const CELLS = 25, MIN_MINES = 1, MAX_MINES = 24;
+export const CELLS = 25;
+const NEW_ROUND_MINES = 7;
 
 /** Fair multiplier after s safe reveals with N mines: C(25,s)/C(25-N,s) × RTP */
 export function multiplier(mines: number, safe: number) {
@@ -29,7 +31,7 @@ export function nextMultipliers(mines: number, safe: number) {
 let cachedGameId: ObjectId | null = null;
 async function gameId(): Promise<ObjectId> {
   if (cachedGameId) return cachedGameId;
-  const g = await Game.findOneAndUpdate({ slug: "mines" }, { $setOnInsert: { name: "Mines", slug: "mines", icon: "💎", category: "original", description: "5×5 grid, mines choose karein, gems kholen aur cash out — 10,000x tak!", isActive: true } }, { upsert: true, returnDocument: "after" }).lean();
+  const g = await Game.findOneAndUpdate({ slug: "mines" }, { $setOnInsert: { name: "Mines", slug: "mines", icon: "💎", category: "original", description: "5×5 grid, 7 mines, gems kholen aur cash out — 10,000x tak!", isActive: true } }, { upsert: true, returnDocument: "after" }).lean();
   cachedGameId = g!._id; return cachedGameId!;
 }
 
@@ -55,33 +57,25 @@ export async function getState(userId: string | null) {
     game: active ? pub(active) : null,
     balance: me?.balance ?? 0,
     dailyPoolEnabled: dailyPoolEnabled(),
-    limits: { min: MIN_BET, max: MAX_BET, minMines: MIN_MINES, maxMines: MAX_MINES, rtp: RTP },
+    limits: { min: MIN_BET, max: MAX_BET, minMines: NEW_ROUND_MINES, maxMines: NEW_ROUND_MINES, rtp: RTP },
     recent: recent.map((r) => ({ id: String(r._id), bet: r.betAmount, mines: r.mines, win: r.winAmount, status: r.status, safe: r.revealed.length, multiplier: r.status === "cashed" ? multiplier(r.mines, r.revealed.length) : 0, poolPending: (r as PoolFields).poolPending, poolClaim: (r as PoolFields).poolClaim })),
   };
 }
 
-export async function start(userId: string, amount: number, mines: number) {
+export async function start(userId: string, amount: number) {
   await dbConnect();
   if (!Number.isFinite(amount) || amount < MIN_BET) return { error: `Minimum bet Rs. ${MIN_BET} hai.` };
   if (amount > MAX_BET) return { error: "Maximum bet per player per round is Rs. 100,000." };
-  mines = Math.floor(mines);
-  if (!Number.isInteger(mines) || mines < MIN_MINES || mines > MAX_MINES) return { error: `Mines ${MIN_MINES}–${MAX_MINES} ke darmiyan hon.` };
+  const mines = NEW_ROUND_MINES;
   amount = Math.floor(amount);
   const denied = await checkGameAccess(userId, "mines");
   if (denied) return { error: denied };
   const uid = oid(userId);
   if (await MinesGame.exists({ userId: uid, status: "active" })) return { error: "Pehle wali game abhi chal rahi hai." };
-  const tight = !isWinOutcome();
   const cells = Array.from({ length: CELLS }, (_, i) => i);
   for (let i = cells.length - 1; i > 0; i--) {
-    if (tight) {
-      // weight early half more (0..23)
-      const j = Math.floor(Math.pow(Math.random(), 1.35) * (i + 1));
-      [cells[i], cells[j]] = [cells[j], cells[i]];
-    } else {
-      const j = Math.floor(Math.random() * (i + 1));
-      [cells[i], cells[j]] = [cells[j], cells[i]];
-    }
+    const j = randomInt(i + 1);
+    [cells[i], cells[j]] = [cells[j], cells[i]];
   }
   const mineCells = cells.slice(0, mines).sort((a, b) => a - b);
   if (isMysqlEnabled() || dailyPoolEnabled()) return acceptPoolMines(userId, amount, mines, mineCells, pub, dailyPoolEnabled());

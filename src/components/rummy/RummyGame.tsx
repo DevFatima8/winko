@@ -12,7 +12,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import type { Card, Group } from "./engine";
 import { availableMeld, handValue, meldType, RANK_LABEL, SUITS, SUIT_SYMBOL, solve, buildDeck, shuffle } from "./engine";
 import { useIdleCardRound } from "../teen-patti/useIdleCardRound";
-import { cardMove, restoreCardRound } from "@/lib/interactiveCardClient";
+import { cardMove, restoreCardRound, type CardOutcome } from "@/lib/interactiveCardClient";
 import { PlayingCard } from "./PlayingCard";
 import { usePersistentState, useSound } from "./hooks";
 import "./rummy.css";
@@ -88,9 +88,8 @@ function Chip({
       onClick={onClick}
       disabled={!onClick}
       aria-label={`Bet ${value} chips`}
-      className={`rounded-full outline-none transition-transform duration-150 ${
-        onClick ? "cursor-pointer hover:-translate-y-1" : ""
-      } ${selected ? "-translate-y-2 scale-110" : ""} ${dim ? "opacity-50" : ""}`}
+      className={`rounded-full outline-none transition-transform duration-150 ${onClick ? "cursor-pointer hover:-translate-y-1" : ""
+        } ${selected ? "-translate-y-2 scale-110" : ""} ${dim ? "opacity-50" : ""}`}
       style={{
         width: size,
         height: size,
@@ -215,6 +214,10 @@ export default function RummyGame() {
     return reply as { unlockedLevel: number };
   });
   const [level, setLevel] = useState(1);
+  const [entryOpen, setEntryOpen] = useState(true);
+  const [restoring, setRestoring] = useState(true);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [savedRound, setSavedRound] = useState<CardOutcome<{ hand: Card[]; level?: number }> | null>(null);
   const [dealing, setDealing] = useState(false);
   const [turn, setTurn] = useState({ seat: 0, until: 0, actAt: 0 });
   const [seconds, setSeconds] = useState(TURN_SECONDS);
@@ -243,13 +246,14 @@ export default function RummyGame() {
   const [drag, setDrag] = useState<{ id: string; x: number; y: number } | null>(null);
 
   const lockRef = useRef(false);
+  const entryAction = useRef(false);
   const meldZone = useRef<HTMLDivElement>(null);
   const pointerDrag = useRef<{ id: string; x: number; y: number; moved: boolean } | null>(null);
   const suppressClick = useRef(false);
   const settledRef = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const turnAction = useRef<() => void>(() => {});
-  const computerAction = useRef<(seat: number) => void>(() => {});
+  const turnAction = useRef<() => void>(() => { });
+  const computerAction = useRef<(seat: number) => void>(() => { });
   const dealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startTurn = useCallback((seat: number) => {
     const now = Date.now();
@@ -272,10 +276,11 @@ export default function RummyGame() {
       setResult(null);
       setSelected([]);
       lockRef.current = false;
+      setEntryOpen(true);
       setPhase("bet");
     },
   });
-  const phase = idleRound.watching ? "play" : wagerPhase;
+  const phase = entryOpen ? "bet" : idleRound.watching ? "play" : wagerPhase;
   const hand = idleRound.preview ?? wagerHand;
   const groups = idleRound.watching ? [] : wagerGroups;
 
@@ -285,7 +290,7 @@ export default function RummyGame() {
     if (toastTimer.current) clearTimeout(toastTimer.current);
   }, []);
   useEffect(() => {
-    if (wagerPhase !== "play" || dealing || !turn.until) return;
+    if (entryOpen || wagerPhase !== "play" || dealing || !turn.until) return;
     const timer = setInterval(() => {
       const remaining = Math.max(0, Math.ceil((turn.until - Date.now()) / 1000));
       setSeconds(remaining);
@@ -299,7 +304,7 @@ export default function RummyGame() {
       }
     }, 100);
     return () => clearInterval(timer);
-  }, [wagerPhase, dealing, turn, startTurn]);
+  }, [entryOpen, wagerPhase, dealing, turn, startTurn]);
 
   const placedIds = useMemo(() => {
     const s = new Set<string>();
@@ -308,7 +313,7 @@ export default function RummyGame() {
   }, [groups]);
 
   const freeCards = useMemo(() => hand.filter((c) => !placedIds.has(c.id)), [hand, placedIds]);
-  const canDeal = !!lobby && balance >= bet && bet >= MIN_BET && bet <= MAX_GAME_BET && !actionBusy;
+  const canDeal = !!lobby && !restoring && !restoreError && !savedRound && balance >= bet && bet >= MIN_BET && bet <= MAX_GAME_BET && !actionBusy;
   const playerTurn = !dealing && turn.seat === 0;
   const endPlayerTurn = useCallback(() => {
     startTurn(1);
@@ -320,15 +325,29 @@ export default function RummyGame() {
     toastTimer.current = setTimeout(() => setToast(null), 2300);
   };
 
+  const checkSavedHand = async (isDisposed = () => false) => {
+    try {
+      const round = await restoreCardRound<{ hand: Card[]; level?: number }>("rummy", pool, "main", true);
+      if (isDisposed()) return;
+      setRestoreError(null);
+      setSavedRound(round?.phase === "accepted" || round?.phase === "play" ? round : null);
+      setPhase("bet");
+    } catch (error: unknown) {
+      if (!isDisposed()) setRestoreError(error instanceof Error ? error.message : "Saved Rummy hand could not be checked.");
+    } finally {
+      if (!isDisposed()) setRestoring(false);
+    }
+  };
+
   const startDeal = async (stake = bet, chosenLevel = level) => {
-    if (!["bet", "result"].includes(wagerPhase) || actionBusy || pool.busy || !lobby ||
-        chosenLevel > lobby.unlockedLevel || stake < MIN_BET || stake > MAX_GAME_BET || balance < stake ||
-        wagerPhase === "bet" && !idleRound.claim()) return;
+    if (restoring || restoreError || savedRound || phase !== "bet" || entryAction.current || pool.busy || !lobby ||
+      chosenLevel > lobby.unlockedLevel || stake < MIN_BET || stake > MAX_GAME_BET || balance < stake) return;
+    entryAction.current = true;
     setActionBusy(true);
     try {
-      if (!await pool.start(stake)) { idleRound.release(); return; }
+      if (!await pool.start(stake)) { await checkSavedHand(); return; }
       const dealt = await cardMove<{ hand: Card[] }>(pool, "deal", { level: chosenLevel });
-      if (!dealt) return;
+      if (!dealt) { await checkSavedHand(); return; }
       setBet(stake);
       setLevel(chosenLevel);
       setDealing(true);
@@ -343,6 +362,7 @@ export default function RummyGame() {
       setHintsLeft(MAX_HINTS);
       setResult(null);
       setPhase("play");
+      setEntryOpen(false);
       setDealKey((k) => k + 1);
       sfx.deal();
       dealTimer.current = setTimeout(() => {
@@ -351,16 +371,28 @@ export default function RummyGame() {
         startTurn(0);
       }, 13 * 45 + 700);
     } finally {
+      entryAction.current = false;
       setActionBusy(false);
     }
   };
 
   useEffect(() => {
     let disposed = false;
-    void restoreCardRound<{ hand: Card[]; level?: number }>("rummy", pool).then(async restored => {
-      if (disposed || !restored) return;
-      const round = restored.phase === "accepted" ? await cardMove<{ hand: Card[]; level?: number }>(pool, "deal") : restored;
-      if (disposed || !round || round.phase !== "play") return;
+    void Promise.resolve().then(() => {
+      if (!disposed) return checkSavedHand(() => disposed);
+    });
+    return () => { disposed = true; };
+    // Restore once on mount; the wallet lifecycle replays any unconfirmed move first.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const resumeHand = async () => {
+    if (!savedRound || restoring || restoreError || entryAction.current) return;
+    entryAction.current = true;
+    setActionBusy(true);
+    try {
+      const round = savedRound.phase === "accepted" ? await cardMove<{ hand: Card[]; level?: number }>(pool, "deal") : savedRound;
+      if (!round || round.phase !== "play") { await checkSavedHand(); return; }
       settledRef.current = false;
       lockRef.current = false;
       setHand(round.view.hand);
@@ -368,12 +400,32 @@ export default function RummyGame() {
       setPhase("play");
       setLevel(round.view.level ?? 1);
       setBots(computerHands(round.view.hand));
+      setBet(round.stake);
+      setSavedRound(null);
+      setEntryOpen(false);
       startTurn(0);
-    });
-    return () => { disposed = true; };
-    // Restore once on mount; the wallet lifecycle replays any unconfirmed move first.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    } finally {
+      entryAction.current = false;
+      setActionBusy(false);
+    }
+  };
+
+  const startFresh = async () => {
+    if (!savedRound || restoring || restoreError || entryAction.current) return;
+    entryAction.current = true;
+    setActionBusy(true);
+    try {
+      const dropped = await cardMove<{ win: boolean }>(pool, "forfeit");
+      if (dropped?.phase !== "result") { await checkSavedHand(); return; }
+      pool.announce();
+      setSavedRound(null);
+      setPhase("bet");
+      showToast("Previous hand closed. Choose a stake to play again.");
+    } finally {
+      entryAction.current = false;
+      setActionBusy(false);
+    }
+  };
 
   const finish = async (win: boolean, reason: string, melds: Group[] = []) => {
     if (idleRound.watching || settledRef.current) return;
@@ -559,7 +611,7 @@ export default function RummyGame() {
 
   const clampBet = (v: number) => Math.min(MAX_GAME_BET, Math.max(MIN_BET, Math.floor(v / 50) * 50));
   const changeBet = (fn: (b: number) => number) => {
-    if (wagerPhase !== "bet" || idleRound.watching || actionBusy) return;
+    if (phase !== "bet" || actionBusy) return;
     setBet((b) => clampBet(fn(b)));
     sfx.chip();
   };
@@ -661,12 +713,21 @@ export default function RummyGame() {
               </div>
               <div className="rummy-entry-content">
                 <h2 className="rummy-section-title">CHOOSE YOUR TABLE</h2>
+                {restoring && <p className="rummy-entry-note" role="status">Checking saved hand...</p>}
+                {restoreError && <p className="rummy-entry-note" role="alert">{restoreError} <button type="button" disabled={restoring || actionBusy} onClick={() => { setRestoring(true); void checkSavedHand(); }}>Retry</button></p>}
+                {savedRound && <div className="rummy-entry-note">
+                  <p>Resume your previous hand without another bet, or start fresh. Starting fresh forfeits the previous Rs. {savedRound.stake.toLocaleString()} stake.</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => void resumeHand()} disabled={actionBusy || restoring || !!restoreError} className="rummy-btn-gold rummy-deal-button">RESUME SAVED HAND</button>
+                    <button type="button" onClick={() => void startFresh()} disabled={actionBusy || restoring || !!restoreError} className="rummy-btn-dark rounded-lg px-3 py-2">FORFEIT &amp; START FRESH</button>
+                  </div>
+                </div>}
                 <div className="rummy-levels" aria-label="Bet amount tables">
                   {BET_PRESETS.map((value, index) => (
                     <button
                       type="button"
-                      key={value}
-                      disabled={actionBusy || !lobby || index + 1 > lobby.unlockedLevel}
+                      key={index}
+                      disabled={actionBusy || restoring || !!restoreError || !!savedRound || !lobby || index + 1 > lobby.unlockedLevel}
                       aria-pressed={level === index + 1}
                       aria-label={`Level ${index + 1}, stake Rs. ${value.toLocaleString()}${lobby && index + 1 > lobby.unlockedLevel ? ", locked" : ", join"}`}
                       className={`rummy-level rummy-level-${index + 1}`}
@@ -700,7 +761,7 @@ export default function RummyGame() {
                   </button>
                 </div>
                 <p className="rummy-entry-note" role="status">{outOfChips ? "Not enough balance. Minimum stake Rs. 10." : bet > balance ? "Not enough balance for this stake." : "Arrange all 13 cards into SETs & RUNs · Gross payout 2x, including stake"}</p>
-                <p className="rummy-entry-note">Win a level to unlock the next. Progress is saved to your account.</p>
+                <p className="rummy-entry-note">Win a level to unlock the next. You can replay any unlocked level.</p>
                 {lobbyError && <p role="alert" className="rummy-entry-note">{lobbyError} <button type="button" onClick={reloadLobby}>Retry</button></p>}
               </div>
               <div className="rummy-player-strip"><span className="rummy-profile-avatar">{player && isAvatar(player.avatar) ? <Image src={avatarSrc(player.avatar)} alt="Your profile avatar" width={42} height={42} unoptimized /> : "Y"}</span><span>{player?.name ?? "YOU"}</span><strong>Rs. {ready ? balance.toLocaleString() : "—"}</strong><span>WINS {stats.wins} · BEST Rs. {stats.best.toLocaleString()}</span></div>
@@ -726,53 +787,54 @@ export default function RummyGame() {
                   {[1, 2].map(seat => {
                     const bot = bots[seat - 1];
                     return <div key={seat} className={`rummy-computer-seat rummy-computer-seat-${seat} ${turn.seat === seat && phase === "play" ? "rummy-seat-active" : ""}`} aria-label={`Computer-controlled seat ${seat}`} title="Computer-controlled seat">
-                    <motion.span key={bot?.moves ?? 0} initial={{ scale: .9 }} animate={{ scale: 1 }} className="rummy-avatar" aria-hidden="true"><svg viewBox="0 0 40 40"><circle cx="20" cy="14" r="8" fill="currentColor" /><path d="M5 38Q5 23 20 23Q35 23 35 38" fill="currentColor" /></svg></motion.span>
-                    <span className="rummy-computer-status" role="status" aria-label={bot?.moves ? `Computer seat ${seat} arranged cards` : undefined}>
-                      {turn.seat === seat && phase === "play" ? "Arranging..." : bot?.moves ? "Arranged" : "Waiting"}
-                    </span>
-                    {turn.seat === seat && phase === "play" && <small className="rummy-computer-timer">{seconds}s</small>}
-                  </div>;})}
-                  <div className="rummy-table-watermark" aria-hidden="true">RUMMY</div>
-                  <div className="rummy-table-instruction" role="status">{dealing ? "Dealer is distributing cards" : !playerTurn ? "Computer arranging cards" : groups.length ? "Your turn: place a meld or take a group back" : "Your turn: select cards, then place a SET or RUN"}</div>
-                  <div ref={meldZone} className={`rummy-meld-zone ${drag ? "rummy-drop-ready" : ""}`} aria-label="Place selected meld here">
-                <AnimatePresence initial={false}>
-                  {groups.map((g) => (
-                    <motion.div
-                      key={g.cards.map((c) => c.id).join("")}
-                      initial={{ scale: 0.6, y: 16, opacity: 0 }}
-                      animate={{ scale: 1, y: 0, opacity: 1 }}
-                      exit={{ scale: 0.7, opacity: 0 }}
-                      transition={{ type: "spring", stiffness: 320, damping: 22 }}
-                      className="rummy-placed-group"
-                    >
-                      <span className="absolute -top-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-[#d6a63a] px-2 py-0.2 text-[8px] sm:text-[9px] font-black tracking-[0.1em] text-[#072b20] whitespace-nowrap shadow">
-                        {groupLabel(g)}
+                      <motion.span key={bot?.moves ?? 0} initial={{ scale: .9 }} animate={{ scale: 1 }} className="rummy-avatar" aria-hidden="true"><svg viewBox="0 0 40 40"><circle cx="20" cy="14" r="8" fill="currentColor" /><path d="M5 38Q5 23 20 23Q35 23 35 38" fill="currentColor" /></svg></motion.span>
+                      <span className="rummy-computer-status" role="status" aria-label={bot?.moves ? `Computer seat ${seat} arranged cards` : undefined}>
+                        {turn.seat === seat && phase === "play" ? "Arranging..." : bot?.moves ? "Arranged" : "Waiting"}
                       </span>
-                      <div className="flex rounded-lg border border-[#e7bc55]/35 bg-[#072b20]/70 p-1.5 pt-2.5 shadow-[0_6px_16px_rgba(0,0,0,0.4)]">
-                        {g.cards.map((c, i) => (
-                          <button
-                            key={c.id}
-                            type="button"
-                            onClick={() => takeBack(c.id)}
-                            title="Take meld back"
-                            disabled={phase !== "play" || idleRound.watching || !playerTurn}
-                            aria-label={`Take back ${groupLabel(g)}`}
-                            className={`rummy-meld-card ${i > 0 ? "rummy-meld-overlap" : ""}`}
-                          >
-                            <PlayingCard card={c} size="slot" />
-                          </button>
-                        ))}
+                      {turn.seat === seat && phase === "play" && <small className="rummy-computer-timer">{seconds}s</small>}
+                    </div>;
+                  })}
+                  <div className="rummy-table-watermark" aria-hidden="true">RUMMY</div>
+                  <div className="rummy-table-instruction" role="status">{dealing ? "Dealer is distributing cards" : !playerTurn ? "Other arranging cards" : groups.length ? "Your turn: place a meld or take a group back" : "Your turn: select cards, then place a SET or RUN"}</div>
+                  <div ref={meldZone} className={`rummy-meld-zone ${drag ? "rummy-drop-ready" : ""}`} aria-label="Place selected meld here">
+                    <AnimatePresence initial={false}>
+                      {groups.map((g) => (
+                        <motion.div
+                          key={g.cards.map((c) => c.id).join("")}
+                          initial={{ scale: 0.6, y: 16, opacity: 0 }}
+                          animate={{ scale: 1, y: 0, opacity: 1 }}
+                          exit={{ scale: 0.7, opacity: 0 }}
+                          transition={{ type: "spring", stiffness: 320, damping: 22 }}
+                          className="rummy-placed-group"
+                        >
+                          <span className="absolute -top-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-[#d6a63a] px-2 py-0.2 text-[8px] sm:text-[9px] font-black tracking-[0.1em] text-[#072b20] whitespace-nowrap shadow">
+                            {groupLabel(g)}
+                          </span>
+                          <div className="flex rounded-lg border border-[#e7bc55]/35 bg-[#072b20]/70 p-1.5 pt-2.5 shadow-[0_6px_16px_rgba(0,0,0,0.4)]">
+                            {g.cards.map((c, i) => (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => takeBack(c.id)}
+                                title="Take meld back"
+                                disabled={phase !== "play" || idleRound.watching || !playerTurn}
+                                aria-label={`Take back ${groupLabel(g)}`}
+                                className={`rummy-meld-card ${i > 0 ? "rummy-meld-overlap" : ""}`}
+                              >
+                                <PlayingCard card={c} size="slot" />
+                              </button>
+                            ))}
+                          </div>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                    {groups.length === 0 && (
+                      <div className="rummy-empty-table">
+                        <div className="rummy-card-back" aria-hidden="true"><SpadeMark className="h-9 w-9" /></div>
+                        <p>13 dealt cards<br /><span>Place your melds here</span></p>
+                        <div className="rummy-table-card" aria-hidden="true"><PlayingCard card={hand[0] ?? { id: "14S", rank: 14, suit: "S" }} /></div>
                       </div>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-                {groups.length === 0 && (
-                  <div className="rummy-empty-table">
-                    <div className="rummy-card-back" aria-hidden="true"><SpadeMark className="h-9 w-9" /></div>
-                    <p>13 dealt cards<br /><span>Place your melds here</span></p>
-                    <div className="rummy-table-card" aria-hidden="true"><PlayingCard card={hand[0] ?? { id: "14S", rank: 14, suit: "S" }} /></div>
-                  </div>
-                )}
+                    )}
                   </div>
                   <div className={`rummy-table-player ${playerTurn && phase === "play" ? "rummy-seat-active" : ""}`}>
                     <span className="rummy-avatar" style={{ "--turn-progress": `${seconds / TURN_SECONDS * 100}%` } as CSSProperties}>
@@ -872,16 +934,16 @@ export default function RummyGame() {
           <button
             type="button"
             onClick={() => {
-              if (balance >= bet && balance > 0) startDeal();
-              else setPhase("bet");
+              setEntryOpen(true);
+              setPhase("bet");
             }}
             className="rummy-btn-gold flex-1 whitespace-nowrap rounded-xl px-3 py-2 font-display text-xs font-black tracking-[0.08em]"
           >
-            DEAL AGAIN
+            CHOOSE BET & PLAY AGAIN
           </button>
           <button
             type="button"
-            onClick={() => setPhase("bet")}
+            onClick={() => { setEntryOpen(true); setPhase("bet"); }}
             className="rummy-btn-dark flex-1 whitespace-nowrap rounded-xl px-3 py-2 text-xs font-bold tracking-[0.08em]"
           >
             CHANGE BET

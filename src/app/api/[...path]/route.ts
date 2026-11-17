@@ -100,7 +100,7 @@ async function dispatch(request: Request) {
             case path === "/api/mines" && method === "POST": {
                 if (!requirePlayer()) return errorResponse("Khelne ke liye Login / Register karein.", 401);
                 const action = String(body.action ?? "");
-                return response(action === "start" ? await mines.start(me!.id, Number(body.amount), Number(body.mines))
+                return response(action === "start" ? await mines.start(me!.id, Number(body.amount))
                     : action === "reveal" ? await mines.reveal(me!.id, Number(body.cell))
                         : action === "cashout" ? await mines.cashOut(me!.id) : { error: "Invalid action" });
             }
