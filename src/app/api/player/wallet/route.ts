@@ -11,7 +11,7 @@ export async function GET() {
         if (!me || me.role !== "client") return NextResponse.json({ error: "Login required." }, { status: 401 });
 
         const assigned = await assignPaymentAccounts(me.id);
-        const assignedIds = new Set(["jazzcash", "easypaisa", "raast"].flatMap(provider => assigned[provider] ? [assigned[provider]] : []));
+        const assignedIds = new Set(["jazzcash", "easypaisa", "bank", "raast"].flatMap(provider => assigned[provider] ? [assigned[provider]] : []));
         const rows = await PaymentAccount.find({ isActive: true }).sort({ createdAt: 1 }).lean();
         const accounts = rows.filter((account) => assignedIds.has(String(account._id)))
             .map((account) => ({ id: String(account._id), provider: account.provider, accountTitle: account.accountTitle, accountNumber: account.accountNumber, qrImage: account.qrImage ?? null }));

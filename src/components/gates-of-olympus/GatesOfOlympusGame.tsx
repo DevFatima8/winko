@@ -26,6 +26,26 @@ const SYMBOLS: Record<SymbolId, { glyph: string; name: string; className: string
 const BETS: number[] = [...BET_PRESETS];
 const STARTING_BALANCE = 1000;
 
+function OlympusSymbol({ id }: { id: SymbolId }) {
+  const shapes = {
+    ruby: [[50, 7], [91, 38], [76, 87], [24, 87], [9, 38]],
+    sapphire: [[50, 6], [91, 50], [50, 94], [9, 50]],
+    emerald: [[50, 8], [93, 86], [7, 86]],
+    amethyst: [[8, 15], [92, 15], [50, 93]],
+  };
+  if (!(id in shapes)) return <span className="glyph">{SYMBOLS[id].glyph}</span>;
+  const vertices = shapes[id as keyof typeof shapes];
+  return <svg viewBox="0 0 100 100" className="olympus-gem" aria-hidden="true">
+    <polygon points={vertices.map(point => point.join(",")).join(" ")} fill="#dcae45" stroke="#fff0b0" strokeWidth="2" strokeLinejoin="round" />
+    <g transform="translate(50 50) scale(.88) translate(-50 -50)">
+      {vertices.map((point, index) => <polygon key={index} points={`50,48 ${point.join(",")} ${vertices[(index + 1) % vertices.length].join(",")}`} fill={index % 2 ? "var(--symbol-dark)" : "var(--symbol)"} />)}
+      <polygon points={vertices.map(([x, y]) => `${50 + (x - 50) * .55},${48 + (y - 48) * .55}`).join(" ")} fill="var(--symbol)" stroke="#ffffff" strokeOpacity=".5" strokeWidth="1" />
+      <path d="M35 32 48 22 60 33 46 41Z" fill="#ffffff" opacity=".6" />
+      <path d="m22 48 5-10 5 10-5 10Z" fill="#ffffff" opacity=".85" />
+    </g>
+  </svg>;
+}
+
 function Icon({ name }: { name: "sound" | "mute" | "info" | "settings" | "menu" | "fullscreen" | "turbo" | "close" | "auto" }) {
   const paths: Record<typeof name, React.ReactNode> = {
     sound: <><path d="M5 10v4h3l4 3V7L8 10H5Z" /><path d="M15 9.5a4 4 0 0 1 0 5M17.5 7a7 7 0 0 1 0 10" /></>,
@@ -272,7 +292,7 @@ export default function GatesOfOlympusGame({ backHref = "/player" }: { backHref?
                     >
                       <span className="symbol-shine" />
                       {cell.symbol === "bolt" ? <span className="scatter-label">SCATTER</span> : null}
-                      <span className="glyph">{symbol.glyph}</span>
+                      <OlympusSymbol id={cell.symbol} />
                       {cell.multiplier ? <span className="multiplier">{cell.multiplier}×</span> : null}
                     </div>
                   );
@@ -365,7 +385,7 @@ export default function GatesOfOlympusGame({ backHref = "/player" }: { backHref?
                   <h2 id="modal-title">How to play</h2>
                   <p>Choose a bet in Rs. and press Spin. Eight or more matching symbols anywhere on the 6×5 board award a prize. Storm Orbs boost that spin.</p>
                   <div className="paytable">
-                    {REGULAR_SYMBOLS.map((id) => <div key={id}><span className={`mini-symbol ${SYMBOLS[id].className}`}>{SYMBOLS[id].glyph}</span><span><b>{SYMBOLS[id].name}</b><small>{SYMBOLS[id].payout}</small></span></div>)}
+                    {REGULAR_SYMBOLS.map((id) => <div key={id}><span className={`mini-symbol symbol ${SYMBOLS[id].className}`}><OlympusSymbol id={id} /></span><span><b>{SYMBOLS[id].name}</b><small>{SYMBOLS[id].payout}</small></span></div>)}
                   </div>
                 </>
               ) : null}

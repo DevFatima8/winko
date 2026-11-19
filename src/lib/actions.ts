@@ -194,7 +194,7 @@ export async function addPaymentAccountAction(_: ActionState, form: FormData): P
   const provider = str(form, "provider");
   const accountTitle = str(form, "accountTitle");
   const accountNumber = str(form, "accountNumber").replace(/\s|-/g, "");
-  if (provider !== "jazzcash" && provider !== "easypaisa" && provider !== "raast") return { error: "Provider select karein." };
+  if (provider !== "jazzcash" && provider !== "easypaisa" && provider !== "raast" && provider !== "bank") return { error: "Provider select karein." };
   if (!accountTitle || !accountNumber) return { error: "Account holder name aur Till ID zaroori hain." };
   // sub-admin accounts belong to them; super-admin accounts go into the shared pool (ownerId null)
   const ownerId = me.level >= 2 ? null : me.id;
@@ -386,8 +386,17 @@ export async function toggleGameAction(slug: string, isActive: boolean) {
 export async function toggleGameHotAction(slug: string, isHot: boolean) {
   await requireSuper();
   await requireSiteGame(slug);
-  await Game.updateMany({ slug: { $regex: new RegExp(`^${slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }, isActive: { $ne: false } }, { $set: { isHot } });
+  await Game.updateMany({ slug: { $regex: new RegExp(`^${slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }, isActive: { $ne: false } }, { $set: { isHot, hotConfigured: true } });
   revalidatePath("/admin/games"); revalidatePath("/"); revalidatePath("/games-all"); revalidatePath("/player");
+}
+
+export async function toggleGameMaintenanceAction(slug: string, underMaintenance: boolean) {
+  await requireSuper();
+  if (typeof underMaintenance !== "boolean") throw new Error("Invalid maintenance setting.");
+  await requireSiteGame(slug);
+  const result = await Game.updateMany({ slug }, { $set: { underMaintenance } });
+  if (!result.matchedCount) throw new Error("Game settings could not be saved.");
+  revalidatePath("/admin/games"); revalidatePath("/"); revalidatePath("/player"); revalidatePath("/games-all");
 }
 
 // settings

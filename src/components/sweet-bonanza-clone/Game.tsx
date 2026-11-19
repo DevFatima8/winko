@@ -397,7 +397,7 @@ export default function SweetBonanzaGamePage() {
           </div>
         </section>
 
-        <aside className="side-column" aria-label="Game controls and odds">
+        <aside className="candy-controls" aria-label="Game controls and odds">
           <section className="control-card">
             <div className="card-heading">
               <div><span className="section-overline">SET YOUR PACE</span><h2>Wager controls</h2></div>

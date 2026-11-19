@@ -77,6 +77,7 @@ export async function browserPoolLifecycle(tx: MultiplayerTransaction, userId: s
     if (!user.isActive || user.role !== "client" || user.blockedGames?.includes(input.game)) throw new BrowserWagerError("This account cannot bet on this game.");
     const game = (await tx.findWhere<GameDoc>("games", { slug: input.game }, 1))[0];
     if (!game?.isActive) throw new BrowserWagerError("This game is not available for betting.");
+    if (game.underMaintenance) throw new BrowserWagerError("Under maintenance. Please try again later.");
     if (cents(user.balance) < cents(amount)) throw new BrowserWagerError("Insufficient balance.");
     result = {
       _id: id, gameId: game._id, userId, roundNo: null, betSlot: 0,
@@ -107,6 +108,7 @@ export async function browserPoolLifecycle(tx: MultiplayerTransaction, userId: s
       if (!user.isActive || user.role !== "client" || user.blockedGames?.includes(input.game)) throw new BrowserWagerError("This account cannot bet on this game.");
       const game = (await tx.findWhere<GameDoc>("games", { slug: input.game }, 1))[0];
       if (!game?.isActive) throw new BrowserWagerError("This game is not available for betting.");
+      if (game.underMaintenance) throw new BrowserWagerError("Under maintenance. Please try again later.");
       if (cents(user.balance) < cents(amount)) throw new BrowserWagerError("Insufficient balance.");
       // Each added stake has its own accepted-day ledger entry, never a retroactive day change.
       if (pooled) {
@@ -289,8 +291,19 @@ async function serverOutcome(tx: MultiplayerTransaction, userId: string, game: s
         typeof input.round !== "number" || !Number.isSafeInteger(input.round) || input.round < 1) {
       throw new BrowserWagerError("Select a valid Derby horse and round.");
     }
+    const horseIds = input.horseIds === undefined ? [input.horseId] : input.horseIds;
+    if (!Array.isArray(horseIds) || horseIds.length < 1 || horseIds.length > rules.HORSES.length ||
+        new Set(horseIds).size !== horseIds.length || horseIds[0] !== input.horseId ||
+        !horseIds.every(id => typeof id === "number" && rules.HORSES.some(horse => horse.id === id)) ||
+        cents(stake) % horseIds.length !== 0 || input.horseIds !== undefined && !Number.isSafeInteger(stake / horseIds.length) || stake / horseIds.length < 10) {
+      throw new BrowserWagerError("Choose valid Derby selections and a whole-rupee stake per runner.");
+    }
     const won = await nextBetWin(tx, game, 30);
     const plan = rules.makeRacePlan(input.horseId, stake, input.round, won, () => randomInt(2 ** 31) / 2 ** 31);
+    plan.selectedHorseIds = horseIds;
+    plan.stakePerHorse = stake / horseIds.length;
+    plan.playerWon = horseIds.includes(plan.winnerId);
+    plan.payoutMultiplier = input.horseIds === undefined ? 2.75 : rules.PAYOUT_MULTIPLIER;
     const payout = rules.settleRace(plan).payout;
     return { claim: payout, outcome: { ...plan, payout } };
   }
@@ -465,6 +478,7 @@ export async function playBrowserWager(
   if (!user.isActive || user.role !== "client" || user.blockedGames?.includes(input.game)) throw new BrowserWagerError("This account cannot bet on this game.");
   const game = (await tx.findWhere<GameDoc>("games", { slug: input.game }, 1))[0];
   if (!game?.isActive) throw new BrowserWagerError("This game is not available for betting.");
+  if (game.underMaintenance) throw new BrowserWagerError("Under maintenance. Please try again later.");
   if (cents(user.balance) < cents(input.stake)) throw new BrowserWagerError("Insufficient balance.");
   const now = new Date(await tx.now());
   const result: BrowserResult = {

@@ -7,10 +7,11 @@ export type ObjectId = OId;
 export const oid = (id: string | ObjectId) => String(id);
 
 export type Provider = "jazzcash" | "easypaisa";
-export type DepositProvider = Provider | "raast";
+export type DepositProvider = Provider | "raast" | "bank";
+export type WithdrawalProvider = Provider | "bank" | "crypto" | "other";
 export type TxnStatus = "pending" | "approved" | "rejected";
 type Base = { _id: string; createdAt: Date; updatedAt: Date };
-export type WithdrawalAccount = { provider: Provider; holderName: string; accountNumber: string };
+export type WithdrawalAccount = { provider: WithdrawalProvider; holderName: string; accountNumber: string; institution?: string };
 
 export type UserDoc = Base & {
   paymentAssignmentTransactions?: Record<string, string>;
@@ -20,7 +21,7 @@ export type UserDoc = Base & {
   totpSecret?: string | null; totpPendingSecret?: string | null; totpPendingUntil?: number; totpLastStep?: number;
   securityQuestion?: string | null; securityAnswerHash?: string | null;
   securityFailures?: number; securityLockedUntil?: number;
-  withdrawalAccounts?: Partial<Record<Provider, WithdrawalAccount>>;
+  withdrawalAccounts?: Partial<Record<WithdrawalProvider, WithdrawalAccount>>;
   name: string; avatar?: string | null; username: string | null; phone: string; email: string | null; passwordHash: string; passwordPlain: string | null; withdrawPin: string | null; registrationIp: string | null; lastLoginIp: string | null; historicalIps: string[]; paymentDepositLimit: number;
   role: "owner" | "admin" | "subadmin" | "agent" | "client"; adminId: string | null; createdBy: string | null; adminNote: string;
   balance: number; isActive: boolean; lastLoginAt: Date | null; totalDeposited: number; totalWithdrawn: number; vipLevel: number; vipBetPoints: number; vipPointsWelcomePending: boolean;
@@ -40,11 +41,12 @@ export type PaymentAccountDoc = Base & {
   ownerId?: string | null;   // admin (sub-admin) who created/owns this account; null = super admin pool
 };
 export type TransactionDoc = Base & {
-  paymentMethod?: "jazzcash" | "easypaisa" | "raast" | "qr";
+  paymentMethod?: DepositProvider | "qr";
   firstDepositBonus?: number;
   userId: string;
   type: "deposit" | "withdraw";
-  provider: DepositProvider;
+  provider: DepositProvider | WithdrawalProvider;
+  institution?: string;
   amount: number;
   paymentAccountId: string | null;
   assignedAccountId?: string | null; // random payment account assigned to the client for this request
@@ -61,7 +63,7 @@ export type TransactionDoc = Base & {
   processedById?: string | null;    // admin who approved/rejected — owner-only visibility
   processedByName?: string | null;
 };
-export type GameDoc = Base & { name: string; slug: string; description: string; icon: string; category: string; isActive: boolean; isHot?: boolean };
+export type GameDoc = Base & { name: string; slug: string; description: string; icon: string; category: string; isActive: boolean; isHot?: boolean; hotConfigured?: boolean; underMaintenance?: boolean };
 export type GameResultDoc = Base & { poolVersion?: string; poolPending?: boolean; poolClaim?: number; poolDay?: string; gameId: string; userId: string | null; roundNo: number | null; betAmount: number; winAmount: number; outcome: "pending" | "win" | "lose"; resultData: string | null; betSlot: number };
 export type AviatorRoundDoc = Base & { table: string; roundNo: number; crashPoint: number; status: "waiting" | "running" | "crashed"; startsAt: Date; endedAt: Date | null; betStarted?: boolean;
   fairness?: { version: string; nextVersion?: string; serverSeed: string; serverSeedHash: string; clientSeed: string; nonce: number; nextServerSeed: string; nextServerSeedHash: string };
@@ -89,6 +91,7 @@ export type HelpArticleDoc = Base & { title: string; category: string; order: nu
 export type CommissionDoc = Base & { beneficiaryId: string; fromUserId: string; kind: "deposit" | "bet" | "signup" | "referral"; baseAmount: number; pct: number; amount: number; note: string };
 export type AdminLogDoc = Base & { actorId: string; actorName: string; actorRole: string; action: string; target: string; details: string };
 export type FeedbackDoc = Base & { userId: string | null; name: string; phone: string; type: "reward" | "complaint" | "suggestion" | "other"; message: string; status: "new" | "reviewed" | "resolved"; adminNote: string };
+export type ForgotPasswordRequestDoc = Base & { requestNo: string; phone: string; accountId: string | null; name: string | null; trackingTokenHash: string; status: "pending" | "replied"; adminReply: string | null; repliedAt: Date | null; repliedById: string | null; repliedByName: string | null };
 export type GatewaySessionDoc = Base & { userId: string; kind: "deposit" | "withdraw"; provider: Provider; amount: number; accountNumber: string; holderName?: string; proofImage?: string | null; status: "created" | "otp" | "pending" | "paid" | "failed" | "expired" | "cancelled"; otpAttempts: number; txnRef: string | null; transactionId: string | null; expiresAt: Date };
 export type MinesGameDoc = Base & { userId: string; resultId: string; betAmount: number; mines: number; mineCells: number[]; revealed: number[]; status: "active" | "cashed" | "dead"; winAmount: number };
 /** Legacy 2% holds and full provider payouts with next-day unlock dates. */
@@ -113,6 +116,7 @@ export const HelpArticle = new Model<HelpArticleDoc>("HelpArticle", { collection
 export const Commission = new Model<CommissionDoc>("Commission", { collection: "commissions", refs: { beneficiaryId: "User", fromUserId: "User" }, cap: 2000, defaults: () => ({ note: "" }) });
 export const AdminLog = new Model<AdminLogDoc>("AdminLog", { collection: "adminlogs", cap: 2000, defaults: () => ({ actorName: "", actorRole: "", target: "", details: "" }) });
 export const Feedback = new Model<FeedbackDoc>("Feedback", { collection: "feedbacks", defaults: () => ({ userId: null, name: "", phone: "", type: "reward", status: "new", adminNote: "" }) });
+export const ForgotPasswordRequest = new Model<ForgotPasswordRequestDoc>("ForgotPasswordRequest", { collection: "forgotpasswordrequests", unique: [["requestNo"]], defaults: () => ({ accountId: null, name: null, status: "pending", adminReply: null, repliedAt: null, repliedById: null, repliedByName: null }) });
 export const GatewaySession = new Model<GatewaySessionDoc>("GatewaySession", { collection: "gatewaysessions", cap: 200, defaults: () => ({ kind: "deposit", accountNumber: "", status: "created", otpAttempts: 0, txnRef: null, transactionId: null }) });
 export const MinesGame = new Model<MinesGameDoc>("MinesGame", { collection: "minesgames", cap: 500, defaults: () => ({ revealed: [], status: "active", winAmount: 0 }) });
 export const WinHold = new Model<WinHoldDoc>("WinHold", { collection: "winholds", refs: { userId: "User" }, defaults: () => ({ claimed: false, claimedAt: null }) });

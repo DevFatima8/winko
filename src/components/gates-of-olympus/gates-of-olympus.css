@@ -336,6 +336,7 @@
   filter: blur(1px);
 }
 .symbol.ruby { --symbol: #ff4b67; --symbol-dark: #7d0e2c; }
+.gates-of-olympus-container .olympus-gem { display: block; width: 84%; height: 90%; overflow: visible; filter: drop-shadow(0 3px 2px #190526) drop-shadow(0 0 3px var(--symbol)); }
 .symbol.sapphire { --symbol: #38c5ff; --symbol-dark: #07578e; }
 .symbol.emerald { --symbol: #53e8a6; --symbol-dark: #08764e; }
 .symbol.amethyst { --symbol: #d072ff; --symbol-dark: #69228f; }

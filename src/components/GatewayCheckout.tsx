@@ -136,7 +136,7 @@ export function GatewayCheckout({ id }: { id: string }) {
               <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-600">!</span>
               <div className="text-xl font-black text-slate-900">Request submitted for review</div>
               <p className="text-sm text-slate-600">Admin proof verify karega. Approval ke baad deposit balance mein add hoga ya withdrawal process hogi.</p>
-              <div className="rounded-xl bg-slate-50 p-3 text-left text-sm"><div className="flex justify-between"><span className="text-slate-500">Amount</span><b>Rs. {s.amount.toLocaleString()}</b></div><div className="flex justify-between"><span className="text-slate-500">Reference</span><b className="font-mono">{result?.txnRef ?? s.txnRef}</b></div><div className="flex justify-between"><span className="text-slate-500">Status</span><b className="text-amber-600">Pending admin approval</b></div></div>
+              <div className="rounded-xl bg-slate-50 p-3 text-left text-sm"><div className="flex justify-between"><span className="text-slate-500">Amount</span><b>Rs. {s.amount.toLocaleString()}</b></div><div className="flex justify-between"><span className="text-slate-500">Reference</span><b className="font-mono">{result?.txnRef ?? s.txnRef}</b></div><div className="flex justify-between"><span className="text-slate-500">Status</span><b className="text-amber-600">Your request is in process</b></div></div>
               <Link href="/player/wallet" className="block rounded-xl py-3 text-sm font-black text-white" style={{ background: b.accent }}>Back to wallet</Link>
             </div>
           )}

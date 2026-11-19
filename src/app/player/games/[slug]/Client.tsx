@@ -1,21 +1,12 @@
 "use client";
 import { GameView, GAME_SLUGS } from "@/components/GameView";
-import { usePage, NOT_FOUND, REDIRECT } from "@/lib/useDb";
+import { usePage, NOT_FOUND } from "@/lib/useDb";
 
 export default function GamePageClient({ params, searchParams }: { params?: Record<string, string>; searchParams?: Record<string, string> }) {
   void params; void searchParams;
   return usePage(async () => {
     const { slug } = params ?? {};
     if (!slug || !GAME_SLUGS.includes(slug)) return NOT_FOUND;
-    try {
-      const response = await fetch(`/api/public/data?view=game&slug=${encodeURIComponent(slug)}`, { cache: "no-store" });
-      if (response.ok) {
-        const data = await response.json();
-        if (data && data.active === false) return NOT_FOUND;
-      }
-    } catch {
-      // Gracefully continue for known games
-    }
     const FRAMED_GAMES = [
       "aviator", "aviator-x", "birds-beasts", "blackjack", "chicken-dash", "mines", "dragon-tiger", "limbo",
       "baccarat", "andar-bahar", "chicken-road-2", "plinko", "lucky-777", "dice", "dream-catcher", "european-roulette",

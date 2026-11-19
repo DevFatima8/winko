@@ -15,11 +15,13 @@ function PendingActions({ id, type }: { id: string; type: TransactionType }) {
   const [slip, setSlip] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [reason, setReason] = useState("");
   const run = async (decision: "approved" | "rejected") => {
+    if (decision === "rejected" && !reason.trim()) { setError("Enter a rejection reason."); return; }
     setBusy(true);
     setError("");
     try {
-      const r = await processTransactionAction(id, decision, decision === "rejected" ? "Rejected by admin" : undefined, decision === "approved" && slip ? slip : undefined);
+      const r = await processTransactionAction(id, decision, decision === "rejected" ? reason.trim() : undefined, decision === "approved" && slip ? slip : undefined);
       if (r?.error) setError(r.error);
       else refreshAdminData();
     } catch (reason) {
@@ -44,6 +46,7 @@ function PendingActions({ id, type }: { id: string; type: TransactionType }) {
         <button disabled={busy} onClick={() => run("approved")} className="rounded-lg bg-emerald-500/15 px-2.5 py-1 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/25 disabled:opacity-50">Approve</button>
         <button disabled={busy} onClick={() => run("rejected")} className="rounded-lg bg-red-500/15 px-2.5 py-1 text-xs font-semibold text-red-400 hover:bg-red-500/25 disabled:opacity-50">Reject</button>
       </div>
+      <textarea aria-label="Rejection reason" placeholder="Reason required to reject" maxLength={1000} disabled={busy} value={reason} onChange={event => setReason(event.target.value)} className="w-full rounded-lg border border-slate-600 bg-slate-950 p-2 text-xs text-white" />
       {error && <p role="alert" className="max-w-60 whitespace-normal text-xs text-red-300">{error}</p>}
     </div>
   );
@@ -75,7 +78,7 @@ export default function TransactionsPageClient({ type, params, searchParams }: {
 type TransactionRow = {
   _id: string; userId: { name: string; phone: string } | null; paymentAccountId: { accountTitle: string; accountNumber: string } | null;
   provider: string; amount: number; type: TransactionType; senderNumber: string | null; referenceId: string | null; proofImage?: string | null; slipImage?: string | null;
-  status: string; method: string; adminNote: string | null; createdAt: Date | string; holderName?: string | null;
+  status: string; method: string; adminNote: string | null; createdAt: Date | string; holderName?: string | null; institution?: string;
 };
 
 function TransactionsView({ type, searchParams }: { type: TransactionType; searchParams?: Record<string, string> }) {
@@ -158,6 +161,7 @@ function TransactionsView({ type, searchParams }: { type: TransactionType; searc
                           </>
                         ) : (
                           <div>
+                            {t.institution && <div className="mb-1 font-bold text-white">{t.institution}</div>}
                             Send to: <span className="font-mono text-yellow-400">{t.senderNumber}</span>
                             {t.holderName && <div className="mt-0.5 inline-block rounded bg-emerald-500/10 px-1.5 py-0.5 font-bold text-emerald-300">Holder: {t.holderName}</div>}
                           </div>

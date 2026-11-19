@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createLegacyScene } from "./multiplayer-legacy-harness.mjs";
 
-for (const action of ["bet", "cashout"]) {
-  test(`Aviator ${action} completes in under one second while a history poll is blocked`, async () => {
+for (const table of ["aviator", "aviator-x"]) for (const action of ["bet", "cashout"]) {
+  test(`${table} ${action} completes in under one second while a history poll is blocked`, async () => {
     const s = createLegacyScene();
-    const first = await s.flight.getState("alice", "aviator");
+    const first = await s.flight.getState("alice", table);
     if (action === "cashout") {
-      await s.flight.placeBet("alice", "aviator", 50, 0, first.round.id);
+      await s.flight.placeBet("alice", table, 50, 0, first.round.id);
       s.at(first.round.startsAt + 180);
     }
     let release, started;
@@ -19,13 +19,13 @@ for (const action of ["bet", "cashout"]) {
         await gate;
       }
     });
-    const poll = s.flight.getState("bob", "aviator");
+    const poll = s.flight.getState(table === "aviator-x" ? "alice" : "bob", table);
     await entered;
     let timer;
     try {
       const request = action === "bet"
-        ? s.flight.placeBet("alice", "aviator", 50, 0, first.round.id)
-        : s.flight.cashOut("alice", "aviator", 0, first.round.id);
+        ? s.flight.placeBet("alice", table, 50, 0, first.round.id)
+        : s.flight.cashOut("alice", table, 0, first.round.id);
       const result = await Promise.race([
         request,
         new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("Action waited for history")), 900); }),

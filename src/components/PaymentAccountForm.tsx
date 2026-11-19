@@ -45,9 +45,10 @@ export function PaymentAccountForm() {
         <option value="jazzcash">JazzCash</option>
         <option value="easypaisa">Easypaisa</option>
         <option value="raast">Raast</option>
+        <option value="bank">Bank Transfer</option>
       </select>
       <input name="accountTitle" required placeholder="Account Title (e.g. Ahmed Ali)" className={field} />
-      <input name="accountNumber" required placeholder="Till ID" className={field} />
+      <input name="accountNumber" required placeholder="Till ID / Account number / IBAN" className={field} />
       <label className="flex min-w-0 cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-600 bg-slate-950 px-3 py-2 text-sm text-slate-300 hover:border-yellow-400">
         <span className="shrink-0 rounded-lg bg-slate-800 px-2 py-1 text-xs font-bold text-yellow-300">Upload QR</span>
         <span className="truncate text-xs text-slate-500">{uploading ? "Uploading..." : qr ? "QR uploaded ✓" : "PNG / JPG"}</span>

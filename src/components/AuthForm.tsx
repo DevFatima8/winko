@@ -86,6 +86,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
             {pending ? t("pleaseWait") : mode === "login" ? t("login") : t("register")}
           </button>
         </form>
+        {mode === "login" && <div className="mt-3 text-center"><Link href="/forgot-password" className="text-sm font-bold text-[#ffb800] hover:underline">Forgot password?</Link></div>}
         <p className="mt-5 text-center text-sm text-slate-400">
           {mode === "login" ? (
             <>

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Copy, Upload, XCircle, Gift, Smartphone, ChevronDown, Clock } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import styles from "./DepositFlow.module.css";
 import { depositAction } from "@/lib/clientActions";
 import { compressImage } from "@/lib/imageFile";
@@ -18,6 +19,7 @@ const META: Record<Provider, { name: string; icon: string }> = {
   easypaisa: { name: "Easypaisa", icon: "EasyPaisa.jpeg" },
   jazzcash: { name: "JazzCash", icon: "Jazzcash.jpeg" },
   raast: { name: "Raast", icon: "Raast.jpeg" },
+  bank: { name: "Bank Transfer", icon: "Raast.jpeg" },
 };
 const input = "w-full border border-white/25 bg-black/40 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-[#ffc933] focus:ring-2 focus:ring-[#ffc933]/20";
 const slide = { initial: { opacity: 0, x: 28 }, animate: { opacity: 1, x: 0 }, exit: { opacity: 0, x: -28 }, transition: { duration: 0.28 } };
@@ -69,7 +71,7 @@ export function DepositFlow({ accounts = [], qrAccount = null, initialAmount, mi
   const account = qrMode ? qrAccount : accounts.find((a) => a.provider === provider) ?? null;
   const numAmount = Number(amount);
   const validAmount = Number.isFinite(numAmount) && numAmount > 0 ? numAmount : 0;
-  const providers = (["easypaisa", "jazzcash", "raast"] as const).map((p) => ({ p, has: accounts.some((a) => a.provider === p) }));
+  const providers = (["easypaisa", "bank", "jazzcash", "raast"] as const).map((p) => ({ p, has: accounts.some((a) => a.provider === p) }));
   const qrAccounts = qrAccount ? [qrAccount] : [];
   const bonusFor = (value: number) => firstDepositBonusEligible ? Math.round(value * 5) / 100 : 0;
   const bonus = bonusFor(validAmount);
@@ -199,17 +201,16 @@ export function DepositFlow({ accounts = [], qrAccount = null, initialAmount, mi
                     <button
                       key={p}
                       type="button"
-                      disabled={!has}
                       aria-pressed={on}
                       onClick={() => { setProvider(p); setQrMode(false); setError(null); setCopied(false); }}
-                      className={`relative flex min-h-[48px] items-center gap-2 border p-1.5 text-center transition ${on ? "border-[#ffc933] bg-[var(--wx-card-2)] text-[#ffc933]" : "border-white/25 text-white"} ${has ? "" : "cursor-not-allowed opacity-40"}`}
+                      className={`relative flex min-h-[48px] items-center gap-2 border p-1.5 text-center transition ${on ? "border-[#ffc933] bg-[var(--wx-card-2)] text-[#ffc933]" : "border-white/25 text-white"}`}
                     >
                       <Image src={`/bank-icons/${m.icon}`} alt="" width={32} height={32} className="h-8 w-8 shrink-0 object-contain" />
-                      <span className="flex-1 text-[13px] font-medium sm:text-base">{m.name}{!has && <small className="block text-[9px]">Unavailable</small>}</span>
+                      <span className="flex-1 text-[13px] font-medium sm:text-base">{m.name}{!has && <small className="block text-[9px]">Contact support for account details</small>}</span>
                     </button>
                   );
                 })}
-                <button type="button" disabled={!qrAccounts.length} aria-pressed={qrMode} onClick={() => { if (qrAccount) { setProvider(qrAccount.provider); setQrMode(true); setError(null); setCopied(false); } }} className={`flex min-h-[48px] items-center gap-2 border p-1.5 disabled:opacity-40 ${qrMode ? "border-[#ffc933] bg-[var(--wx-card-2)] text-[#ffc933]" : "border-white/25 text-white"}`}><Image src="/bank-icons/Qr.jpeg" alt="" width={32} height={32} className="h-8 w-8 object-contain" /><span className="flex-1 text-[13px] sm:text-base">QR{!qrAccounts.length && <small className="block text-[9px]">Unavailable</small>}</span></button>
+                <button type="button" aria-pressed={qrMode} onClick={() => { if (qrAccount) setProvider(qrAccount.provider); setQrMode(true); setError(qrAccount ? null : "QR payment details are not configured. Please contact support."); setCopied(false); }} className={`flex min-h-[48px] items-center gap-2 border p-1.5 ${qrMode ? "border-[#ffc933] bg-[var(--wx-card-2)] text-[#ffc933]" : "border-white/25 text-white"}`}><Image src="/bank-icons/Qr.jpeg" alt="" width={32} height={32} className="h-8 w-8 object-contain" /><span className="flex-1 text-[13px] sm:text-base">QR{!qrAccounts.length && <small className="block text-[9px]">Contact support for QR details</small>}</span></button>
               </div>
             </div>
 
@@ -328,10 +329,11 @@ export function DepositFlow({ accounts = [], qrAccount = null, initialAmount, mi
             </motion.div>
             <div role="status" aria-live="polite">
               <div className="text-xl font-black text-white">{paymentStatus === "approved" ? "Your amount is added to the wallet" : paymentStatus === "rejected" ? "Payment was rejected" : "Payment is in process"}</div>
-              <p className="mx-auto mt-1 max-w-sm text-sm text-[#b8a7e6]">{paymentStatus === "approved" ? `Rs. ${numAmount.toLocaleString()} deposit approved.` : paymentStatus === "rejected" ? adminNote || "Please contact support for details." : `Rs. ${numAmount.toLocaleString()} payment is awaiting approval.`}</p>
+              <p className="mx-auto mt-1 max-w-sm text-sm text-[#b8a7e6]">{paymentStatus === "approved" ? `Rs. ${numAmount.toLocaleString()} added to your wallet.` : paymentStatus === "rejected" ? adminNote || "Please contact support for details." : `Rs. ${numAmount.toLocaleString()} payment is in process.`}</p>
             </div>
             {statusError && <p role="alert" className="text-sm text-red-300">{statusError} Retrying automatically.</p>}
             <motion.button whileTap={{ scale: 0.97 }} type="button" onClick={reset} className="btn-gold min-h-[44px] rounded-full px-6 text-sm font-black">Make Another Deposit</motion.button>
+            <Link href="/player" className="rounded-full border border-[#ffc933] px-6 py-3 text-sm font-bold text-[#ffc933]">Back to Games</Link>
           </motion.div>
         )}
       </AnimatePresence>

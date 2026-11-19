@@ -413,7 +413,7 @@ export function AviatorGame({
     const poll = () => {
       if (!active) return;
       retry = setTimeout(poll, FLIGHT_POLL_MS);
-      if (controllers.size < MAX_FLIGHT_READS) return request();
+      if (controllers.size < MAX_FLIGHT_READS + (table === "aviator-x" ? 1 : 0)) return request();
     };
     void poll();
     return () => {

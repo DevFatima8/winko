@@ -16,6 +16,7 @@ type Props = {
   plan: RacePlan | null;
   countdown: number;
   selectedHorseId: number;
+  selectedHorseIds?: number[];
   onSelectHorse: (horseId: number) => void;
   onProgress: (progress: number) => void;
   onComplete: (plan: RacePlan) => void;
@@ -102,6 +103,7 @@ export default function DerbyTrack(props: Props) {
           plan: current.plan,
           countdown: current.countdown,
           selectedHorseId: current.selectedHorseId,
+          selectedHorseIds: current.selectedHorseIds,
           animatePreview: current.previewPlaying,
           reducedMotion: current.reducedMotion,
         });

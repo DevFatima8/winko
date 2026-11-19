@@ -69,7 +69,7 @@ export async function POST(request: Request) {
       paymentAccountId: account._id, assignedAccountId: account._id, accountName: account.accountTitle,
       senderNumber, referenceId: referenceId || null, proofImage, method: "manual",
     });
-    await notifyUser(me.id, "Purchase request received", `Your deposit request of Rs. ${amount.toLocaleString()} has been sent for admin verification.`, "info", { href: "/player/wallet" });
+    await notifyUser(me.id, "Payment is in process", `Your payment of Rs. ${amount.toLocaleString()} is in process.`, "info", { href: "/player/wallet" });
     await notifyAdmins("New deposit request", `${me.name} requested a deposit of Rs. ${amount.toLocaleString()} via ${account.provider}.`, "info", { href: "/admin/deposits?status=pending" });
     const referrer = await User.findById(me.id, "referredBy").lean();
     if (referrer?.referredBy) await notifyUser(String(referrer.referredBy), "New deposit request", `${me.name} requested a deposit of Rs. ${amount.toLocaleString()} via ${account.provider}.`, "info", { href: "/admin/deposits?status=pending" });

@@ -14,7 +14,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const body = await request.json();
     const decision = body.decision;
     if (decision !== "approved" && decision !== "rejected") return NextResponse.json({ error: "Invalid decision." }, { status: 400 });
-    const note = typeof body.note === "string" ? body.note : null;
+    const note = typeof body.note === "string" ? body.note.trim() : null;
+    if (decision === "rejected" && (!note || note.length > 1000)) return NextResponse.json({ error: "Rejection reason is required (1-1000 characters)." }, { status: 400 });
     const slip = typeof body.slipImage === "string" ? body.slipImage : "";
     if (slip && (!/^data:image\/(png|jpe?g|webp);base64,/i.test(slip) || slip.length > 1_500_000)) return NextResponse.json({ error: "Payment slip image invalid ya bohat bari hai." }, { status: 400 });
     const pending = await Transaction.findOne({ _id: oid(id), status: "pending" }).lean();
@@ -45,7 +46,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const actionLabel = decision === "approved" ? "approved" : "rejected";
     const transactionLabel = transaction.type === "deposit" ? "Purchase/deposit" : "Withdrawal";
-    await notifyUser(String(transaction.userId), `${transactionLabel} ${actionLabel}`, `Your ${transactionLabel.toLowerCase()} of Rs. ${transaction.amount.toLocaleString()} has been ${actionLabel} by admin.${note ? ` Note: ${note}` : ""}`, decision === "approved" ? "success" : "warning", { href: "/player/wallet", actorRole: me.dbRole });
+    const message = decision === "rejected"
+      ? `Your ${transactionLabel.toLowerCase()} of Rs. ${transaction.amount.toLocaleString()} was rejected. Reason: ${note}`
+      : transaction.type === "withdraw" ? "Requested money is transferred to your account."
+      : "Your amount is added to the wallet.";
+    await notifyUser(String(transaction.userId), `${transactionLabel} ${actionLabel}`, message, decision === "approved" ? "success" : "warning", { href: transaction.type === "withdraw" ? "/player/withdraw" : "/player/wallet", actorRole: me.dbRole });
     await AdminLog.create({ actorId: me.id, actorName: me.name, actorRole: me.dbRole, action: `${decision}_${transaction.type}`, target: String(transaction.userId), details: `Rs. ${transaction.amount}` });
     return NextResponse.json({ success: `${transactionLabel} ${actionLabel}.` });
   } catch (error) {

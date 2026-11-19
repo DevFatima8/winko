@@ -5,7 +5,7 @@ import { mysqlMultiplayerStore, type MultiplayerTable, type MultiplayerTransacti
 type AssignmentUser = Pick<UserDoc, "_id" | "referredBy" | "assignedAccounts" | "paymentAssignmentTransactions">;
 type AssignmentAccount = Pick<PaymentAccountDoc, "_id" | "provider" | "ownerId" | "isActive" | "qrImage">;
 type AssignmentDeposit = Pick<TransactionDoc, "_id" | "provider" | "paymentAccountId" | "paymentMethod" | "createdAt">;
-const methods = ["jazzcash", "easypaisa", "raast", "qr"] as const;
+const methods = ["jazzcash", "easypaisa", "bank", "raast", "qr"] as const;
 
 export function planPaymentAssignments(user: AssignmentUser, accounts: AssignmentAccount[], users: AssignmentUser[], deposits: AssignmentDeposit[]) {
   const assigned: Record<string, string> = {};

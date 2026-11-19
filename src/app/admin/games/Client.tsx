@@ -1,13 +1,13 @@
 "use client";
 import { Card } from "@/components/Shell";
 import { useState } from "react";
-import { toggleGameAction, toggleGameHotAction } from "@/lib/actions";
+import { toggleGameAction, toggleGameHotAction, toggleGameMaintenanceAction } from "@/lib/actions";
 import { usePage } from "@/lib/useDb";
 import { GameGridSkeleton } from "@/components/lobby/GameGridSkeleton";
 import { refreshAdminData } from "@/lib/adminLiveUpdates";
 import { compareProviderGames } from "@/lib/providerOrder";
 
-type ProviderGame = { _id: string; name: string; slug: string; category: string; isActive: boolean; isHot?: boolean; icon: string; imageUrl: string; stats: { c: number; bet: number; win: number } };
+type ProviderGame = { _id: string; name: string; slug: string; category: string; isActive: boolean; isHot?: boolean; underMaintenance?: boolean; icon: string; imageUrl: string; stats: { c: number; bet: number; win: number } };
 type GamesData = { games: ProviderGame[]; blocked: { _id: string; c: number }[]; level: number };
 
 export default function GamesAdminPageClient({ params, searchParams }: { params?: Record<string, string>; searchParams?: Record<string, string> }) {
@@ -28,12 +28,13 @@ function ProviderGamesManager({ data }: { data: GamesData }) {
       { provider: a.category, title: a.name, id: a.slug },
       { provider: b.category, title: b.name, id: b.slug },
     ));
-    async function updateGame(game: ProviderGame, hot: boolean) {
+    async function updateGame(game: ProviderGame, hot: boolean, maintenance = false) {
       if (pending) return;
       setPending(game.slug);
       setError("");
       try {
-        if (hot) await toggleGameHotAction(game.slug, !game.isHot);
+        if (maintenance) await toggleGameMaintenanceAction(game.slug, !game.underMaintenance);
+        else if (hot) await toggleGameHotAction(game.slug, !game.isHot);
         else await toggleGameAction(game.slug, !game.isActive);
         refreshAdminData();
       } catch (reason) {
@@ -75,6 +76,7 @@ function ProviderGamesManager({ data }: { data: GamesData }) {
                     {g.isHot ? "Remove from Lobby Hot Games" : "Add to Lobby Hot Games"}
                   </button>
                 </form>}
+                {Number(data.level) >= 2 && <button type="button" disabled={pending !== null} onClick={() => void updateGame(g, false, true)} className="mt-2 w-full rounded-xl bg-amber-500/20 py-2 text-sm font-bold text-amber-200 disabled:opacity-50">{g.underMaintenance ? "End Maintenance" : "Put Under Maintenance"}</button>}
               </Card>
             );
           })}

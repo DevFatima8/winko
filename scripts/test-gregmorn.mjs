@@ -386,6 +386,18 @@ test("provider restrictions stop new bets but allow payouts, replays and refunds
   assert.equal(tx.rows.get(`users:${user._id}`).balance, 505);
 });
 
+test("provider maintenance blocks new debits but preserves accepted replays, win-only credits and refunds", async () => {
+  const slug = identity.gregmornGameSlug(session.gameId), catalogGameId = "maintenance-game";
+  const tx = transaction({ [`users:${user._id}`]: user, [`games:${catalogGameId}`]: { _id: catalogGameId, slug, isActive: true } });
+  await wallet.registerGregmornSession(tx, { ...session, catalogGameId });
+  await wallet.processGregmornWalletCallback(tx, write("accepted-maintenance", 20, 0));
+  tx.rows.get(`games:${catalogGameId}`).underMaintenance = true;
+  await assert.rejects(wallet.processGregmornWalletCallback(tx, write("new-maintenance", 10, 0)), /maintenance/);
+  assert.equal((await wallet.processGregmornWalletCallback(tx, write("accepted-maintenance", 20, 0))).balance, 480);
+  assert.equal((await wallet.processGregmornWalletCallback(tx, write("maintenance-payout", 0, 5))).balance, 485);
+  assert.equal((await wallet.processGregmornWalletCallback(tx, rollback("accepted-maintenance", 20))).balance, 505);
+});
+
 test("seamless callbacks reject forged sessions, insufficient funds, malformed amounts and mismatched rollback", async () => {
   const tx = transaction({ [`users:${user._id}`]: user });
   await wallet.registerGregmornSession(tx, session);

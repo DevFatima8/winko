@@ -4,7 +4,7 @@ import test from "node:test";
 import ts from "typescript";
 
 function load(path, imports) {
-  imports = { "@/lib/gameAvailability": { PROVIDER_GAMES_VISIBLE: true }, ...imports };
+  imports = { "@/lib/gameAvailability": { PROVIDER_GAMES_VISIBLE: true }, "@/lib/lobbyGames": { hotGameRank: () => 0 }, ...imports };
   const loaded = { exports: {} };
   const code = ts.transpileModule(readFileSync(path, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },

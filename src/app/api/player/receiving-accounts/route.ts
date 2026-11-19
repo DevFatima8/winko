@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { User } from "@/models";
 import { getServerSessionUser } from "@/lib/serverAuth";
+import { isWithdrawalProvider, receivingAccountError } from "@/lib/paymentMethods";
 
 export async function POST(request: Request) {
   try {
@@ -10,10 +11,11 @@ export async function POST(request: Request) {
     const provider = data.provider;
     const holderName = typeof data.holderName === "string" ? data.holderName.trim() : "";
     const accountNumber = typeof data.accountNumber === "string" ? data.accountNumber.trim() : "";
-    if (provider !== "jazzcash" && provider !== "easypaisa") return NextResponse.json({ error: "JazzCash ya Easypaisa select karein." }, { status: 400 });
-    if (holderName.length < 3 || holderName.length > 100) return NextResponse.json({ error: "Account holder ka naam 3-100 characters mein likhein." }, { status: 400 });
-    if (!/^03\d{9}$/.test(accountNumber)) return NextResponse.json({ error: "Account number 03XXXXXXXXX format mein likhein." }, { status: 400 });
-    const account = { provider, holderName, accountNumber };
+    const institution = typeof data.institution === "string" ? data.institution.trim() : "";
+    if (typeof provider !== "string" || !isWithdrawalProvider(provider)) return NextResponse.json({ error: "Withdrawal method select karein." }, { status: 400 });
+    const error = receivingAccountError(provider, holderName, accountNumber, institution);
+    if (error) return NextResponse.json({ error }, { status: 400 });
+    const account = { provider, holderName, accountNumber, institution };
     const result = await User.updateOne({ _id: me.id }, { $set: { [`withdrawalAccounts.${provider}`]: account } });
     if (!result.matchedCount) return NextResponse.json({ error: "Account nahi mila." }, { status: 404 });
     return NextResponse.json({ account });

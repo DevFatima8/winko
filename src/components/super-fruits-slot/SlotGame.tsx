@@ -111,7 +111,7 @@ const FLOATY: { e: string; x: string; y: string; s: number; d: number }[] = [
 ];
 
 export default function SlotGame() {
-  const [screen, setScreen] = useState<"start" | "game">("start");
+  const [screen, setScreen] = useState<"start" | "game">("game");
   const [balance] = useGameBalance("super-fruits", START_BALANCE);
   const pool = usePoolLifecycle("super-fruits");
   const [loaded, setLoaded] = useState(false);

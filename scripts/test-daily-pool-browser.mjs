@@ -101,6 +101,18 @@ test("explicit zero claim is a real losing wager and participates in no-claim fa
   assert.equal(s.rows.users[0].balance, 935);
 });
 
+test("maintenance blocks new browser stakes while accepted rounds still complete and replay", async () => {
+  const s = scene(), wagerId = randomUUID();
+  await s.lifecycle({ wagerId }, false);
+  s.rows.games[0].underMaintenance = true;
+  await assert.rejects(s.lifecycle({ wagerId: randomUUID() }, false), /maintenance/);
+  await assert.rejects(s.lifecycle({ wagerId, action: "increment", amount: 10 }, false), /maintenance/);
+  const done = await s.lifecycle({ wagerId, action: "complete", amount: 150 }, false);
+  assert.equal(done.balance, 1050);
+  assert.equal(s.rows.gameresults.length, 1);
+  await assert.rejects(s.play({}), /maintenance/);
+});
+
 test("consent, account access, supported games, and genuine positive stakes are enforced", async () => {
   const s = scene();
   await assert.rejects(s.play({ poolVersion: undefined }), /rules/);

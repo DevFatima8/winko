@@ -18,7 +18,7 @@ import { gameBetError } from "./gameBetLimits";
 import { BLAST_OFF_MODEL, BLAST_OFF_PREVIOUS_MODEL, BLAST_OFF_MAX_CASHOUT, blastOffPayout, blastOffMaxCrash, blastOffMaxCashout, isBlastOffModel, type BlastOffModel } from "./blastOffRules";
 
 type Wallet = { _id: string; name: string; role: string; balance: number; isActive: boolean; blockedGames?: string[]; vipBetPoints?: number; updatedAt?: string };
-type CatalogGame = { _id: string; slug: string; isActive: boolean };
+type CatalogGame = { _id: string; slug: string; isActive: boolean; underMaintenance?: boolean };
 type RoomBet = Omit<MultiplayerBet, "mine"> & { userId: string; cashoutMultiplier?: number; createdAt?: number; settledAt?: number; blastModel?: BlastOffModel };
 type Room = {
   _id: string; gameId: string; game: MultiplayerGame; roundNo: number; startedAt: number;
@@ -320,6 +320,7 @@ export function createMultiplayerService(store: MultiplayerStore = mysqlMultipla
           const poolMode = dailyPoolEnabled() && !isCardGame(game) && !isRouletteGame(game) && !isWheelGame(game) && game !== "blast-off";
           if (poolMode && action.poolRulesVersion !== DAILY_POOL_VERSION) throw new MultiplayerError("Read and accept the daily-pool rules before placing a new bet.");
           if (!catalog.isActive) throw new MultiplayerError("Game is currently disabled.", 403);
+          if (catalog.underMaintenance) throw new MultiplayerError("Under maintenance. Please try again later.", 403);
           if (!open && (isCardGame(game) || isRouletteGame(game) || game === "birds-beasts")) throw new MultiplayerError("Betting is closed. Wait for the next round to begin.", 409);
           const expectedRound = room.roundNo + (open ? 0 : 1);
           if (action.roundNo !== expectedRound) throw new MultiplayerError("Round changed. Refresh the live table before betting.", 409);

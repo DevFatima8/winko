@@ -540,10 +540,10 @@ for (const table of ["aviator", "aviator-x"]) {
   });
 }
 
-function refreshFixture() {
+function refreshFixture(table = "aviator") {
   const effects = [], timers = new Map(), intervals = new Map(), warnings = [], errors = [];
   const flightRequests = [];
-  let nextId = 0, captured, requests = 0, succeed = false, flightReply = null;
+  let nextId = 0, captured, requests = 0, succeed = false, flightReply = null, blockedFlights = 0;
   const hookImports = {
     react: {
       useState: initial => [typeof initial === "function" ? initial() : initial, () => {}],
@@ -558,6 +558,10 @@ function refreshFixture() {
       localApi: async (_url, { signal }) => {
         if (_url.startsWith("/api/aviator/flight?")) {
           flightRequests.push(_url);
+          if (blockedFlights > 0) {
+            blockedFlights--;
+            return new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
+          }
           return { ok: true, status: flightReply ? 200 : 204, json: async () => flightReply };
         }
         requests++;
@@ -583,12 +587,13 @@ function refreshFixture() {
     () => 1, () => {},
     { warn: (...args) => warnings.push(args), error: (...args) => errors.push(args) },
   );
-  loadedModule.exports.AviatorGame({});
+  loadedModule.exports.AviatorGame({ table });
   const cleanups = effects.map(fn => fn()).filter(Boolean);
   return {
     captured, warnings, errors, timers, flightRequests,
     get requests() { return requests; },
     succeed: () => { succeed = true; },
+    blockFlights: count => { blockedFlights = count; },
     flightReply: value => { flightReply = value; },
     async pollFlight() {
       const entry = [...timers].find(([, timer]) => timer.delay === 150);
@@ -622,6 +627,22 @@ test("a flight state timeout is a warning with a reconnect message, not a consol
   assert.equal(f.captured.stRef.current.balance, 100);
   assert.ok(![...f.timers.values()].some(timer => timer.delay === 15000));
   f.unmount();
+});
+
+test("Aviator X still receives a fresh sample while three slow flight reads are pending", async () => {
+  const f = refreshFixture("aviator-x");
+  const pending = f.captured.refresh();
+  await Promise.resolve();
+  f.captured.stRef.current = { serverNow: 1000, round: { id: 42 }, balance: 100 };
+  const snapshot = { serverNow: 1200, round: { id: 42, multiplier: 1.2, status: "running" } };
+  f.flightReply(snapshot);
+  f.blockFlights(3);
+  const blocked = [f.pollFlight(), f.pollFlight(), f.pollFlight()];
+  await f.pollFlight();
+  assert.equal(f.flightRequests.length, 4);
+  assert.equal(f.captured.flightSnapshot.current, snapshot);
+  f.unmount();
+  await Promise.all([...blocked, pending]);
 });
 
 test("leaving the game aborts the read without reporting a connection error", async () => {

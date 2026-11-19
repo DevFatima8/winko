@@ -25,7 +25,7 @@ export function HotSlider({ hot, rest, onPhase, onEnd, initialScrollLeft = 0 }: 
   return (
     <div className="min-w-0 space-y-2">
       <div ref={ref} data-provider-slider onScroll={onScroll} role="region" aria-label="Slide through provider games" tabIndex={0}
-        className="relative grid snap-x snap-proximity auto-cols-[calc((100%-1rem)/3)] grid-flow-col grid-rows-2 gap-x-2 gap-y-2 overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:auto-cols-[calc((100%-1.5rem)/4)] md:auto-cols-[calc((100%-3rem)/5)] md:gap-x-3 lg:auto-cols-[calc((100%-3.75rem)/6)] xl:auto-cols-[calc((100%-5.25rem)/8)]">
+        className="relative grid snap-x snap-proximity auto-cols-[calc((100%-1rem)/3)] grid-flow-col grid-rows-3 gap-x-2 gap-y-2 overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:auto-cols-[calc((100%-1.5rem)/4)] md:auto-cols-[calc((100%-3rem)/5)] md:gap-x-3 lg:auto-cols-[calc((100%-3.75rem)/6)] xl:auto-cols-[calc((100%-5.25rem)/8)]">
         {hot}
         {rest.map((node, index) => index === 0 ? <div key="first" ref={restRef} className="snap-start">{node}</div> : node)}
       </div>

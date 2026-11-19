@@ -7,12 +7,14 @@ import { useI18n } from "@/lib/i18n/client";
 import { usePendingPayments } from "@/components/admin/usePendingPayments";
 import { AdminCountBadge } from "@/components/admin/AdminCountBadge";
 import { useSupportUnread } from "@/components/admin/useSupportUnread";
+import { useForgotPasswordUnread } from "@/components/admin/useForgotPasswordUnread";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const { user, loading, error } = useSession();
   const { t } = useI18n();
   const payments = usePendingPayments(user?.role === "admin" ? user.id : undefined);
   const support = useSupportUnread(user?.role === "admin" ? user.id : undefined);
+  const forgotPassword = useForgotPasswordUnread(user?.role === "admin" && user.level >= 2 ? user.id : undefined);
   useEffect(() => { if (!loading && (!user || user.role !== "admin")) window.location.replace("/login"); }, [user, loading]);
   if (loading || !user || user.role !== "admin") return (
     <div className="wx-bg min-h-screen p-4 sm:p-6">
@@ -26,9 +28,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const nav = [
     { href: "/admin", label: t("dashboard"), icon: "📊" },
     { href: "/admin/support", label: t("liveSupportAdmin"), icon: "💬", badge: <AdminCountBadge label={t("liveSupportAdmin")} description="unread messages" count={support.counts?.unread} error={support.error} /> },
+    ...(superNav ? [{ href: "/admin/forgot-password", label: "Forgot Password", icon: "🔐", badge: <AdminCountBadge label="Forgot Password" description="unanswered requests" count={forgotPassword.counts?.unread} error={forgotPassword.error} /> }] : []),
     { href: "/admin/users", label: t("usersAdmin"), icon: "👥" },
     ...(user.level >= 3 ? [{ href: "/admin/devices", label: "Login devices", icon: "🛡️" }] : []),
     { href: "/admin/deposits", label: t("depositsAdmin"), icon: "💳", badge: <AdminCountBadge label={t("depositsAdmin")} count={payments.counts?.deposits} error={payments.error} /> },
+    ...(superNav ? [{ href: "/admin/payments", label: t("paymentAccountsAdmin"), icon: "🏦" }] : []),
     { href: "/admin/withdrawals", label: t("withdrawalsAdmin"), icon: "💳", badge: <AdminCountBadge label={t("withdrawalsAdmin")} count={payments.counts?.withdrawals} error={payments.error} /> },
     { href: "/admin/feedback", label: t("feedbackAdmin"), icon: "📢" },
     { href: "/admin/games", label: superNav ? t("gamesOnOff") : t("gamesAdmin"), icon: "🎮" },
@@ -47,7 +51,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       ...(user.level >= 3 ? [{ href: "/admin/cleanup", label: t("historyCleanup"), icon: "🧹" }] : []),
       { href: "/admin/vip", label: "VIP deposit levels", icon: "👑" },
       { href: "/admin/help", label: t("helpCenterAdmin"), icon: "📘" },
-      { href: "/admin/payments", label: t("paymentAccountsAdmin"), icon: "🏦" },
       { href: "/admin/settings", label: t("settingsAdmin"), icon: "⚙️" },
     ] : []),
     { href: "/admin/account", label: t("myAccountAdmin"), icon: "👤" },

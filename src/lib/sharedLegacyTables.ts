@@ -242,17 +242,17 @@ async function withFlight<T>(fn: (tx: Tx, round: AviatorRoundDoc, gid: string, c
 }
 
 export async function sharedFlightState(userId: string | null, table: flight.Table = "aviator") {
-  const shared = table === "aviator" ? await withFlight(async (tx, round, gid, context) => {
+  const shared = await withFlight(async (tx, round, gid, context) => {
     const current = await flightBets(tx, gid, round.roundNo, context);
     const queued = userId ? (await flightBets(tx, gid, round.roundNo + 1, context)).filter((bet) => bet.userId === userId && bet.outcome === "pending") : [];
     const me = userId ? await tx.get<UserDoc>("users", userId) : null;
     return { round, gid, context, current, queued, me, serverNow: await tx.now() };
-  }, table, userId) : null;
+  }, table, userId);
   const present = async (tx: Pick<Tx, "get" | "findWhere" | "now">, round: AviatorRoundDoc, gid: string, context: FlightContext) => {
-    const current = shared?.current ?? await flightBets(tx, gid, round.roundNo, context);
-    const queued = shared?.queued ?? (userId ? (await flightBets(tx, gid, round.roundNo + 1, context)).filter(bet => bet.userId === userId && bet.outcome === "pending") : []);
+    const current = shared.current;
+    const queued = shared.queued;
     let history = await tx.findWhere<AviatorRoundDoc>("aviatorrounds", { table: context.room, status: "crashed" }, 40, { field: "roundNo", direction: "desc" });
-    if (shared) history = history.filter(row => row.roundNo < round.roundNo || row.roundNo === round.roundNo && round.status === "crashed");
+    history = history.filter(row => row.roundNo < round.roundNo || row.roundNo === round.roundNo && round.status === "crashed");
     for (const completed of history) flight.validateFlightRound(completed, table);
     const own = userId ? await tx.findWhere<LiveResult>("gameresults", { gameId: gid, userId }, 30, { field: "createdAt", direction: "desc" }) : [];
     const top = await tx.findWhere<LiveResult>("gameresults", { gameId: gid, outcome: "win" }, 20, { field: "winAmount", direction: "desc" });
@@ -266,10 +266,10 @@ export async function sharedFlightState(userId: string | null, table: flight.Tab
       const match = bet.resultData?.match(/@\s*([0-9.]+)x/i);
       return match ? Number(match[1]) : null;
     };
-    const me = shared ? shared.me : userId ? await tx.get<UserDoc>("users", userId) : null;
+    const me = shared.me;
     const cfg = flight.TABLES[table];
     const maxMult = round.fairness ? cfg.maxMult : AVIATOR_LEGACY_MAX_CRASH;
-    const serverNow = shared?.serverNow ?? await tx.now();
+    const serverNow = shared.serverNow;
     const snapshot = flightAnimationSnapshot(round, serverNow, cfg.growth, maxMult);
     return {
       serverNow, table,
@@ -287,9 +287,7 @@ export async function sharedFlightState(userId: string | null, table: flight.Tab
       balance: me?.balance ?? 0,
     };
   };
-  return shared
-    ? readMultiplayer(reader => present(reader, shared.round, shared.gid, shared.context))
-    : withFlight(present, table, userId);
+  return readMultiplayer(reader => present(reader, shared.round, shared.gid, shared.context));
 }
 
 export async function sharedFlightBet(userId: string, amount: number, slot: number, expectedRound?: number, table: flight.Table = "aviator", queueIfClosed = false, autoCashout?: number) {

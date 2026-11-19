@@ -33,7 +33,8 @@ function ArrowIcon() {
 export default function HomePage() {
   const [balance, setBalance] = useGameBalance("derby-race", STARTING_BALANCE);
   const pool = usePoolLifecycle("derby-race");
-  const [selectedHorseId, setSelectedHorseId] = useState(1);
+  const [selectedHorseIds, setSelectedHorseIds] = useState<number[]>([1]);
+  const selectedHorseId = selectedHorseIds[0] ?? 1;
   const [stake, setStake] = useState(BET_PRESETS[0]);
   const [round, setRound] = useState(7);
   const [phase, setPhase] = useState<RacePhase>("idle");
@@ -46,21 +47,22 @@ export default function HomePage() {
   const roundRef = useRef(7);
   const planRef = useRef<RacePlan | null>(plan);
   const balanceRef = useRef(balance);
-  const [bet, setBet] = usePoolRoundState<{ horseId: number; amount: number; round?: number } | null>("derby-race", "bet", null);
+  const [bet, setBet] = usePoolRoundState<{ horseId: number; horseIds?: number[]; amount: number; round?: number } | null>("derby-race", "bet", null);
   const betRef = useRef(bet);
-  const queue = useRoundQueue<{ horseId: number; amount: number }>();
+  const queue = useRoundQueue<{ horseId: number; horseIds?: number[]; amount: number }>();
   const settledRace = useRef<string | null>(null);
   const rulesRef = useRef<HTMLDialogElement>(null);
   useEffect(() => { balanceRef.current = balance; }, [balance]);
 
   const selectedHorse = HORSES.find((horse) => horse.id === selectedHorseId) ?? HORSES[0];
   const potentialReturn = Number((stake * PAYOUT_MULTIPLIER).toFixed(2));
-  const canBet = Number.isSafeInteger(stake) && stake >= 10 && stake <= MAX_GAME_BET && stake <= balance;
+  const totalStake = stake * selectedHorseIds.length;
+  const canBet = selectedHorseIds.length > 0 && Number.isSafeInteger(stake) && stake >= 10 && totalStake <= MAX_GAME_BET && totalStake <= balance;
   const canEdit = !bet && !queue.queued;
   const winner = lastResult ? HORSES.find((horse) => horse.id === lastResult.winningHorseId) : null;
 
   const selectHorse = useCallback((horseId: number) => {
-    if (canEdit && HORSES.some((horse) => horse.id === horseId)) setSelectedHorseId(horseId);
+    if (canEdit && HORSES.some((horse) => horse.id === horseId)) setSelectedHorseIds(current => current.includes(horseId) ? current.filter(id => id !== horseId) : [...current, horseId]);
   }, [canEdit]);
 
   const completeRace = useCallback(async (racePlan: RacePlan) => {
@@ -80,14 +82,14 @@ export default function HomePage() {
 
   const reportProgress = useCallback((value: number) => setProgress(value), []);
 
-  const acceptBet = useCallback(async (wager: { horseId: number; amount: number }) => {
+  const acceptBet = useCallback(async (wager: { horseId: number; horseIds?: number[]; amount: number }) => {
     if (betRef.current) return;
-    if (!Number.isSafeInteger(wager.amount) || wager.amount < 10 || wager.amount > balanceRef.current ||
+    if (!Number.isSafeInteger(wager.amount) || wager.amount < 10 || wager.amount > MAX_GAME_BET || wager.amount > balanceRef.current ||
       !HORSES.some((horse) => horse.id === wager.horseId)) {
       queue.setStatus("Bet rejected — invalid stake or insufficient balance");
       return;
     }
-    const selection = { horseId: wager.horseId, round: roundRef.current };
+    const selection = { horseId: wager.horseId, ...(wager.horseIds ? { horseIds: wager.horseIds } : {}), round: roundRef.current };
     const acceptedWager = { ...wager, round: selection.round };
     pool.checkpoint({ bet: acceptedWager });
     if (!await pool.start(wager.amount, () => { }, selection)) return;
@@ -102,10 +104,11 @@ export default function HomePage() {
   }, [queue.setStatus, setBalance]);
 
   const primaryAction = useCallback(() => {
-    const wager = { horseId: selectedHorseId, amount: stake };
+    if (!canBet) { queue.setStatus("Choose runners and a valid stake within your balance and the total wager limit."); return; }
+    const wager = { horseId: selectedHorseId, horseIds: [...selectedHorseIds], amount: totalStake };
     if (phaseRef.current === "idle") acceptBet(wager);
     else queue.enqueue(wager);
-  }, [acceptBet, queue.enqueue, selectedHorseId, stake]);
+  }, [acceptBet, queue.enqueue, selectedHorseId, selectedHorseIds, totalStake, canBet, queue.setStatus]);
 
   useEffect(() => {
     if (phase === "idle") {
@@ -120,7 +123,7 @@ export default function HomePage() {
         }
         const wager = betRef.current;
         if (wager && !planRef.current) {
-          const outcome = await pool.resolveServer({ horseId: wager.horseId, round: wager.round ?? roundRef.current }, { holdBalance: true });
+          const outcome = await pool.resolveServer({ horseId: wager.horseId, ...(wager.horseIds ? { horseIds: wager.horseIds } : {}), round: wager.round ?? roundRef.current }, { holdBalance: true });
           if (disposed) return;
           if (!outcome) {
             queue.setStatus("Waiting for server race confirmation");
@@ -229,6 +232,7 @@ export default function HomePage() {
                 plan={plan}
                 countdown={countdown}
                 selectedHorseId={selectedHorseId}
+                selectedHorseIds={selectedHorseIds}
                 onSelectHorse={selectHorse}
                 onProgress={reportProgress}
                 onComplete={completeRace}
@@ -238,7 +242,7 @@ export default function HomePage() {
             <section className="race-ticker shrink-0 py-1.5 px-3 min-h-0" aria-label="Current race information">
               <div className="ticker-race"><span className="mini-checker" aria-hidden="true" /><div><strong>RACE {String(round).padStart(2, "0")}</strong><small>1,200 M <span>·</span> DIRT</small></div></div>
               <div className="ticker-middle">
-                <span className="ticker-section-label">{phase === "result" ? "FINAL PLACES" : phase === "racing" ? "LIVE POSITIONS" : "YOUR RUNNER"}</span>
+                <span className="ticker-section-label">{phase === "result" ? "FINAL PLACES" : phase === "racing" ? "LIVE POSITIONS" : "YOUR RUNNERS"}</span>
                 {raceOrder.length > 0 ? (
                   <div className="podium-line">
                     {raceOrder.slice(0, 3).map((id, index) => {
@@ -246,7 +250,7 @@ export default function HomePage() {
                       return <span className="podium-entry" key={id}><small>{index + 1}{index === 0 ? "ST" : index === 1 ? "ND" : "RD"}</small><i style={{ background: horse.accent }}>{id}</i><strong>{horse.colorName}</strong></span>;
                     })}
                   </div>
-                ) : <span className="ticker-selection"><i style={{ background: selectedHorse.accent }} />#{selectedHorse.id} {selectedHorse.name}</span>}
+                ) : <span className="ticker-selection"><i style={{ background: selectedHorse.accent }} />{selectedHorseIds.length === 1 ? `#${selectedHorse.id} ${selectedHorse.name}` : selectedHorseIds.length ? selectedHorseIds.map(id => `#${id}`).join(", ") : "Choose runners"}</span>}
               </div>
               <div className="ticker-distance"><strong>{phase === "racing" || phase === "result" ? `${Math.min(1200, Math.floor(progress * 1200))}m` : "AT GATE"}</strong><div className="race-progress"><span style={{ width: `${progress * 100}%` }} /></div></div>
             </section>
@@ -255,30 +259,30 @@ export default function HomePage() {
           <aside className="bet-panel flex flex-col justify-between p-2.5 sm:p-3 shrink-0 rounded-xl border border-[#3b493d] bg-gradient-to-b from-[#202922] to-[#17201e]" aria-labelledby="bet-heading">
             <div className="bet-panel-topline"><span>BET SLIP</span><span className={`slip-status ${canEdit ? "slip-open" : ""}`}><span />{canEdit ? "OPEN" : phase === "result" ? "SETTLED" : "LOCKED"}</span></div>
 
-            <div className="section-heading mt-1"><span>SELECT RUNNER</span><span>6 HORSES</span></div>
+            <div className="section-heading mt-1"><span>SELECT RUNNERS</span><span>6 HORSES</span></div>
             <div className="runner-options grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-1 gap-1.5 mt-1" role="group" aria-label="Choose your horse">
               {HORSES.map((horse) => (
                 <button
                   key={horse.id}
                   type="button"
-                  className={`runner-option py-1 px-1.5 rounded-lg border transition-all ${selectedHorseId === horse.id
+                  className={`runner-option py-1 px-1.5 rounded-lg border transition-all ${selectedHorseIds.includes(horse.id)
                     ? "ring-2 ring-lime-400 border-lime-400 bg-lime-950/40"
                     : "border-white/10 bg-black/30 hover:border-white/30"
                     }`}
                   onClick={() => selectHorse(horse.id)}
                   disabled={!canEdit}
-                  aria-pressed={selectedHorseId === horse.id}
+                  aria-pressed={selectedHorseIds.includes(horse.id)}
                   style={{ "--horse-accent": horse.accent } as CSSProperties}
                 >
                   <span className="option-number text-xs font-black" style={{ color: horse.accent }}>#{horse.id}</span>
                   <span className="option-copy"><strong className="text-[11px] truncate">{horse.name}</strong></span>
-                  <span className="option-odds text-[10px] font-bold text-amber-300">2.75x</span>
+                  <span className="option-odds text-[10px] font-bold text-amber-300">3.25x</span>
                 </button>
               ))}
             </div>
 
             <div className="stake-section mt-1.5">
-              <div className="section-heading"><label htmlFor="wager-amount">WAGER</label><span>MIN Rs. 1</span></div>
+              <div className="section-heading"><label htmlFor="wager-amount">WAGER PER RUNNER</label><span>MIN Rs. 10</span></div>
               <div className="stake-input-wrap mt-1 py-0.5 px-2.5 min-h-0 h-8 rounded-lg border border-white/20 bg-black/40"><Coin small /><input id="wager-amount" type="number" min={10} max={Math.min(MAX_GAME_BET, Math.floor(balance))} step={1} inputMode="numeric" value={stake || ""} onChange={(event) => updateStake(event.currentTarget.value)} disabled={!canEdit} aria-describedby="wager-help" className="text-sm font-bold" /><span>Rs.</span></div>
               <div className="quick-stakes grid grid-cols-5 gap-1 mt-1" aria-label="Quick wager amounts">
                 {QUICK_STAKES.map((amount) => (
@@ -303,6 +307,7 @@ export default function HomePage() {
               <span className="text-[10px] text-lime-300/80 font-bold">RETURN:</span>
               <strong className="text-sm font-black text-lime-300"><Coin small />Rs. {formatCoins(potentialReturn)}</strong>
             </div>
+            <p id="wager-help" className="mt-1 text-xs text-slate-200">{selectedHorseIds.length} selected x Rs. {formatCoins(stake)} = Rs. {formatCoins(totalStake)} total. Return shown is per winning runner.</p>
 
             {lastResult && winner && bet && (
               <div className={`result-callout mt-1 py-1 px-2 rounded-lg border text-xs font-bold ${lastResult.won ? "border-lime-500/60 bg-lime-950/40 text-lime-300" : "border-amber-500/60 bg-amber-950/40 text-amber-300"}`}>
@@ -332,7 +337,7 @@ export default function HomePage() {
         <div className="rules-topline"><span>THE ARCADE CLUB</span><button type="button" aria-label="Close game instructions" onClick={() => rulesRef.current?.close()}>×</button></div>
         <h2>Welcome to the Derby.</h2>
         <p className="rules-subtitle">A retro race. A virtual wager. All for fun.</p>
-        <ol><li><strong>Pick a runner.</strong> Click a coloured horse or use keys 1–6. The number on its yellow saddlecloth is its race number.</li><li><strong>Set your wager.</strong> Use the quick amounts or enter whole coins from your balance.</li><li>        <strong>Place a bet.</strong> Press Place Bet or Space during the ten-second betting window. Races run continuously, even without a wager. A bet placed after betting closes queues one next-race wager, uncharged until the next window and subject to available funds. Cancel it using the queued-bet control.</li><li><strong>Watch the finish.</strong> If your accepted horse wins, you receive 2.75× your stake in total. Bets do not repeat automatically.</li></ol>
+        <ol><li><strong>Pick runners.</strong> Click horses or use keys 1–6 to select or deselect any combination.</li><li><strong>Set your wager per runner.</strong> Total stake is this amount multiplied by the number selected, within your balance and the total wager limit.</li><li><strong>Place a bet.</strong> Press Place Bet or Space during the ten-second betting window. Later bets queue for the next race and are charged only when accepted. Bets do not repeat automatically.</li><li><strong>Watch the finish.</strong> A selected winning horse returns 3.25x its individual stake, including that stake. Selecting all six costs six stakes but returns only one winning stake at 3.25x.</li></ol>
         <button type="button" className="rules-done" onClick={() => rulesRef.current?.close()}>LET&apos;S RACE <ArrowIcon /></button>
       </dialog>
     </main>

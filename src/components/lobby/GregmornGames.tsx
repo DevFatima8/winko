@@ -12,6 +12,7 @@ import { readProviderGameReturn, rememberGameReturn, useGameReturnScroll } from 
 import { matchesProviderCategory } from "@/lib/providerCategories";
 import { compareProviderGames } from "@/lib/providerOrder";
 import { PROVIDER_GAMES_VISIBLE } from "@/lib/gameAvailability";
+import { hotGameRank } from "@/lib/lobbyGames";
 
 export function GregmornGames({ category = "All", lobby = false, catalog }: { category?: string; lobby?: boolean; catalog?: ProviderCatalogState }) {
   const ownCatalog = useProviderCatalog(catalog === undefined);
@@ -68,6 +69,7 @@ export function GregmornGames({ category = "All", lobby = false, catalog }: { ca
   }
 
   async function launch(game: ProviderCatalogGame) {
+    if (game.underMaintenance) { setError("Under maintenance. Please try again later."); return; }
     if (launchController.current) return;
     const controller = new AbortController();
     launchController.current = controller;
@@ -129,7 +131,7 @@ export function GregmornGames({ category = "All", lobby = false, catalog }: { ca
   }
 
   const ordered = games.filter(game => matchesProviderCategory(game, category))
-    .sort((a, b) => Number(b.isHot) - Number(a.isHot) || compareProviderGames(a, b));
+    .sort((a, b) => Number(b.isHot) - Number(a.isHot) || (a.isHot && b.isHot ? hotGameRank(a.slug) - hotGameRank(b.slug) : 0) || compareProviderGames(a, b));
   const visible = ordered.slice(0, limit);
   const cards = visible.map((game, index) => (
     <button key={game.id} type="button" onClick={() => void launch(game)} disabled={launching !== null || game.isEnabled === false}
@@ -138,6 +140,7 @@ export function GregmornGames({ category = "All", lobby = false, catalog }: { ca
       <span className="relative block aspect-square overflow-hidden rounded-t-xl bg-[#100a21]">
         <GameThumbnail src={game.imageUrl} alt={game.title} loading={index < 6 ? "eager" : "lazy"} className={`h-full w-full ${game.imageUrl.startsWith("/games/") && game.imageUrl.endsWith("_1024x700.jpg") ? "object-cover object-center" : "object-contain"}`} />
         {game.isEnabled === false && <span className="absolute left-1 top-1 rounded bg-slate-800 px-2 py-1 text-[10px] font-bold text-white">Unavailable</span>}
+        {game.underMaintenance && <span className="absolute inset-x-0 bottom-0 bg-black/85 p-2 text-center text-[10px] font-bold text-amber-200">Under maintenance</span>}
         {launching === game.id && <span className="absolute inset-0 flex items-center justify-center bg-black/70 text-xs font-bold text-white" role="status">{waiting ? "Waiting for next session…" : "Opening…"}</span>}
       </span>
       {game.isHot && <svg viewBox="0 0 80 40" role="img" aria-label="Hot" className="pointer-events-none absolute left-1 top-1 z-10 h-auto w-[26%]">

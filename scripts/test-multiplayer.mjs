@@ -615,6 +615,16 @@ test("Disabling a catalog game denies new wagers without trapping existing reser
   assert.equal(f.rows("gameresults").length, 1);
 });
 
+test("Maintenance refuses new multiplayer wagers but still settles the accepted winning stake", async () => {
+  const f = fixture(), state = await f.service.read("7-up-down");
+  await f.service.act("7-up-down", "u1", bet(1));
+  f.seed("games", "7-up-down", { _id: "catalog-7-up-down", slug: "7-up-down", isActive: true, underMaintenance: true });
+  await rejects(f.service.act("7-up-down", "u2", bet(1)), 403);
+  f.at(state.round.resultAt);
+  await f.service.read("7-up-down");
+  assert.equal(f.document("users", "u1").balance, 10096);
+});
+
 test("No future outcome leakage; wheel targets appear only after betting closes", async () => {
   for (const game of types.MULTIPLAYER_GAMES) {
     const f = fixture(), state = await f.service.read(game);

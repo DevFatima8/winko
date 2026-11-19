@@ -38,11 +38,11 @@ test("deposit status reads only the authenticated player's deposit and disables 
   assert.equal(approved.headers["Cache-Control"], "no-store");
 });
 
-test("deposit submission returns its saved receipt ID and the client action preserves it", async () => {
+for (const provider of ["jazzcash", "bank", "raast"]) test(`${provider}: deposit submission returns its saved receipt ID and the client action preserves it`, async () => {
   const form = new FormData();
   form.set("amount", "1000");
   form.set("paymentAccountId", "account-1");
-  form.set("paymentMethod", "jazzcash");
+  form.set("paymentMethod", provider);
   form.set("referenceId", "receipt-reference");
   const api = load("src\\app\\api\\player\\deposit\\route.ts", {
     "next/server": { NextResponse: { json: (body, options = {}) => ({ body, status: options.status ?? 200 }) } },
@@ -50,10 +50,10 @@ test("deposit submission returns its saved receipt ID and the client action pres
       oid: value => value,
       Transaction: { create: async data => { assert.equal(data.amount, 1000); assert.equal(data.userId, "player-1"); return { _id: "saved-deposit" }; } },
       User: { findById: () => ({ lean: async () => ({}) }) },
-      PaymentAccount: { findById: () => ({ lean: async () => ({ _id: "account-1", isActive: true, provider: "jazzcash", accountTitle: "Merchant" }) }) },
+      PaymentAccount: { findById: () => ({ lean: async () => ({ _id: "account-1", isActive: true, provider, accountTitle: "Merchant" }) }) },
     },
     "@/lib/serverAuth": { getServerSessionUser: async () => ({ id: "player-1", role: "client", name: "Player" }) },
-    "@/lib/platform": { getSettings: async () => ({}), assignPaymentAccounts: async () => ({ jazzcash: "account-1" }) },
+    "@/lib/platform": { getSettings: async () => ({}), assignPaymentAccounts: async () => ({ [provider]: "account-1" }) },
     "@/lib/notifications": { notifyUser: async () => {}, notifyAdmins: async () => {} },
   });
   const receipt = await api.POST(new Request("http://localhost/api/player/deposit", { method: "POST", body: form }));
@@ -92,6 +92,7 @@ function ui() {
     "framer-motion": { motion: new Proxy({}, { get: (_, key) => `motion-${String(key)}` }), AnimatePresence: "presence" },
     "lucide-react": Object.fromEntries(["Copy", "Upload", "XCircle", "Gift", "Smartphone", "ChevronDown", "Clock"].map(name => [name, name])),
     "next/image": { default: "img" }, "./DepositFlow.module.css": { default: {} },
+    "next/link": { default: "a" },
     "@/lib/clientActions": { depositAction: async () => ({ success: "Payment is in process", transactionId: submittedId }) },
     "@/lib/imageFile": { compressImage: async () => "data:image/jpeg;base64,abc" },
   }, {

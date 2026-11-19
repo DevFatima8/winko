@@ -361,6 +361,7 @@ export type TrackSnapshot = {
   plan: RacePlan | null;
   countdown: number;
   selectedHorseId: number;
+  selectedHorseIds?: number[];
   animatePreview: boolean;
   reducedMotion: boolean;
 };
@@ -471,7 +472,7 @@ export class PixelDerbyRenderer {
       p.text(`RACE ${String(plan.round).padStart(2, "0")}`, 15, 22, "#f6ed8b");
       const meters = `${Math.min(1200, Math.floor(raceProgress * 1200))} M`;
       p.text(meters, 465 - meters.length * 6, 22, "#f4f0df");
-      p.text(`YOUR HORSE : ${snapshot.selectedHorseId}`, 15, 322, "#e9edab");
+      p.text(`YOUR HORSES: ${(snapshot.selectedHorseIds ?? [snapshot.selectedHorseId]).join(",") || "-"}`, 15, 322, "#e9edab");
       const leading = HORSES.map((horse, index) => ({ id: horse.id, value: positions[index] })).sort((a, b) => b.value - a.value)[0];
       p.text(`LEADER : ${leading.id}`, 465 - 60, 322, "#f2ecd6");
     }

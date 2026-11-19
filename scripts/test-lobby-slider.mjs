@@ -1,23 +1,21 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { createElement, useRef } from "react";
+import { createElement } from "react";
+import * as react from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import * as jsxRuntime from "react/jsx-runtime";
 import ts from "typescript";
 
-const path = "src\\components\\lobby\\Lobby.tsx";
-const file = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-const slider = file.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === "HotSlider");
-assert.ok(slider);
-const code = ts.transpileModule(`${slider.getText(file)}\nexport { HotSlider };`, {
+const code = ts.transpileModule(readFileSync("src\\components\\lobby\\HotSlider.tsx", "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
 }).outputText;
 const loaded = { exports: {} };
-new Function("require", "module", "exports", "useRef", code)(name => {
+new Function("require", "module", "exports", code)(name => {
+  if (name === "react") return react;
   assert.equal(name, "react/jsx-runtime");
   return jsxRuntime;
-}, loaded, loaded.exports, useRef);
+}, loaded, loaded.exports);
 
 for (const [hotCount, restCount] of [[2, 4], [3, 5], [6, 3], [0, 4], [4, 0]]) {
   test(`lobby slider packs ${hotCount} hot and ${restCount} other games without blank slots`, () => {
@@ -34,7 +32,7 @@ for (const [hotCount, restCount] of [[2, 4], [3, 5], [6, 3], [0, 4], [4, 0]]) {
     ]);
     assert.doesNotMatch(markup, /aria-hidden|row-start-1/);
     assert.equal((markup.match(/<div/g) ?? []).length, hotCount + restCount + 3 + Number(restCount > 0));
-    assert.match(markup, /grid-rows-2/);
+    assert.match(markup, /grid-flow-col grid-rows-3/);
     assert.match(markup, /aria-label="Previous games"/);
     assert.match(markup, /aria-label="Next games"/);
   });

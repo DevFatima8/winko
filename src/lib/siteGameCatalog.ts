@@ -3,6 +3,7 @@ import { GAME_IMAGES, GAME_SLUGS } from "./gameCatalog";
 import { PROVIDER_GAMES_VISIBLE } from "./gameAvailability";
 import { getProviderCatalog, saveProviderGame, type ProviderCatalogGame } from "./gregmornCatalog";
 import { ensureGames } from "./seed";
+import { HOT_GAME_ORDER } from "./lobbyGames";
 
 export async function getSiteGameCatalog(): Promise<ProviderCatalogGame[]> {
   if (PROVIDER_GAMES_VISIBLE) return getProviderCatalog();
@@ -23,7 +24,8 @@ export async function getSiteGameCatalog(): Promise<ProviderCatalogGame[]> {
     return {
       id: String(game._id), slug, title: game.name, provider: game.category, category,
       imageUrl: GAME_IMAGES[slug], currency: "PKR", isEnabled: true,
-      isActive: game.isActive, isHot: game.isActive && game.isHot === true,
+      isActive: game.isActive, underMaintenance: game.underMaintenance === true,
+      isHot: game.isActive && (game.hotConfigured ? game.isHot === true : game.isHot === true || HOT_GAME_ORDER.some(value => value === slug)),
       isHiddenByAdmin: !game.isActive,
     };
   });

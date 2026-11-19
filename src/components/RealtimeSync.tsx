@@ -42,7 +42,7 @@ export function RealtimeSync({ children }: { children: ReactNode }) {
       const item = JSON.parse((event as MessageEvent).data) as LiveNotification;
       setNotification(item);
       playGameSound("notification");
-      if (item.audience === "user" && item.href?.startsWith("/player/wallet")) {
+      if (item.audience === "user" && (item.href?.startsWith("/player/wallet") || item.href?.startsWith("/player/withdraw"))) {
         window.dispatchEvent(new CustomEvent("wx:balance-update"));
         window.dispatchEvent(new CustomEvent("wx:data-refresh"));
       }

@@ -21,13 +21,13 @@ export async function GET(request: Request) {
             if (!slug || !GAME_SLUGS.includes(slug)) {
                 return NextResponse.json({ active: false }, { status: 404 });
             }
-            let game = await Game.findOne({ slug }, "slug isActive").lean();
+            let game = await Game.findOne({ slug }, "slug isActive underMaintenance").lean();
             if (!game) {
                 const { ensureGames } = await import("@/lib/seed");
                 await ensureGames();
-                game = await Game.findOne({ slug }, "slug isActive").lean();
+                game = await Game.findOne({ slug }, "slug isActive underMaintenance").lean();
             }
-            return NextResponse.json({ active: game?.isActive === true }, { headers: { "Cache-Control": "no-store" } });
+            return NextResponse.json({ active: game?.isActive === true, underMaintenance: game?.underMaintenance === true }, { headers: { "Cache-Control": "no-store" } });
         }
         if (view === "help") {
             await ensureHelp();

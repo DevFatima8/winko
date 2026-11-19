@@ -238,6 +238,7 @@ export async function processGregmornWalletCallback(tx: MultiplayerTransaction, 
     if (betCents > 0) {
       const slug = gregmornGameSlug(session.gameId);
       const game = session.catalogGameId ? await tx.get<GameDoc>("games", session.catalogGameId) : null;
+      if (game?.underMaintenance) throw new GregmornWalletError("Under maintenance. Please try again later.", currentCents / 100);
       if (game?.isActive === false || user.blockedGames?.includes(slug)) {
         throw new GregmornWalletError("This provider game is restricted.", currentCents / 100);
       }

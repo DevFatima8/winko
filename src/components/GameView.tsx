@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { GameAvailability } from "@/components/GameAvailability";
 import dynamic from "next/dynamic";
 import { AviatorGame } from "@/components/AviatorGame";
 import { ChickenRoadGame } from "@/components/ChickenRoadGame";
@@ -351,9 +352,18 @@ export function GameView({ slug, backHref = "/", isScreenFit = false }: { slug: 
   ];
 
   const framed = FRAMED_GAMES.includes(slug);
+  const sharedBack = [
+    "poker-roulette", "mini-roulette", "race-betting", "derby-race", "treasure-bowl", "sweet-bonanza",
+    "super-fruits", "diao-chan", "wheel-betting", "tower-betting", "thai-hi-lo", "tai-xiu", "sic-bo", "keno",
+    "lightning-roulette", "crash-goal", "crash-cricket", "crash-bonus", "three-cards", "three-card-poker",
+    "texas-holdem", "teen-patti-joker", "teen-patti-hukam", "teen-patti-faceoff", "teen-patti-best-of-four",
+    "teen-patti-ak47", "teen-patti-999", "teen-patti", "speed-baccarat", "rummy", "red-vs-black",
+    "monster-hilo", "casino-war", "bollywood-casino", "ludo", "hotline", "blast-off", "poker-betting",
+  ].includes(slug);
 
   // Blackjack settles before its dealer animation and displays its own result afterwards.
   return (
+    <GameAvailability key={slug} slug={slug} backHref={backHref}>
     <SharedGameResults value={slug !== "blackjack"}>
       {slug !== "blackjack" && <GameResultPopup key={slug} game={slug} />}
       <div onClickCapture={handleGameNavigation} data-game-frame={framed ? slug : undefined} className={framed ? "flex h-full min-h-0 w-full flex-1 flex-col overflow-y-auto overscroll-contain" : "space-y-4"}>
@@ -364,6 +374,7 @@ export function GameView({ slug, backHref = "/", isScreenFit = false }: { slug: 
           </div>
         )}
         <div className="relative z-40 flex shrink-0 items-center justify-between gap-2 border-b border-slate-800 bg-slate-950 px-2 py-0.5">
+          {sharedBack && <button type="button" onClick={exitGame} aria-label="Back to games" className="shrink-0 rounded px-2 py-1 text-xs font-bold text-white hover:bg-white/10">&larr; Back</button>}
           <details className="text-xs text-slate-300">
             <summary className="cursor-pointer px-2 py-1">{t("howToPlay")}</summary>
             <p className="absolute left-2 right-2 top-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm shadow-xl">
@@ -375,5 +386,6 @@ export function GameView({ slug, backHref = "/", isScreenFit = false }: { slug: 
         <div className={framed ? "game-surface wx-game min-h-0 w-full flex-1 overflow-y-auto overflow-x-hidden" : "game-surface"}>{isDailyPoolGame(slug) ? <DailyPoolNotice key={slug} game={slug}>{body}</DailyPoolNotice> : body}</div>
       </div>
     </SharedGameResults>
+    </GameAvailability>
   );
 }

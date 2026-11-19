@@ -401,6 +401,7 @@ async function loadData(request: Request) {
                     imageUrl: providerGame.imageUrl,
                     isActive: providerGame.isActive,
                     isHot: providerGame.isHot,
+                    underMaintenance: providerGame.underMaintenance === true,
                     stats: gameStats,
                 };
             });

@@ -18,6 +18,7 @@ function load(path, imports = {}) {
 const availability = load("src\\lib\\gameAvailability.ts");
 const images = load("src\\lib\\gameCatalog.ts");
 const categories = load("src\\lib\\providerCategories.ts");
+const lobbyOrder = load("src\\lib\\lobbyGames.ts");
 const next = { NextResponse: { json: (body, options) => Response.json(body, options) } };
 const jsx = (type, props) => ({ type, props });
 
@@ -30,8 +31,9 @@ function fixture() {
     updateMany: async (filter, update) => {
       writes.push({ filter, update });
       for (const game of rows.values()) {
-        if (filter.slug.$regex.test(game.slug) && !(filter.isActive && !game.isActive)) Object.assign(game, update.$set);
+        if ((typeof filter.slug === "string" ? filter.slug === game.slug : filter.slug.$regex.test(game.slug)) && !(filter.isActive && !game.isActive)) Object.assign(game, update.$set);
       }
+      return { matchedCount: 1 };
     },
   };
   const seed = load("src\\lib\\seed.ts", {
@@ -45,7 +47,7 @@ function fixture() {
   };
   const catalog = load("src\\lib\\siteGameCatalog.ts", {
     "@/models": { Game }, "./seed": seed, "./gameCatalog": images,
-    "./gameAvailability": availability, "./gregmornCatalog": provider,
+    "./gameAvailability": availability, "./gregmornCatalog": provider, "./lobbyGames": lobbyOrder,
   });
   return { rows, Game, seed, catalog, writes, upstream: () => upstream };
 }
@@ -95,6 +97,15 @@ test("admin OFF/Hot and user restrictions operate on local games without resetti
   assert.equal(f.rows.get("mines").isHot, true);
   await actions.toggleGameAction("mines", false);
   assert.equal(f.rows.get("mines").isHot, false);
+  await actions.toggleGameMaintenanceAction("aviator", true);
+  let aviator = (await f.catalog.getSiteGameCatalog()).find(game => game.slug === "aviator");
+  assert.equal(aviator.isActive, true, "Maintenance does not hide the card");
+  assert.equal(aviator.underMaintenance, true);
+  await actions.toggleGameMaintenanceAction("aviator", false);
+  aviator = (await f.catalog.getSiteGameCatalog()).find(game => game.slug === "aviator");
+  assert.equal(aviator.underMaintenance, false);
+  await actions.toggleGameHotAction("aviator", false);
+  assert.equal((await f.catalog.getSiteGameCatalog()).find(game => game.slug === "aviator").isHot, false, "Admin can override the default nine hot games");
   await assert.rejects(actions.toggleGameAction("gregmorn-saved", false), /not available/);
   const route = load("src\\app\\api\\public\\data\\route.ts", {
     "next/server": next, "@/models": {}, "@/lib/serverAuth": { getServerSessionUser: async () => ({ blockedGames: ["aviator"] }) },
@@ -120,23 +131,36 @@ test("local cards keep the existing presentation and navigate to local engines w
     react: { useId: () => "games", useState: initial => [initial, () => {}], useEffect: () => {}, useRef: () => ({ current: null }) },
     "next/navigation": { useRouter: () => ({ push: href => navigations.push(href) }) },
     "@/lib/auth": { getCurrentUser: async () => user },
-    "./GameThumbnail": { GameThumbnail: "thumbnail" }, "./GameGridSkeleton": {}, "./HotSlider": {},
+    "./GameThumbnail": { GameThumbnail: "thumbnail" }, "./GameGridSkeleton": {}, "./HotSlider": { HotSlider: "slider" },
     "@/lib/useProviderCatalog": { useProviderCatalog: () => ({}) },
     "@/lib/gameNavigation": { useGameReturnScroll: () => {}, rememberGameReturn: value => returns.push(value) },
     "@/lib/providerCategories": categories, "@/lib/providerOrder": load("src\\lib\\providerOrder.ts"),
     "@/lib/gameAvailability": availability,
+    "@/lib/lobbyGames": lobbyOrder,
   });
-  const tree = component.GregmornGames({ catalog: { games, loading: false, error: "" } });
+  games.find(game => game.slug === "aviator").underMaintenance = true;
+  const tree = component.GregmornGames({ lobby: true, catalog: { games, loading: false, error: "" } });
   const cards = [];
+  let slider;
   function visit(node) {
     if (Array.isArray(node)) node.forEach(visit);
     else if (node && typeof node === "object") {
+      if (node.type === "slider") {
+        slider = node;
+        visit(node.props.hot);
+        visit(node.props.rest);
+      }
       if (node.type === "button" && node.props.onClick && node.props.className?.includes("group relative")) cards.push(node);
       visit(node.props?.children);
     }
   }
   visit(tree);
-  assert.equal(cards.length, 60, "existing Load More page size stays unchanged");
+  assert.ok(slider, "home games use the horizontal slider");
+  assert.equal(cards.length, 60, "initial slider batch stays unchanged");
+  cards[0].props.onClick();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(navigations.length, 0, "Maintenance cards never launch");
+  games.find(game => game.slug === "aviator").underMaintenance = false;
   cards[0].props.onClick();
   await new Promise(resolve => setImmediate(resolve));
   assert.match(navigations[0], /^\/player\/games\//);
@@ -145,6 +169,10 @@ test("local cards keep the existing presentation and navigate to local engines w
   await new Promise(resolve => setImmediate(resolve));
   assert.match(navigations[1], /^\/games\//);
   assert.equal(returns.length, 2);
+  assert.deepEqual(cards.slice(0, 9).map(card => {
+    const text = card.props.children.find(child => child?.type === "span" && typeof child.props.children === "string");
+    return text.props.children;
+  }), lobbyOrder.HOT_GAME_ORDER.map(slug => games.find(game => game.slug === slug).title));
 });
 
 test("public availability respects admin OFF and does not reactivate games", async () => {
@@ -157,9 +185,9 @@ test("public availability respects admin OFF and does not reactivate games", asy
     "@/lib/seed": { ensureGames: async () => {} },
   });
   const request = () => new Request("https://site.example/api/public/data?view=game&slug=mines");
-  assert.deepEqual(await (await route.GET(request())).json(), { active: false });
+  assert.deepEqual(await (await route.GET(request())).json(), { active: false, underMaintenance: false });
   active = true;
-  assert.deepEqual(await (await route.GET(request())).json(), { active: true });
+  assert.deepEqual(await (await route.GET(request())).json(), { active: true, underMaintenance: false });
 });
 
 test("admin game controls, restrictions and results all list local games with correct saved totals and artwork", async () => {

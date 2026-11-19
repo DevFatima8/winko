@@ -19,6 +19,9 @@ export type RacePlan = {
   selectedHorseId: number;
   stake: number;
   playerWon: boolean;
+  selectedHorseIds?: number[];
+  stakePerHorse?: number;
+  payoutMultiplier?: number;
   finishingPaces: number[];
   seed: number;
 };
@@ -36,7 +39,7 @@ export type RaceResult = {
 
 export const STARTING_BALANCE = 1_000;
 export const WIN_PROBABILITY = 0.3;
-export const PAYOUT_MULTIPLIER = 2.75;
+export const PAYOUT_MULTIPLIER = 3.25;
 export const RACE_DURATION = 12_000;
 export const RACE_DISTANCE = 1_800;
 export const SCREEN_WIDTH = 480;
@@ -73,6 +76,7 @@ export function makeRacePlan(selectedHorseId: number, stake: number, round: numb
     selectedHorseId,
     stake,
     playerWon,
+    payoutMultiplier: PAYOUT_MULTIPLIER,
     finishingPaces: HORSES.map((horse) => horse.id === winnerId ? 1 : 0.916 + rng() * 0.062),
     seed: rng() * 100,
   };
@@ -103,7 +107,7 @@ export function settleRace(plan: RacePlan): RaceResult {
     selectedHorseId: plan.selectedHorseId,
     won: plan.playerWon,
     stake: plan.stake,
-    payout: plan.playerWon ? Number((plan.stake * PAYOUT_MULTIPLIER).toFixed(2)) : 0,
+    payout: plan.playerWon ? Number(((plan.stakePerHorse ?? plan.stake) * (plan.payoutMultiplier ?? 2.75)).toFixed(2)) : 0,
     order,
   };
 }
