@@ -156,6 +156,33 @@ for (const type of ["deposit", "withdraw"]) {
   });
 }
 
+test("pending withdrawals remain available for staff approval", async () => {
+  const notices = [], refunds = [];
+  const pending = { _id: "tx", userId: "alice", amount: 500, type: "withdraw", status: "pending" };
+  let updated;
+  const api = load("src\\app\\api\\admin\\transactions\\[id]\\route.ts", {
+    "next/server": next, "@/lib/auth": { isStaff: () => true },
+    "@/lib/serverAuth": { getServerSessionUser: async () => ({ id: "admin", dbRole: "admin", level: 2 }) },
+    "@/lib/notifications": { notifyUser: async (...args) => notices.push(args) },
+    "@/lib/platform": { recomputeVip: async () => {} }, "@/lib/depositApproval": {},
+    "@/models": {
+      oid: id => id, PaymentAccount: {}, AdminLog: { create: async () => {} },
+      User: { updateOneAtomic: async (...args) => refunds.push(args) },
+      Transaction: {
+        findOne: () => ({ lean: async () => pending }),
+        updateOneAtomic: async (filter, update) => { updated = { filter, update }; return { modifiedCount: 1 }; },
+        findById: () => ({ lean: async () => ({ ...pending, status: "approved" }) }),
+      },
+    },
+  });
+  const response = await api.PATCH(new Request("http://local/transaction/tx", { method: "PATCH", body: JSON.stringify({ decision: "approved" }) }), { params: Promise.resolve({ id: "tx" }) });
+  assert.equal(response.status, 200);
+  assert.equal(updated.filter.status, "pending");
+  assert.equal(updated.update.$set.status, "approved");
+  assert.equal(refunds.length, 0);
+  assert.equal(notices[0][2], "Requested money is transferred to your account.");
+});
+
 function withdrawalUI(limits = { min: 10 }) {
   const states = [], effects = [], pending = [], intervals = new Map(), browser = new EventTarget();
   let index = 0, effectIndex = 0, seq = 0, reply = { status: "pending" }, fail = false, missingReceipt = false;
@@ -163,7 +190,7 @@ function withdrawalUI(limits = { min: 10 }) {
   browser.clearInterval = id => intervals.delete(id);
   const requests = [];
   const { WithdrawRequest } = load("src\\components\\WithdrawRequest.tsx", {
-    "react/jsx-runtime": jsx, "next/link": { default: "a" },
+    "react/jsx-runtime": jsx, "next/link": { default: "a" }, "next/image": { default: "img" },
     react: {
       useState(initial) { const i = index++; if (!(i in states)) states[i] = typeof initial === "function" ? initial() : initial; return [states[i], value => { states[i] = typeof value === "function" ? value(states[i]) : value; }]; },
       useCallback: fn => fn,
