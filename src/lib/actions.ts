@@ -24,7 +24,8 @@ export async function setWithdrawPinAction(_: ActionState, form: FormData): Prom
   if (pin !== confirm) return { error: "PIN match nahi karta." };
   const u = await User.findById(me.id, "withdrawPin");
   if (u?.withdrawPin && u.withdrawPin !== current) return { error: "Purana PIN ghalat hai." };
-  await User.updateOne({ _id: oid(me.id) }, { $set: { withdrawPin: pin } });
+  const updated = await User.updateOne({ _id: oid(me.id) }, { $set: { withdrawPin: pin } });
+  if (!updated.matchedCount) return { error: "Account nahi mila. PIN save nahi hua." };
   revalidatePath("/player/profile");
   return { success: "Withdrawal PIN set ho gaya." };
 }

@@ -71,7 +71,8 @@ export async function getSettings(forceRefresh = false): Promise<SettingsDoc> {
   }
   if (!s.withdrawalMinimum500Migrated) {
     const vipLevels = s.vipLevels.map(level => ({ ...level, minWithdraw: 500 }));
-    await Settings.updateOne({ key: "main" }, { $set: { vipLevels, "wallet.minWithdraw": 500, withdrawalMinimum500Migrated: true } });
+    const migrated = await Settings.updateOneAtomic({ _id: s._id, withdrawalMinimum500Migrated: { $ne: true } }, { $set: { vipLevels, "wallet.minWithdraw": 500, withdrawalMinimum500Migrated: true } });
+    if (!migrated.modifiedCount) return getSettings(true);
     s = { ...s, vipLevels, wallet: { ...s.wallet, minWithdraw: 500 }, withdrawalMinimum500Migrated: true };
   }
   if (!Array.isArray((s as SettingsDoc & { leaderboard?: SettingsDoc["leaderboard"] }).leaderboard)) {

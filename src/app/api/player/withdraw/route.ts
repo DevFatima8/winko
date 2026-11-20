@@ -28,7 +28,7 @@ export async function POST(request: Request) {
         const me = await getServerSessionUser();
         if (!me || me.role !== "client") return NextResponse.json({ error: "Login required." }, { status: 401 });
         const form = await request.formData();
-        const amount = Math.floor(Number(form.get("amount")));
+        const amount = Number(form.get("amount"));
         const provider = String(form.get("provider") ?? "");
         const accountNumber = String(form.get("accountNumber") ?? "").trim();
         const holderName = String(form.get("holderName") ?? form.get("accountName") ?? "").trim();
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
         const settings = await getSettings();
         const { cur } = vipInfo(user.vipLevel ?? 0, settings.vipLevels);
         const min = cur?.minWithdraw ?? settings.wallet?.minWithdraw ?? 500;
-        if (!Number.isFinite(amount) || amount < min) return NextResponse.json({ error: `Minimum withdraw Rs. ${min} hai.` }, { status: 400 });
+        if (!Number.isInteger(amount) || amount < min) return NextResponse.json({ error: `Minimum withdraw Rs. ${min} hai aur amount whole rupees mein honi chahiye.` }, { status: 400 });
         const countToday = await withdrawalCountToday(me.id);
         if (cur?.withdrawalsPerDay && countToday >= cur.withdrawalsPerDay) return NextResponse.json({ error: `Aapki VIP level (${cur.name}) par rozana ${cur.withdrawalsPerDay} withdrawals allowed hain.` }, { status: 400 });
         if (cur?.perWithdrawMax && amount > cur.perWithdrawMax) return NextResponse.json({ error: `Aapki VIP level (${cur.name}) par ek withdraw max Rs. ${cur.perWithdrawMax.toLocaleString()} hai.` }, { status: 400 });
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
 
         const assignedId = (user.assignedAccounts?.[provider] as string) ?? null;
         const account = assignedId ? await PaymentAccount.findById(assignedId).lean() : null;
-        const update = await User.updateOne({ _id: oid(me.id), balance: { $gte: amount } }, { $inc: { balance: -amount } });
+        const update = await User.updateOneAtomic({ _id: oid(me.id), balance: { $gte: amount } }, { $inc: { balance: -amount } });
         if (!update.modifiedCount) return NextResponse.json({ error: "Insufficient balance." }, { status: 400 });
         const transaction = await Transaction.create({
             userId: oid(me.id), type: "withdraw", provider, amount, senderNumber: accountNumber, holderName, institution,

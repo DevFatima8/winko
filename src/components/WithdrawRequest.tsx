@@ -57,6 +57,7 @@ export function WithdrawRequest({ balance, hasPin, limits, initialAccounts = {} 
   const [pinReady, setPinReady] = useState(hasPin);
   const [pinSavedMessage, setPinSavedMessage] = useState("");
   const [showPin, setShowPin] = useState(false);
+  const [pin, setPin] = useState("");
   const pinSaved = useCallback((savedPin: string) => {
     setPinReady(true);
     setPin(savedPin);
@@ -68,7 +69,6 @@ export function WithdrawRequest({ balance, hasPin, limits, initialAccounts = {} 
   const [adminNote, setAdminNote] = useState("");
   const [statusError, setStatusError] = useState("");
   const [amount, setAmount] = useState("");
-  const [pin, setPin] = useState("");
   const [bal, setBal] = useState(balance);
   const [used, setUsed] = useState(limits?.usedToday ?? 0);
   const [count, setCount] = useState(limits?.withdrawalsToday ?? 0);

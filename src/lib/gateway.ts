@@ -102,8 +102,8 @@ export async function verifyOtp(userId: string, id: string, otp: string) {
   } else {
     const upd = await User.updateOne({ _id: uid, balance: { $gte: s.amount } }, { $inc: { balance: -s.amount } });
     if (!upd.modifiedCount) { s.status = "failed"; await s.save(); return { error: "Insufficient balance.", failed: true }; }
-    const tx = await Transaction.create({ userId: uid, type: "withdraw", provider: s.provider, amount: s.amount, senderNumber: s.accountNumber, holderName: s.holderName ?? "", accountName: "Client payout", referenceId: s.txnRef || ref, method: "gateway", status: "pending", adminNote: "Waiting for admin verification" });
-    await notifyUser(userId, "Withdrawal request received", `Your withdrawal of Rs. ${s.amount.toLocaleString()} is pending admin verification.`, "info", { href: "/player/wallet" });
+    const tx = await Transaction.create({ userId: uid, type: "withdraw", provider: s.provider, amount: s.amount, senderNumber: s.accountNumber, holderName: s.holderName ?? "", accountName: "Client payout", referenceId: s.txnRef || ref, method: "gateway", status: "pending", adminNote: null });
+    await notifyUser(userId, "Withdrawal request received", `Your withdrawal request of Rs. ${s.amount.toLocaleString()} is in process.`, "info", { href: "/player/wallet" });
     await notifyAdmins("New withdrawal request", `A client submitted a gateway withdrawal of Rs. ${s.amount.toLocaleString()} via ${s.provider}.`, "warning", { href: "/admin/withdrawals?status=pending" });
     s.transactionId = tx._id;
   }

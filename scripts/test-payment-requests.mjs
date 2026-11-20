@@ -17,6 +17,36 @@ function load(file, imports = {}, globals = {}) {
 const methods = load("src\\lib\\paymentMethods.ts");
 const next = { NextResponse: { json: (body, options) => Response.json(body, options) } };
 
+test("existing withdrawal minimums migrate once without changing configured maximums", async () => {
+  let settings = {
+    _id: "settings", vipLevels: [{ level: 0, minWithdraw: 1000, perWithdrawMax: 600, dailyWithdrawLimit: 700 }],
+    wallet: { minWithdraw: 1000 }, leaderboard: [],
+    referral: { depositCommissionPct: 1.5, referralDepositBonus: 0, betCommissionPct: 0, agentDepositCommissionPct: 0 },
+  };
+  let migrations = 0;
+  const platform = load("src\\lib\\platform.ts", {
+    "./mongo": { dbConnect: async () => {} }, "./notifications": {}, "./seed": {}, "./paymentAssignments": {}, "./providerWinnings": {},
+    "@/models": { Settings: {
+      findOne: () => ({ lean: async () => structuredClone(settings) }),
+      updateOneAtomic: async (filter, update) => {
+        assert.equal(filter._id, "settings");
+        migrations++;
+        settings = { ...settings, vipLevels: update.$set.vipLevels, wallet: { minWithdraw: update.$set["wallet.minWithdraw"] }, withdrawalMinimum500Migrated: true };
+        return { modifiedCount: 1 };
+      },
+    } },
+  });
+  let result = await platform.getSettings();
+  assert.equal(result.vipLevels[0].minWithdraw, 500);
+  assert.equal(result.wallet.minWithdraw, 500);
+  assert.equal(result.vipLevels[0].perWithdrawMax, 600);
+  assert.equal(result.vipLevels[0].dailyWithdrawLimit, 700);
+  settings.vipLevels[0].minWithdraw = 800;
+  result = await platform.getSettings(true);
+  assert.equal(result.vipLevels[0].minWithdraw, 800);
+  assert.equal(migrations, 1);
+});
+
 test("withdrawal destinations persist mobile numbers, bank IBANs, crypto networks and arbitrary services", async () => {
   let saved;
   const api = load("src\\app\\api\\player\\receiving-accounts\\route.ts", {
@@ -55,11 +85,11 @@ test("withdrawal tracking is owner scoped and expanded destinations retain payme
   const api = load("src\\app\\api\\player\\withdraw\\route.ts", {
     "next/server": next, "@/lib/serverAuth": { getServerSessionUser: async () => viewer },
     "@/lib/paymentMethods": methods,
-    "@/lib/platform": { getSettings: async () => ({ wallet: { minWithdraw: 10 } }), vipInfo: () => ({}), withdrawalCountToday: async () => 0, withdrawnToday: async () => 0 },
+    "@/lib/platform": { getSettings: async () => ({ wallet: { minWithdraw: 500 } }), vipInfo: () => ({ cur: { minWithdraw: 500, perWithdrawMax: 700, dailyWithdrawLimit: 700 } }), withdrawalCountToday: async () => 0, withdrawnToday: async () => 0 },
     "@/lib/notifications": { notifyUser: async (...args) => notices.push(args), notifyAdmins: async () => {} },
     "@/models": {
       oid: id => id, PaymentAccount: {},
-      User: { findById: () => ({ lean: async () => ({ withdrawPin: "1234" }) }), updateOne: async (filter, update) => { debits.push({ filter, update }); return { modifiedCount: 1 }; } },
+      User: { findById: () => ({ lean: async () => ({ withdrawPin: "1234" }) }), updateOneAtomic: async (filter, update) => { debits.push({ filter, update }); return { modifiedCount: 1 }; } },
       Transaction: {
         findOne: query => { queries.push(query); return { lean: async () => row }; },
         create: async data => { created = data; return { _id: "saved-withdrawal", ...data }; },
@@ -78,14 +108,19 @@ test("withdrawal tracking is owner scoped and expanded destinations retain payme
   viewer = { id: "alice", role: "client" };
   for (const provider of ["bank", "crypto", "other"]) {
     const form = new FormData();
-    for (const [key, value] of Object.entries({ provider, institution: "Test destination", accountNumber: "Address-1234", holderName: "Test holder", amount: "100", pin: "1234" })) form.set(key, value);
+    for (const [key, value] of Object.entries({ provider, institution: "Test destination", accountNumber: "Address-1234", holderName: "Test holder", amount: "500", pin: "1234" })) form.set(key, value);
+    for (const invalid of ["499", "500.5", "701"]) {
+      form.set("amount", invalid);
+      assert.equal((await api.POST(new Request("http://local/withdraw", { method: "POST", body: form }))).status, 400);
+    }
+    form.set("amount", "500");
     const reply = await api.POST(new Request("http://local/withdraw", { method: "POST", body: form }));
     assert.equal(reply.status, 200);
     assert.deepEqual(await reply.json(), { success: "Your request is in process", transactionId: "saved-withdrawal" });
     assert.equal(created.provider, provider);
     assert.equal(created.institution, "Test destination");
     assert.equal(created.senderNumber, "Address-1234");
-    assert.equal(debits.at(-1).update.$inc.balance, -100);
+    assert.equal(debits.at(-1).update.$inc.balance, -500);
     assert.match(notices.at(-1)[2], /request is in process/);
   }
 });
@@ -121,7 +156,7 @@ for (const type of ["deposit", "withdraw"]) {
   });
 }
 
-function withdrawalUI() {
+function withdrawalUI(limits = { min: 10 }) {
   const states = [], effects = [], pending = [], intervals = new Map(), browser = new EventTarget();
   let index = 0, effectIndex = 0, seq = 0, reply = { status: "pending" }, fail = false, missingReceipt = false;
   browser.setInterval = fn => { intervals.set(++seq, fn); return seq; };
@@ -146,7 +181,7 @@ function withdrawalUI() {
     index = effectIndex = 0;
     const nodes = [];
     const visit = node => { if (Array.isArray(node)) node.forEach(visit); else if (node && typeof node === "object") { nodes.push(node); visit(node.props?.children); } };
-    visit(WithdrawRequest({ hasPin, balance: 1000, limits: { min: 10 }, initialAccounts: { bank: { provider: "bank", holderName: "Test holder", accountNumber: "PK12345678", institution: "Test bank" } } }));
+    visit(WithdrawRequest({ hasPin, balance: 1000, limits, initialAccounts: { bank: { provider: "bank", holderName: "Test holder", accountNumber: "PK12345678", institution: "Test bank" } } }));
     while (pending.length) pending.shift()();
     return nodes;
   };
@@ -165,6 +200,16 @@ function withdrawalUI() {
     unmount() { effects.forEach(effect => effect.cleanup?.()); },
   };
 }
+
+test("withdrawal form shows the minimum but keeps the maximum enforced without advertising it", () => {
+  const h = withdrawalUI({ min: 500, perMax: 700 });
+  const input = h.render().find(node => node.props?.id === "wd-amount");
+  assert.equal(input.props.min, 500);
+  assert.equal(input.props.max, 700);
+  assert.match(input.props.placeholder, /500/);
+  assert.doesNotMatch(input.props.placeholder, /max/i);
+  h.unmount();
+});
 
 test("bank-only withdrawal selection submits, polls confirmed status, retries failures and provides a home button", async () => {
   const h = withdrawalUI();
@@ -185,12 +230,38 @@ test("withdrawal rejection displays the admin reason and inline PIN setup reuses
   const h = withdrawalUI();
   const pin = h.render(false).find(node => node.type === "pin-form");
   assert.equal(pin.props.hasPin, false);
-  pin.props.onSuccess();
+  pin.props.onSuccess("1234");
+  let field = h.render().find(node => node.props?.id === "wd-pin");
+  assert.equal(field.props.value, "1234");
+  assert.equal(field.props.type, "text");
+  h.render().find(node => node.type === "button" && node.props.children === "Hide").props.onClick();
+  field = h.render().find(node => node.props?.id === "wd-pin");
+  assert.equal(field.props.value, "1234");
+  assert.equal(field.props.type, "password");
   await h.submit();
   h.status({ status: "rejected", adminNote: "Receiving account is incorrect" }); await h.tick();
   assert.ok(h.text("Withdrawal was rejected. Reason: Receiving account is incorrect"));
   assert.equal(h.intervals.size, 0);
   h.unmount();
+});
+
+test("PIN form transfers the entered PIN only after successful saving", async () => {
+  let save = async () => ({ error: "PIN invalid" });
+  let callbackPin;
+  const { PinForm } = load("src\\components\\ProfileForms.tsx", {
+    "react/jsx-runtime": jsx,
+    react: { useActionState: action => [undefined, action, false], useState: initial => [initial, () => {}] },
+    "@/lib/actions": { setWithdrawPinAction: (...args) => save(...args) },
+    "@/lib/i18n/client": { useI18n: () => ({ t: value => value }) },
+  });
+  const form = new FormData();
+  form.set("pin", "1234");
+  const action = PinForm({ hasPin: false, onSuccess: pin => { callbackPin = pin; } }).props.action;
+  await action(undefined, form);
+  assert.equal(callbackPin, undefined);
+  save = async () => ({ success: "saved" });
+  await action(undefined, form);
+  assert.equal(callbackPin, "1234");
 });
 
 test("missing withdrawal receipt never shows confirmed submission", async () => {
