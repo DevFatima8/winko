@@ -19,7 +19,7 @@ const META: Record<Provider, { name: string; icon: string }> = {
   easypaisa: { name: "Easypaisa", icon: "EasyPaisa.jpeg" },
   jazzcash: { name: "JazzCash", icon: "Jazzcash.jpeg" },
   raast: { name: "Raast", icon: "Raast.jpeg" },
-  bank: { name: "Bank Transfer", icon: "Raast.jpeg" },
+  bank: { name: "Bank Transfer", icon: "Bank_Transfer.ico" },
 };
 const input = "w-full border border-white/25 bg-black/40 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-[#ffc933] focus:ring-2 focus:ring-[#ffc933]/20";
 const slide = { initial: { opacity: 0, x: 28 }, animate: { opacity: 1, x: 0 }, exit: { opacity: 0, x: -28 }, transition: { duration: 0.28 } };
@@ -205,7 +205,7 @@ export function DepositFlow({ accounts = [], qrAccount = null, initialAmount, mi
                       onClick={() => { setProvider(p); setQrMode(false); setError(null); setCopied(false); }}
                       className={`relative flex min-h-[48px] items-center gap-2 border p-1.5 text-center transition ${on ? "border-[#ffc933] bg-[var(--wx-card-2)] text-[#ffc933]" : "border-white/25 text-white"}`}
                     >
-                      <Image src={`/bank-icons/${m.icon}`} alt="" width={32} height={32} className="h-8 w-8 shrink-0 object-contain" />
+                      <Image src={`/bank-icons/${m.icon}`} unoptimized={m.icon.endsWith(".ico")} alt="" width={32} height={32} className="h-8 w-8 shrink-0 object-contain" />
                       <span className="flex-1 text-[13px] font-medium sm:text-base">{m.name}{!has && <small className="block text-[9px]">Contact support for account details</small>}</span>
                     </button>
                   );
@@ -265,7 +265,7 @@ export function DepositFlow({ accounts = [], qrAccount = null, initialAmount, mi
           <motion.div key="s2" {...slide} className="space-y-4">
             <div className="flex items-center justify-between gap-3 border border-[#ffc933] bg-[var(--wx-card)] p-3">
               <div className="flex min-w-0 items-center gap-2.5">
-                <Image src={`/bank-icons/${META[provider].icon}`} alt={META[provider].name} width={36} height={36} className="h-9 w-9 object-contain" />
+                <Image src={`/bank-icons/${META[provider].icon}`} unoptimized={META[provider].icon.endsWith(".ico")} alt={META[provider].name} width={36} height={36} className="h-9 w-9 object-contain" />
                 <div className="min-w-0">
                   <div className="text-[11px] text-slate-300">Pay via {META[provider].name}</div>
                   <div className="truncate text-lg font-black text-[#ffb800]">Rs. {numAmount.toLocaleString()}</div>

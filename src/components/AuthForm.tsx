@@ -75,7 +75,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
           {mode === "signup" && (
             <Field label="User name" name="name" placeholder="AliKhan" autoComplete="username" onKeyDown={(e) => { if (e.key === " ") e.preventDefault(); }} onChange={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/\s/g, ""); }} required />
           )}
-          <Field label={mode === "login" ? t("phoneOrUsername") : t("phoneNumber")} name="phone" value={login} onChange={(e) => setLogin(e.target.value)} placeholder={mode === "login" ? "03XXXXXXXXX / username / WX-ADM-0001" : "03XXXXXXXXX"} required />
+          <Field label={mode === "login" ? t("phoneOrUsername") : t("phoneNumber")} name="phone" value={login} onChange={(e) => setLogin(e.target.value)} placeholder={mode === "login" ? "03XXXXXXXXX / username" : "03XXXXXXXXX"} required />
           <Field label={t("password")} name="password" type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="••••••••" required />
           {mode === "signup" && <Field label="Confirm password" name="confirmPassword" type="password" placeholder="••••••••" required />}
           {mode === "signup" && <Field label={t("refOptional")} name="ref" value={ref} onChange={(e) => setRef(e.target.value.toUpperCase())} placeholder="e.g. ALIK7X2P" />}
