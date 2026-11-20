@@ -44,6 +44,8 @@ Run `node --test --test-name-pattern="all 70 local games|wager cap" scripts/test
 
 ## Player wallet controls
 
+Authorized admins can add or remove a player's wallet balance in rupees and paisa (up to two decimal places). The server rejects overdrafts and invalid precision, and retries concurrent balance changes without overwriting them.
+
 Deposits support Easypaisa, Bank Transfer, JazzCash, QR and Raast. Configure real receiving accounts (and a QR image for QR payments) in Admin Payment Accounts; unconfigured methods show a support message and cannot submit payments. Bank accounts participate in the same owner-scoped assignment/rotation as mobile wallets.
 
 Withdrawals support JazzCash, Easypaisa, Bank Transfer, Crypto and Other. Bank/Other save the institution or service, holder and account identifier; Crypto saves the currency/network and address. The withdrawal page can set the same PIN used by Security Center. Requests show "Your request is in process", then "Requested money is transferred to your account." only after server-confirmed approval. Deposit/withdrawal rejections require an admin-entered reason and show it in status/history and the existing notification channel (the Agent-origin notification policy above still applies). Submitted screens include Back to Games. Status screens poll every three seconds while pending and refresh on focus/live events, without a page reload.

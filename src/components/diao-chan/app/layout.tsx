@@ -5,7 +5,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Honey Trap of Diao Chan — Slot",
   description:
-    "Honey Trap of Diao Chan betting slot: 5×3 reels, 30 fixed lines, free spins with Expanding Wilds, ×4 Wilds and sticky Lu Bu.",
+    "Honey Trap of Diao Chan betting slot: 5×3 reels, 30 fixed lines, spins with Expanding Wilds, ×4 Wilds and sticky Lu Bu.",
 };
 
 export const viewport: Viewport = {

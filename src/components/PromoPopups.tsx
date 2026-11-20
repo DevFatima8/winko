@@ -168,7 +168,7 @@ function LuckyDrawPopup({ onClose, onNext }: { onClose: () => void; onNext: () =
             <button type="button" onClick={() => router.push("/player/team")} className="rounded bg-white/10 px-2 py-1">My subordinates</button>
           </div>
           <div className="mt-2 flex items-center justify-center gap-1.5 rounded-lg bg-[#0e3f96]/80 py-2 text-center text-xs font-black text-white"><Sparkles size={13} />Complete tasks for free draws<Sparkles size={13} /></div>
-                    <div className="mt-1.5 flex items-center gap-2 rounded-lg bg-white/90 px-3 py-2 text-[11px] font-bold text-[#1257c4]"><CalendarDays size={14} /> Daily Login <span className="text-[#7aa8e8]">Free draw:{hh}:{mm}:{ss}</span></div>
+          <div className="mt-1.5 flex items-center gap-2 rounded-lg bg-white/90 px-3 py-2 text-[11px] font-bold text-[#1257c4]"><CalendarDays size={14} /> Daily Login <span className="text-[#7aa8e8]">Free draw:{hh}:{mm}:{ss}</span></div>
         </div>
         <CloseBelow onClose={onNext} />
       </div>

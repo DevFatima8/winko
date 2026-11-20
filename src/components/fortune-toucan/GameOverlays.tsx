@@ -280,7 +280,7 @@ export function AutoModal({
             ×
           </button>
         </div>
-        <p className="ft-modal-note">Choose how many hands-free spins to play.</p>
+        <p className="ft-modal-note">Choose how many hands spins to play.</p>
         <div className="ft-chips dense">
           {opts.map((n) => (
             <button key={n} type="button" onClick={() => onPick(n)}>

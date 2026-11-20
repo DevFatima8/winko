@@ -49,7 +49,12 @@ export function WithdrawRequest({ balance, hasPin, limits, initialAccounts = {} 
   const [number, setNumber] = useState("");
   const [institution, setInstitution] = useState("");
   const [pinReady, setPinReady] = useState(hasPin);
-  const pinSaved = useCallback(() => setPinReady(true), []);
+  const [pinSavedMessage, setPinSavedMessage] = useState("");
+  const [showPin, setShowPin] = useState(false);
+  const pinSaved = useCallback(() => {
+    setPinReady(true);
+    setPinSavedMessage("Withdrawal PIN saved securely. Enter it below to continue.");
+  }, []);
   const [transactionId, setTransactionId] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState("pending");
   const [adminNote, setAdminNote] = useState("");
@@ -155,7 +160,7 @@ export function WithdrawRequest({ balance, hasPin, limits, initialAccounts = {} 
       setSuccess("Your request is in process");
       setTransactionId(result?.transactionId ?? null);
       setPaymentStatus("pending"); setAdminNote(""); setStatusError("");
-      setBal((prev) => prev - value); setUsed((prev) => prev + value); setCount((prev) => prev + 1); setAmount(""); setPin("");
+      setBal((prev) => prev - value); setUsed((prev) => prev + value); setCount((prev) => prev + 1); setAmount(""); setPin(""); setShowPin(false);
       void getCurrentUser(true).catch((e) => console.error("[withdraw balance refresh]", e));
     } catch (e) { setError(e instanceof Error ? e.message : "Withdrawal request submit nahi ho saki."); }
     finally { setBusy(false); }
@@ -180,7 +185,14 @@ export function WithdrawRequest({ balance, hasPin, limits, initialAccounts = {} 
         <form onSubmit={submit} className="space-y-4">
           <div><label htmlFor="wd-amount" className="mb-2 block text-base">Withdrawal Amount</label><input id="wd-amount" type="number" inputMode="numeric" min={min} max={maximum} step={1} disabled={!account || busy} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={account ? `Rs  Min ${min.toLocaleString()} - Max ${Math.floor(maximum).toLocaleString()}` : "Rs  Add a withdrawal account before withdrawing"} className={input} /></div>
           {account && <div>
-            {pinReady && <><label htmlFor="wd-pin" className="mb-2 block text-sm">Withdrawal PIN</label><input id="wd-pin" type="password" autoComplete="off" disabled={busy} inputMode="numeric" maxLength={4} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="4-digit PIN" className={input} /></>}
+            {pinReady && <>
+              <label htmlFor="wd-pin" className="mb-2 block text-sm">Withdrawal PIN</label>
+              <div className="flex gap-2">
+                <input id="wd-pin" type={showPin ? "text" : "password"} autoComplete="off" disabled={busy} inputMode="numeric" maxLength={4} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="4-digit PIN" className={input} />
+                <button type="button" disabled={busy} onClick={() => setShowPin((visible) => !visible)} className="shrink-0 rounded-lg border border-white/25 px-3 text-sm text-slate-200">{showPin ? "Hide" : "Show"}</button>
+              </div>
+            </>}
+            {pinSavedMessage && <p className="mt-2 text-xs text-emerald-300">{pinSavedMessage}</p>}
             <p className="mt-2 text-[11px] text-slate-400">Min {money(min)} · Max {money(maximum)}{limitReached && " · Aaj ki withdrawal count limit complete ho gayi."}</p>
           </div>}
           <button type="submit" disabled={busy || !account || !pinReady || !amount || !/^\d{4}$/.test(pin) || maximum < min || limitReached} className="btn-gold mt-2 min-h-12 w-full rounded-lg px-3 py-3 text-sm font-semibold disabled:!bg-none disabled:!bg-slate-600 disabled:!text-slate-300 disabled:!shadow-none disabled:opacity-60">{busy ? "Submitting..." : "Confirm withdrawal"}</button>

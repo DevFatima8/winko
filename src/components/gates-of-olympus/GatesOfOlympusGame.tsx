@@ -66,6 +66,7 @@ export default function GatesOfOlympusGame({ backHref = "/player" }: { backHref?
     const saved = readSlotPresentation("gates-of-olympus");
     return saved?.outcome.spins[Math.max(0, saved.cursor - 1)]?.grid ?? createLossGrid();
   });
+  const settledGridRef = useRef(grid);
   const [balance] = useGameBalance("gates-of-olympus", STARTING_BALANCE);
   const pool = usePoolLifecycle("gates-of-olympus");
   const [bet, setBet] = usePoolRoundState<number>("gates-of-olympus", "bet", 100);
@@ -87,6 +88,7 @@ export default function GatesOfOlympusGame({ backHref = "/player" }: { backHref?
   const [showOdds, setShowOdds] = useState(false);
   const audioContext = useRef<AudioContext | null>(null);
   const spinTimer = useRef<number | null>(null);
+  const shuffleTimer = useRef<number | null>(null);
   const busyRef = useRef(false);
 
   const playTone = useCallback((frequency: number, duration = 0.08, type: OscillatorType = "sine") => {
@@ -120,58 +122,86 @@ export default function GatesOfOlympusGame({ backHref = "/player" }: { backHref?
     }
 
     busyRef.current = true;
-    let result: SpinResult;
-    const legacy = isFree && !prepared && legacyFreeSpins > 0;
-    if (isFree && prepared) {
-      result = prepared.spins[0];
-      setPrepared(prepared.spins.length > 1 ? { ...prepared, spins: prepared.spins.slice(1) } : null);
-      const saved = readSlotPresentation("gates-of-olympus");
-      if (saved) saveSlotPresentation("gates-of-olympus",
-        prepared.spins.length > 1 ? { ...saved, cursor: saved.cursor + 1 } : null);
-    } else if (legacy) {
-      // Only an active pre-migration snapshot can restore this counter.
-      result = legacyBonusSpin(bet, Math.random() < 0.35);
-      const remaining = legacyFreeSpins - 1;
-      pool.checkpoint({ bet, freeSpins: remaining });
-      const steps: { action: "award" | "complete"; amount: number }[] = [];
-      if (result.amount > 0) steps.push({ action: "award", amount: result.amount });
-      if (!remaining) steps.push({ action: "complete", amount: 0 });
-      if (steps.length) pool.queue(steps);
-      setLegacyFreeSpins(remaining);
-    } else {
-      if (!await pool.start(bet, undefined, {})) { busyRef.current = false; return; }
-      const outcome = readBrowserSlotOutcome("gates-of-olympus", await pool.resolveServer({}), bet);
-      if (!outcome) {
-        setMessage("SPIN CONFIRMATION PENDING — PLEASE RETRY");
-        setAutoRemaining(null);
-        busyRef.current = false;
-        return;
-      }
-      result = outcome.spins[0];
-      setPrepared(outcome.spins.length > 1 ? { stake: bet, spins: outcome.spins.slice(1) } : null);
-      saveSlotPresentation("gates-of-olympus", outcome.spins.length > 1 ? { outcome, cursor: 1 } : null);
-    }
-    const bonus = result.bonus;
-    const amount = result.amount;
+    const startedAt = performance.now();
+    const duration = turbo ? 430 : 950;
     setIsSpinning(true);
     setWinner(null);
     setWinAmount(0);
     setMessage(isFree ? "FREE SPIN" : "GOOD LUCK!");
     playTone(210, 0.12, "triangle");
+    shuffleTimer.current = window.setInterval(() => setGrid(randomGrid()), turbo ? 55 : 95);
 
-    const shuffleEvery = window.setInterval(() => setGrid(randomGrid()), turbo ? 55 : 95);
-    const duration = turbo ? 430 : 950;
+    let result: SpinResult;
+    const legacy = isFree && !prepared && legacyFreeSpins > 0;
+    try {
+      if (isFree && prepared) {
+        result = prepared.spins[0];
+        setPrepared(prepared.spins.length > 1 ? { ...prepared, spins: prepared.spins.slice(1) } : null);
+        const saved = readSlotPresentation("gates-of-olympus");
+        if (saved) saveSlotPresentation("gates-of-olympus",
+          prepared.spins.length > 1 ? { ...saved, cursor: saved.cursor + 1 } : null);
+      } else if (legacy) {
+        // Only an active pre-migration snapshot can restore this counter.
+        result = legacyBonusSpin(bet, Math.random() < 0.35);
+        const remaining = legacyFreeSpins - 1;
+        pool.checkpoint({ bet, freeSpins: remaining });
+        const steps: { action: "award" | "complete"; amount: number }[] = [];
+        if (result.amount > 0) steps.push({ action: "award", amount: result.amount });
+        if (!remaining) steps.push({ action: "complete", amount: 0 });
+        if (steps.length) pool.queue(steps);
+        setLegacyFreeSpins(remaining);
+      } else {
+        if (!await pool.start(bet, undefined, {})) {
+          if (shuffleTimer.current) window.clearInterval(shuffleTimer.current);
+          shuffleTimer.current = null;
+          setGrid(settledGridRef.current);
+          setIsSpinning(false);
+          setAutoRemaining(null);
+          busyRef.current = false;
+          return;
+        }
+        const outcome = readBrowserSlotOutcome("gates-of-olympus", await pool.resolveServer({}), bet);
+        if (!outcome) {
+          if (shuffleTimer.current) window.clearInterval(shuffleTimer.current);
+          shuffleTimer.current = null;
+          setGrid(settledGridRef.current);
+          setIsSpinning(false);
+          setMessage("SPIN CONFIRMATION PENDING — PLEASE RETRY");
+          setAutoRemaining(null);
+          busyRef.current = false;
+          return;
+        }
+        result = outcome.spins[0];
+        setPrepared(outcome.spins.length > 1 ? { stake: bet, spins: outcome.spins.slice(1) } : null);
+        saveSlotPresentation("gates-of-olympus", outcome.spins.length > 1 ? { outcome, cursor: 1 } : null);
+      }
+    } catch (error) {
+      if (shuffleTimer.current) window.clearInterval(shuffleTimer.current);
+      shuffleTimer.current = null;
+      setGrid(settledGridRef.current);
+      setIsSpinning(false);
+      setMessage("SPIN COULD NOT BE CONFIRMED — PLEASE RETRY");
+      setAutoRemaining(null);
+      busyRef.current = false;
+      console.error("[gates of olympus spin]", error);
+      return;
+    }
+    const bonus = result.bonus;
+    const amount = result.amount;
     spinTimer.current = window.setTimeout(async () => {
-      window.clearInterval(shuffleEvery);
+      if (shuffleTimer.current) window.clearInterval(shuffleTimer.current);
+      shuffleTimer.current = null;
       if (legacy && amount > 0 && !await pool.award(amount) ||
         legacy && legacyFreeSpins === 1 && !await pool.complete(0)) {
         setAutoRemaining(null);
         busyRef.current = false;
+        setGrid(settledGridRef.current);
         setIsSpinning(false);
         return;
       }
       if (!legacy) pool.revealReturn(amount);
       setGrid(result.grid);
+      settledGridRef.current = result.grid;
       if (bonus || amount > 0) {
         if (bonus) {
           setWinner("bolt");
@@ -191,11 +221,12 @@ export default function GatesOfOlympusGame({ backHref = "/player" }: { backHref?
       }
       busyRef.current = false;
       setIsSpinning(false);
-    }, duration);
+    }, Math.max(0, duration - (performance.now() - startedAt)));
   }, [balance, bet, freeSpins, prepared, legacyFreeSpins, isSpinning, playTone, turbo, setPrepared, setLegacyFreeSpins]);
 
   useEffect(() => () => {
     if (spinTimer.current) window.clearTimeout(spinTimer.current);
+    if (shuffleTimer.current) window.clearInterval(shuffleTimer.current);
   }, []);
 
   useEffect(() => {

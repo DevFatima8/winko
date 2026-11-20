@@ -11,7 +11,7 @@ export function BalanceAdjustForm({ userId, balance }: { userId: string; balance
         <form action={action} className="space-y-3">
             <input type="hidden" name="id" value={userId} />
             <p className="text-xs text-[#b8a7e6]">Current balance: <b className="text-[#ffb800]">Rs. {balance.toLocaleString()}</b></p>
-            <label className="block"><span className="mb-1 block text-xs font-semibold text-[#b8a7e6]">Amount</span><input name="amount" type="number" min="1" step="1" required placeholder="e.g. 1000" className={input} /></label>
+            <label className="block"><span className="mb-1 block text-xs font-semibold text-[#b8a7e6]">Amount</span><input name="amount" type="number" min="0.01" step="0.01" inputMode="decimal" required placeholder="e.g. 400.87" className={input} /></label>
             <div className="grid grid-cols-2 gap-2">
                 <button name="direction" value="add" disabled={pending} className="rounded-xl bg-emerald-500/20 px-3 py-2.5 text-sm font-black text-emerald-300 hover:bg-emerald-500/30 disabled:opacity-60">{pending ? "Processing..." : "Add amount"}</button>
                 <button name="direction" value="remove" disabled={pending} className="rounded-xl bg-red-500/20 px-3 py-2.5 text-sm font-black text-red-300 hover:bg-red-500/30 disabled:opacity-60">Remove amount</button>

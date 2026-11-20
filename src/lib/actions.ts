@@ -293,21 +293,41 @@ export async function deleteSelectedHistoryAction(_: ActionState, form: FormData
 export async function adjustUserBalanceAction(_: ActionState, form: FormData): Promise<ActionState> {
   const me = await requireAdmin(1);
   const id = str(form, "id");
-  const amount = num(form, "amount");
+  const rawAmount = str(form, "amount");
+  const amount = Number(rawAmount);
+  const amountCents = Math.round(amount * 100);
   const direction = str(form, "direction");
-  if (!Number.isFinite(amount) || amount <= 0) return { error: "Amount 0 se zyada hona chahiye." };
+  if (!/^\d+(?:\.\d{1,2})?$/.test(rawAmount) || !Number.isSafeInteger(amountCents) || amountCents <= 0 || amountCents / 100 !== amount) return { error: "Valid amount likhein (maximum 2 decimal places, 0 se zyada)." };
   if (direction !== "add" && direction !== "remove") return { error: "Balance action select karein." };
-  const u = await User.findById(id);
-  if (!u || isStaff(u.role) || (me.level < 2 && String(u.referredBy ?? "") !== me.id)) return { error: "User nahi mila ya aapki team mein nahi hai." };
-  if (direction === "remove" && (u.balance ?? 0) < amount) return { error: "User balance se zyada amount remove nahi kar sakte." };
-  const change = direction === "add" ? amount : -amount;
-  u.balance = (u.balance ?? 0) + change;
-  await u.save();
-  const label = direction === "add" ? "Balance added" : "Balance removed";
-  await notifyUser(id, label, `Super Admin ne aapke wallet mein Rs. ${amount.toLocaleString()} ${direction === "add" ? "add" : "remove"} kiye. New balance: Rs. ${u.balance.toLocaleString()}.`, direction === "add" ? "success" : "warning", { href: "/player/wallet", actorRole: me.dbRole });
-  await logAdmin(me, direction === "add" ? "add_user_balance" : "remove_user_balance", u.phone, `Rs. ${amount.toLocaleString()} | new balance Rs. ${u.balance.toLocaleString()}`);
+  let adjusted: { phone: string; balance: number } | null = null;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const u = await User.findById(id);
+    if (!u || isStaff(u.role) || (me.level < 2 && String(u.referredBy ?? "") !== me.id)) return { error: "User nahi mila ya aapki team mein nahi hai." };
+    const previous = u.balance ?? 0;
+    const previousCents = Math.round(previous * 100);
+    if (!Number.isSafeInteger(previousCents) || previousCents < 0 ||
+      Math.abs(previousCents / 100 - previous) > Math.min(1e-7, Number.EPSILON * Math.max(1, Math.abs(previous)) * 4)) return { error: "User wallet balance invalid hai. Please check the account." };
+    if (direction === "remove" && previousCents < amountCents) return { error: "User balance se zyada amount remove nahi kar sakte." };
+    const nextCents = previousCents + (direction === "add" ? amountCents : -amountCents);
+    if (!Number.isSafeInteger(nextCents) || Math.round(nextCents / 100 * 100) !== nextCents) return { error: "Amount wallet limit se zyada hai." };
+    const balance = nextCents / 100;
+    const filter = { _id: id, balance: u.balance, role: u.role, ...(me.level < 2 ? { referredBy: me.id } : {}) };
+    const updated = await User.updateOneAtomic(filter, { $set: { balance } });
+    if (updated.matchedCount) { adjusted = { phone: u.phone, balance }; break; }
+  }
+  if (!adjusted) return { error: "Balance update ke dauran account badal gaya. Dobara koshish karein." };
+  let notificationFailed = false;
+  if (me.level < 2) {
+    try {
+      await notifyUser(id, direction === "add" ? "Balance added" : "Balance removed", `Admin ne aapke wallet mein Rs. ${amount.toLocaleString()} ${direction === "add" ? "add" : "remove"} kiye. New balance: Rs. ${adjusted.balance.toLocaleString()}.`, direction === "add" ? "success" : "warning", { href: "/player/wallet", actorRole: me.dbRole });
+    } catch (error) {
+      console.error("[admin balance notification]", error);
+      notificationFailed = true;
+    }
+  }
+  await logAdmin(me, direction === "add" ? "add_user_balance" : "remove_user_balance", adjusted.phone, `Rs. ${amount.toLocaleString()} | new balance Rs. ${adjusted.balance.toLocaleString()}`);
   revalidatePath("/admin/users"); revalidatePath(`/admin/users/${id}`);
-  return { success: `Rs. ${amount.toLocaleString()} ${direction === "add" ? "add" : "remove"} ho gaye. New balance: Rs. ${u.balance.toLocaleString()}.` };
+  return { success: `Rs. ${amount.toLocaleString()} ${direction === "add" ? "add" : "remove"} ho gaye. New balance: Rs. ${adjusted.balance.toLocaleString()}.${notificationFailed ? " Player notification nahi bheji ja saki; balance update ho chuka hai, dobara submit na karein." : ""}` };
 }
 export async function adminUpdateUserAction(_: ActionState, form: FormData): Promise<ActionState> {
   const me = await requireAdmin(1);

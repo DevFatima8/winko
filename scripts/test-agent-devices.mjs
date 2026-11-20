@@ -250,6 +250,11 @@ test("owner approval keeps principal and first-deposit bonus while omitting the 
             oid: String, User: {
               findById: () => Object.assign(Promise.resolve(player), { lean: async () => player }),
               updateOne: async (_filter, update) => Object.assign(player, update.$set),
+              updateOneAtomic: async (filter, update) => {
+                if (filter.balance !== player.balance || filter.role !== player.role) return { matchedCount: 0 };
+                Object.assign(player, update.$set);
+                return { matchedCount: 1 };
+              },
             },
             AdminLog: { create: async row => logs.push(row) },
           },
