@@ -57,9 +57,11 @@ export function WithdrawRequest({ balance, hasPin, limits, initialAccounts = {} 
   const [pinReady, setPinReady] = useState(hasPin);
   const [pinSavedMessage, setPinSavedMessage] = useState("");
   const [showPin, setShowPin] = useState(false);
-  const pinSaved = useCallback(() => {
+  const pinSaved = useCallback((savedPin: string) => {
     setPinReady(true);
-    setPinSavedMessage("Withdrawal PIN saved securely. Enter it below to continue.");
+    setPin(savedPin);
+    setShowPin(true);
+    setPinSavedMessage("Withdrawal PIN saved. Use Show or Hide to control its visibility.");
   }, []);
   const [transactionId, setTransactionId] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState("pending");
@@ -75,7 +77,7 @@ export function WithdrawRequest({ balance, hasPin, limits, initialAccounts = {} 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const account = selected ? accounts[selected] : undefined;
-  const min = limits?.min ?? 1000;
+  const min = limits?.min ?? 500;
   const maximum = Math.max(0, Math.min(bal, limits?.perMax || Infinity, limits?.daily ? Math.max(0, limits.daily - used) : Infinity));
   const limitReached = !!limits?.withdrawalsPerDay && count >= limits.withdrawalsPerDay;
 
@@ -189,7 +191,7 @@ export function WithdrawRequest({ balance, hasPin, limits, initialAccounts = {} 
           <span className="min-w-0 flex-1 text-sm text-slate-300">{account ? <><span className="block text-white">{name(account.provider)} · {account.accountNumber}</span><span className="block truncate text-xs text-slate-400">{account.holderName}</span></> : "Add withdrawal account"}</span><ChevronRight size={18} className="text-slate-500" />
         </button>
         <form onSubmit={submit} className="space-y-4">
-          <div><label htmlFor="wd-amount" className="mb-2 block text-base">Withdrawal Amount</label><input id="wd-amount" type="number" inputMode="numeric" min={min} max={maximum} step={1} disabled={!account || busy} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={account ? `Rs  Min ${min.toLocaleString()} - Max ${Math.floor(maximum).toLocaleString()}` : "Rs  Add a withdrawal account before withdrawing"} className={input} /></div>
+          <div><label htmlFor="wd-amount" className="mb-2 block text-base">Withdrawal Amount</label><input id="wd-amount" type="number" inputMode="numeric" min={min} max={maximum} step={1} disabled={!account || busy} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={account ? `Rs  Min ${min.toLocaleString()}` : "Rs  Add a withdrawal account before withdrawing"} className={input} /></div>
           {account && <div>
             {pinReady && <>
               <label htmlFor="wd-pin" className="mb-2 block text-sm">Withdrawal PIN</label>
@@ -199,7 +201,7 @@ export function WithdrawRequest({ balance, hasPin, limits, initialAccounts = {} 
               </div>
             </>}
             {pinSavedMessage && <p className="mt-2 text-xs text-emerald-300">{pinSavedMessage}</p>}
-            <p className="mt-2 text-[11px] text-slate-400">Min {money(min)} · Max {money(maximum)}{limitReached && " · Aaj ki withdrawal count limit complete ho gayi."}</p>
+            <p className="mt-2 text-[11px] text-slate-400">Min {money(min)}{limitReached && " · Aaj ki withdrawal count limit complete ho gayi."}{!limitReached && maximum < min && " · Balance ya withdrawal limit minimum se kam hai."}</p>
           </div>}
           <button type="submit" disabled={busy || !account || !pinReady || !amount || !/^\d{4}$/.test(pin) || maximum < min || limitReached} className="btn-gold mt-2 min-h-12 w-full rounded-lg px-3 py-3 text-sm font-semibold disabled:!bg-none disabled:!bg-slate-600 disabled:!text-slate-300 disabled:!shadow-none disabled:opacity-60">{busy ? "Submitting..." : "Confirm withdrawal"}</button>
         </form>

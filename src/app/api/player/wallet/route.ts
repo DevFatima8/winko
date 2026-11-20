@@ -42,7 +42,7 @@ export async function GET() {
                 usedToday,
                 withdrawalsToday,
                 withdrawalsPerDay: cur?.withdrawalsPerDay ?? 0,
-                min: cur?.minWithdraw ?? settings.wallet?.minWithdraw ?? 1000,
+                min: cur?.minWithdraw ?? settings.wallet?.minWithdraw ?? 500,
             },
             gateway: {
                 enabled: gateway.enabled,

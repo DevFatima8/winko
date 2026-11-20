@@ -23,7 +23,7 @@ export const DEFAULT_VIP = [
   { level: 13, name: "Supreme", minDeposit: 2000000, nextLevelBonus: 50000, dailyWithdrawLimit: 0, withdrawalsPerDay: 0, perWithdrawMax: 0, minWithdraw: 1000 },
   { level: 14, name: "Royal Legend", minDeposit: 5000000, nextLevelBonus: 100000, dailyWithdrawLimit: 0, withdrawalsPerDay: 0, perWithdrawMax: 0, minWithdraw: 1000 },
   { level: 15, name: "Legend", minDeposit: 10000000, nextLevelBonus: 250000, dailyWithdrawLimit: 0, withdrawalsPerDay: 0, perWithdrawMax: 0, minWithdraw: 1000 },
-];
+].map(level => ({ ...level, minWithdraw: 500 }));
 
 const LEGACY_DEFAULT_VIP = [
   { level: 0, name: "Bronze", minDeposit: 0, dailyWithdrawLimit: 5000, perWithdrawMax: 5000, minWithdraw: 1000 },
@@ -68,6 +68,11 @@ export async function getSettings(forceRefresh = false): Promise<SettingsDoc> {
     const users = await User.find({ role: { $nin: ["owner", "admin", "subadmin"] } }, "_id totalDeposited").lean();
     await Promise.all(users.map((user) => User.updateOne({ _id: user._id }, { $set: { vipLevel: vipFor(user.totalDeposited ?? 0, DEFAULT_VIP) } })));
     s = { ...s, vipLevels: DEFAULT_VIP as SettingsDoc["vipLevels"] };
+  }
+  if (!s.withdrawalMinimum500Migrated) {
+    const vipLevels = s.vipLevels.map(level => ({ ...level, minWithdraw: 500 }));
+    await Settings.updateOne({ key: "main" }, { $set: { vipLevels, "wallet.minWithdraw": 500, withdrawalMinimum500Migrated: true } });
+    s = { ...s, vipLevels, wallet: { ...s.wallet, minWithdraw: 500 }, withdrawalMinimum500Migrated: true };
   }
   if (!Array.isArray((s as SettingsDoc & { leaderboard?: SettingsDoc["leaderboard"] }).leaderboard)) {
     await Settings.updateOne({ key: "main" }, { $set: { leaderboard: DEFAULT_LEADERBOARD } });

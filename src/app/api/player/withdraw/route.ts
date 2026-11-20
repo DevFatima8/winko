@@ -43,7 +43,7 @@ export async function POST(request: Request) {
         if (pin !== user.withdrawPin) return NextResponse.json({ error: "Withdrawal PIN ghalat hai." }, { status: 400 });
         const settings = await getSettings();
         const { cur } = vipInfo(user.vipLevel ?? 0, settings.vipLevels);
-        const min = cur?.minWithdraw ?? settings.wallet?.minWithdraw ?? 1000;
+        const min = cur?.minWithdraw ?? settings.wallet?.minWithdraw ?? 500;
         if (!Number.isFinite(amount) || amount < min) return NextResponse.json({ error: `Minimum withdraw Rs. ${min} hai.` }, { status: 400 });
         const countToday = await withdrawalCountToday(me.id);
         if (cur?.withdrawalsPerDay && countToday >= cur.withdrawalsPerDay) return NextResponse.json({ error: `Aapki VIP level (${cur.name}) par rozana ${cur.withdrawalsPerDay} withdrawals allowed hain.` }, { status: 400 });

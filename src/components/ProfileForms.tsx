@@ -1,18 +1,19 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useState } from "react";
 import { setWithdrawPinAction, changePasswordAction, type ActionState } from "@/lib/actions";
 import { useI18n } from "@/lib/i18n/client";
 
 const input = "w-full rounded-xl border border-[#3a2470] bg-black/30 px-3 py-2.5 text-white outline-none focus:border-[#d946ef]";
 const Msg = ({ s }: { s: ActionState }) => (!s ? null : s.error ? <p className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-300">{s.error}</p> : <p className="rounded-lg bg-emerald-500/15 px-3 py-2 text-sm text-emerald-300">{s.success}</p>);
 
-export function PinForm({ hasPin, onSuccess }: { hasPin: boolean; onSuccess?: () => void }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(setWithdrawPinAction, undefined);
+export function PinForm({ hasPin, onSuccess }: { hasPin: boolean; onSuccess?: (pin: string) => void }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(async (previous, form) => {
+    const result = await setWithdrawPinAction(previous, form);
+    if (result?.success) onSuccess?.(String(form.get("pin") ?? ""));
+    return result;
+  }, undefined);
   const { t } = useI18n();
-  useEffect(() => {
-    if (state?.success) onSuccess?.();
-  }, [state, onSuccess]);
   return (
     <form action={action} className="space-y-3">
       {hasPin && <input name="current" inputMode="numeric" maxLength={4} placeholder={t("oldPin")} className={input} />}

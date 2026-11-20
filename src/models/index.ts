@@ -76,6 +76,7 @@ export type CardRoundDoc = Base & { table: "dragon-tiger" | "andar-bahar"; round
 export type CardBetDoc = Base & { userId: string; table: string; roundNo: number; option: string; amount: number; status: "pending" | "win" | "lose" | "push"; payout: number };
 export type VipLevelRow = { level?: number | null; name?: string | null; minDeposit?: number | null; nextLevelBonus?: number | null; dailyWithdrawLimit?: number | null; withdrawalsPerDay?: number | null; perWithdrawMax?: number | null; minWithdraw?: number | null };
 export type SettingsDoc = Base & {
+  withdrawalMinimum500Migrated?: boolean;
   key: string; vipLevels: VipLevelRow[]; announcement?: string;
   leaderboard: { name: string; amount: number }[];
   support: { enabled: boolean; is247: boolean; startHour: number; endHour: number; offlineMessage: string; welcomeMessage: string };
