@@ -109,6 +109,73 @@ test("no successful claim falls back to all accepted stakes; losers are not fina
   assert.equal(s.data.dailypoolentries.find(e => e._id === "b").payoutCents, 10500);
 });
 
+test("expired non-live wagers lose without a refund; recent wagers and completed pool claims remain untouched", async () => {
+  const s = scene(["alice"]);
+  const started = new Date(day);
+  const oldGame = { _id: "olympus-game", slug: "gates-of-olympus" };
+  s.data.games.push(oldGame);
+  const expired = {
+    _id: "expired-browser", gameId: oldGame._id, userId: "alice", roundNo: null, betSlot: 0,
+    betAmount: 100, winAmount: 0, outcome: "pending", resultData: "Browser wager active",
+    browserGame: oldGame.slug, browserStatus: "active", browserParts: [],
+    createdAt: started, updatedAt: started,
+  };
+  await run(s, async tx => {
+    await s.pool.addPoolWager(tx, oldGame.slug, expired);
+    await tx.insert("gameresults", expired._id, expired);
+  });
+  s.users.get("alice").balance = 900;
+
+  const recent = {
+    ...expired, _id: "recent-browser", betAmount: 20,
+    createdAt: new Date(day + 1000), updatedAt: new Date(day + 1000),
+  };
+  const completedClaim = {
+    ...expired, _id: "completed-claim", browserStatus: "closed", poolClaim: 150,
+    resultData: "Completed result | Pending daily pool settlement",
+  };
+  const liveBet = {
+    ...expired, _id: "live-bet", roundNo: 44, browserStatus: undefined, browserGame: undefined,
+    resultData: null,
+  };
+  await run(s, async tx => {
+    await tx.insert("gameresults", recent._id, recent);
+    await tx.insert("gameresults", completedClaim._id, completedClaim);
+    await tx.insert("gameresults", liveBet._id, liveBet);
+  });
+
+  s.at(day + 24 * 60 * 60 * 1000 + 1);
+  const count = await run(s, tx => s.pool.forfeitExpiredNonLiveWagers(tx, oldGame.slug));
+  assert.equal(count, 1);
+  assert.equal(s.data.gameresults.find(row => row._id === expired._id).outcome, "lose");
+  assert.equal(s.data.gameresults.find(row => row._id === expired._id).poolPending, false);
+  assert.equal(s.data.dailypoolentries.find(row => row._id === expired._id).status, "cancelled");
+  assert.equal(s.users.get("alice").balance, 900, "forfeiting must not refund the stake");
+  assert.equal(s.data.gameresults.find(row => row._id === recent._id).outcome, "pending");
+  assert.equal(s.data.gameresults.find(row => row._id === completedClaim._id).outcome, "pending");
+  assert.equal(s.data.gameresults.find(row => row._id === liveBet._id).outcome, "pending");
+
+  const chickenGame = { _id: "chicken-road-game", slug: "chicken-road-2" };
+  const chickenResult = {
+    _id: "expired-chicken-result", gameId: chickenGame._id, userId: "alice", roundNo: null, betSlot: 0,
+    betAmount: 50, winAmount: 0, outcome: "pending", resultData: "Easy · started",
+    createdAt: started, updatedAt: started,
+  };
+  s.data.games.push(chickenGame);
+  s.data.gameresults.push(chickenResult);
+  s.data.chickengames.push({
+    _id: "expired-chicken-game", userId: "alice", resultId: chickenResult._id, betAmount: 50,
+    status: "active", winAmount: 0, createdAt: started, updatedAt: started,
+  });
+  s.users.get("alice").balance = 850;
+  const chickenCount = await run(s, tx => s.pool.forfeitExpiredNonLiveWagers(tx, chickenGame.slug));
+  assert.equal(chickenCount, 1);
+  assert.equal(s.data.chickengames.find(row => row._id === "expired-chicken-game").status, "dead");
+  assert.equal(s.data.chickengames.find(row => row._id === "expired-chicken-game").poolPending, false);
+  assert.equal(s.data.gameresults.find(row => row._id === chickenResult._id).outcome, "lose");
+  assert.equal(s.users.get("alice").balance, 850, "stale active game stakes are not refunded");
+});
+
 test("multiplier, card and roulette games pay only 10 of every 100 wagers, each 1x-2x of stake, within the 35% pool", async () => {
   for (const game of [
     "aviator", "dice", "auto-roulette",

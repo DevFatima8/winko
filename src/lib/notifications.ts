@@ -61,3 +61,17 @@ export async function markAllNotificationsRead(userId: string | null) {
   await Notification.updateMany({ ...await notificationFilter(userId, user.role), readBy: { $ne: oid(userId) } }, { $addToSet: { readBy: oid(userId) } });
   return { ok: true };
 }
+
+export async function markNotificationRead(userId: string | null, role: string | null, id: string) {
+  if (!userId) return { ok: false, error: "Unauthorized" };
+  if (!/^(?:[a-f0-9]{24}|[a-f0-9-]{36})$/i.test(id)) return { ok: false, error: "Invalid notification." };
+  await dbConnect();
+  const filter = { ...await notificationFilter(userId, role), _id: oid(id) };
+  const notification = await Notification.findOne(filter).lean();
+  if (!notification) return { ok: false, error: "Notification not found." };
+  await Notification.updateOneAtomic(
+    { ...filter, readBy: { $ne: oid(userId) } },
+    { $addToSet: { readBy: oid(userId) } },
+  );
+  return { ok: true };
+}

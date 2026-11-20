@@ -1,7 +1,7 @@
 import { createHash, randomInt } from "node:crypto";
 import type { GameDoc, GameResultDoc, UserDoc } from "@/models";
 import type { MultiplayerTransaction } from "./multiplayer-store";
-import { addPoolWager, cents, closePoolWager, settleDailyPools, type PoolFields, type PoolEntry } from "./dailyPool";
+import { addPoolWager, cents, closePoolWager, forfeitExpiredNonLiveWagers, settleDailyPools, type PoolFields, type PoolEntry } from "./dailyPool";
 import { DAILY_POOL_VERSION, type DailyPoolGame } from "./dailyPoolRules";
 import { isBrowserPoolGame } from "./dailyPoolBrowserGames";
 import { isDailyPoolGame } from "./dailyPoolRules";
@@ -18,6 +18,7 @@ export class BrowserWagerError extends Error {}
 
 type LifecycleResult = GameResultDoc & PoolFields & {
   browserGame: string; browserStatus: "active" | "closed" | "refunded";
+  browserForfeited?: boolean;
   browserTotalStake: number;
   browserGrossClaim?: number;
   browserCompletedClaim?: number;
@@ -40,8 +41,9 @@ export async function browserPoolLifecycle(tx: MultiplayerTransaction, userId: s
   if (!Number.isFinite(amount) || amount < 0 || cents(amount) / 100 !== amount ||
       amount > Number.MAX_SAFE_INTEGER / 100 || (input.action === "accept" || input.action === "increment") && amount <= 0) throw new BrowserWagerError("Invalid lifecycle amount.");
   if (input.action === "refund" && amount !== 0) throw new BrowserWagerError("A refund returns only the accepted stake.");
-  await settleDailyPools(tx, input.game);
   const id = createHash("sha256").update(`browser-active:${userId}:${input.game}:${input.wagerId}`).digest("hex");
+  await forfeitExpiredNonLiveWagers(tx, input.game, id);
+  await settleDailyPools(tx, input.game);
   let result = await tx.get<LifecycleResult>("gameresults", id);
   if (serverGame(input.game) && ["complete", "award"].includes(input.action) && !verified &&
       !((input.game === "dice" || input.game === "rock-paper-scissors" || input.game === "race-betting" || input.game === "tower-betting" || input.game === "derby-race" || input.game === "thai-hi-lo" || isSlotGame(input.game) || isServerBrowserCardGame(input.game) || isBrowserRouletteGame(input.game)) && result && !result.browserServerRequired)) {
@@ -49,6 +51,12 @@ export async function browserPoolLifecycle(tx: MultiplayerTransaction, userId: s
   }
   const user = await tx.get<UserDoc>("users", userId, true);
   if (!user || !Number.isFinite(user.balance)) throw new Error("Player wallet unavailable.");
+  if (result?.browserForfeited) {
+    return {
+      ok: true, balance: user.balance, wagerId: input.wagerId, poolPending: false, claim: 0,
+      status: "closed", replay: true, forfeited: true, outcome: { forfeited: true, payout: 0 },
+    };
+  }
   const operation = result?.browserOperations[input.operationId];
   if (operation) {
     if (operation.action !== input.action || operation.amount !== amount) throw new BrowserWagerError("Operation identity was reused with different values.");
@@ -230,10 +238,19 @@ export async function resolveServerBrowserWager(tx: MultiplayerTransaction, user
 }, enabled: boolean) {
   if (!isDailyPoolGame(input.game) || !serverGame(input.game)) throw new BrowserWagerError("Unsupported server browser engine.");
   if (isInteractiveBrowserCardGame(input.game) || input.game === "tower-betting") throw new BrowserWagerError("Continue this wager using its table actions.");
-  await settleDailyPools(tx, input.game);
   const id = createHash("sha256").update(`browser-active:${userId}:${input.game}:${input.wagerId}`).digest("hex");
+  await forfeitExpiredNonLiveWagers(tx, input.game, id);
+  await settleDailyPools(tx, input.game);
   const result = await tx.get<LifecycleResult>("gameresults", id);
   if (!result || result.userId !== userId) throw new BrowserWagerError("Accepted server wager not found.");
+  if (result.browserForfeited) {
+    const user = await tx.get<UserDoc>("users", userId, true);
+    if (!user) throw new Error("Wallet unavailable.");
+    return {
+      ok: true, wagerId: input.wagerId, balance: user.balance, status: "closed", poolPending: false, claim: 0,
+      replay: true, forfeited: true, outcome: { forfeited: true, payout: 0 },
+    };
+  }
   const selection = JSON.stringify(input.selection ?? {});
   if (selection.length > 8000) throw new BrowserWagerError("Invalid outcome selection.");
   if (result.browserServerInput && result.browserServerInput !== selection) throw new BrowserWagerError("Wager outcome selection cannot change.");

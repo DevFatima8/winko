@@ -147,7 +147,11 @@ async function dispatch(request: Request) {
             }
             case path === "/api/notifications" && method === "GET": return response(await notifications.getNotifications(userId, me?.dbRole ?? null));
             case path === "/api/notifications" && method === "POST":
-                return me ? response(await notifications.markAllNotificationsRead(me.id)) : errorResponse("Unauthorized", 401);
+                return me
+                    ? response(typeof body.id === "string"
+                        ? await notifications.markNotificationRead(me.id, me.dbRole, body.id)
+                        : await notifications.markAllNotificationsRead(me.id))
+                    : errorResponse("Unauthorized", 401);
             case path === "/api/feedback" && method === "POST": return response(await feedback.submitFeedback(body as Parameters<typeof feedback.submitFeedback>[0], me));
             default: return errorResponse("Not found: " + path, 404);
         }

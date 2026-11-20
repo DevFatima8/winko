@@ -1,10 +1,16 @@
-import type { GameResultDoc, UserDoc } from "@/models";
+import type { ChickenDashDoc, ChickenGameDoc, GameDoc, GameResultDoc, MinesGameDoc, UserDoc } from "@/models";
 import { randomInt } from "node:crypto";
 import type { MultiplayerTransaction, MultiplayerTable, MultiplayerFilters } from "./multiplayer-store";
 import { DAILY_POOL_VERSION, DAILY_POOL_WIN_CAP, EXACT_CLAIM_POOL_GAMES, TEN_WIN_POOL_GAMES, pakistanDay, type DailyPoolGame } from "./dailyPoolRules";
 
 type Tx = MultiplayerTransaction;
 export type PoolFields = { poolVersion?: string; poolPending?: boolean; poolClaim?: number; poolDay?: string };
+type AbandonableResult = GameResultDoc & PoolFields & {
+  browserGame?: string;
+  browserStatus?: "active" | "closed" | "refunded";
+  browserForfeited?: boolean;
+  browserParts?: string[];
+};
 export type PoolEntry = {
   _id: string; poolId: string; game: DailyPoolGame; day: string; userId: string;
   stakeCents: number; claimCents: number; status: "active" | "closed" | "cancelled" | "settled";
@@ -32,6 +38,69 @@ export async function allRows<T extends { _id: string }>(tx: Tx, table: Multipla
     if (page.length < 500) return rows;
     cursor = page[page.length - 1]._id;
   }
+}
+
+/** Forfeit only resumable, non-live wagers after their 24-hour inactivity window. */
+export async function forfeitExpiredNonLiveWagers(tx: Tx, game: DailyPoolGame, onlyResultId?: string) {
+  const gameDoc = (await tx.findWhere<GameDoc>("games", { slug: game }, 1))[0];
+  if (!gameDoc) return 0;
+  const now = await tx.now();
+  const cutoff = now - 24 * 60 * 60 * 1000;
+  const pending = onlyResultId
+    ? [await tx.get<AbandonableResult>("gameresults", onlyResultId)].filter((row): row is AbandonableResult => !!row)
+    : await allRows<AbandonableResult>(tx, "gameresults", { gameId: gameDoc._id, outcome: "pending", roundNo: null });
+  let forfeited = 0;
+  const sourceTable = game === "chicken-road-2" ? "chickengames"
+    : game === "chicken-dash" ? "chickendashes"
+      : game === "mines" ? "minesgames" : null;
+
+  for (const candidate of pending) {
+    const result = await tx.get<AbandonableResult>("gameresults", candidate._id, true);
+    if (!result || result.gameId !== gameDoc._id || result.outcome !== "pending" || result.roundNo !== null ||
+        result.resultData?.toLowerCase().includes("pending daily pool settlement")) continue;
+    const browserWager = result.browserGame === game && result.browserStatus === "active";
+    let source: (ChickenGameDoc | ChickenDashDoc | MinesGameDoc) | null = null;
+    if (!browserWager && sourceTable) {
+      const found = (await tx.find(sourceTable, "resultId", result._id, 1))[0];
+      if (found?._id) {
+        source = await tx.get<ChickenGameDoc | ChickenDashDoc | MinesGameDoc>(sourceTable, found._id, true);
+      }
+    }
+    if (!browserWager && (!source || source.status !== "active")) continue;
+
+    const lastActivity = Math.max(
+      new Date(result.updatedAt ?? result.createdAt).getTime(),
+      source ? new Date(source.updatedAt ?? source.createdAt).getTime() : 0,
+    );
+    if (!Number.isFinite(lastActivity) || lastActivity > cutoff) continue;
+
+    if (source) {
+      source.status = "dead";
+      source.winAmount = 0;
+      source.updatedAt = new Date(now);
+      Object.assign(source, { poolPending: false, poolClaim: 0 });
+      await tx.put(sourceTable!, source._id, source);
+    }
+
+    const relatedIds = new Set([result._id, ...(result.browserParts ?? [])]);
+    for (const id of relatedIds) {
+      const part = await tx.get<AbandonableResult>("gameresults", id, true);
+      if (!part || part.outcome !== "pending") continue;
+      const entry = await tx.get<PoolEntry>("dailypoolentries", id);
+      if (entry?.status === "active") await closePoolWager(tx, id, 0, true);
+      Object.assign(part, {
+        outcome: "lose", winAmount: 0, poolPending: false, poolClaim: 0, updatedAt: new Date(now),
+        resultData: `${part.resultData ?? ""} | Forfeited after 24 hours without activity; no refund`,
+      });
+      if (id === result._id && browserWager) {
+        part.browserStatus = "closed";
+        part.browserForfeited = true;
+      }
+      await tx.put("gameresults", id, part);
+    }
+    forfeited++;
+  }
+  return forfeited;
 }
 
 /** Integer largest-remainder allocation, with a stable ID tie-break and no lost paisa. */

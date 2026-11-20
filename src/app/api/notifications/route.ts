@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSessionUser } from "@/lib/serverAuth";
 import { dbConnect } from "@/lib/mongo";
 import { Notification, oid } from "@/models";
-import { notificationFilter } from "@/lib/notifications";
+import { markNotificationRead, notificationFilter } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -25,10 +25,16 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
     const user = await getServerSessionUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const body = await request.json().catch(() => ({})) as { id?: unknown };
+    if (typeof body.id === "string") {
+      const result = await markNotificationRead(user.id, user.dbRole, body.id);
+      const status = result.ok ? 200 : result.error === "Notification not found." ? 404 : 400;
+      return NextResponse.json(result, { status });
+    }
     await dbConnect();
     await Notification.updateMany({ ...await notificationFilter(user.id, user.dbRole), readBy: { $ne: oid(user.id) } }, { $addToSet: { readBy: oid(user.id) } });
     return NextResponse.json({ ok: true });

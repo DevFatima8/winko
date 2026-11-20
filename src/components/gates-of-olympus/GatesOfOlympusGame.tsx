@@ -160,7 +160,19 @@ export default function GatesOfOlympusGame({ backHref = "/player" }: { backHref?
           busyRef.current = false;
           return;
         }
-        const outcome = readBrowserSlotOutcome("gates-of-olympus", await pool.resolveServer({}), bet);
+        const serverResolution = await pool.resolveServer({});
+        if (serverResolution && typeof serverResolution === "object" &&
+            "forfeited" in serverResolution && serverResolution.forfeited === true) {
+          if (shuffleTimer.current) window.clearInterval(shuffleTimer.current);
+          shuffleTimer.current = null;
+          setGrid(settledGridRef.current);
+          setIsSpinning(false);
+          setMessage("ROUND FORFEITED AFTER 24 HOURS — STAKE NOT REFUNDED");
+          setAutoRemaining(null);
+          busyRef.current = false;
+          return;
+        }
+        const outcome = readBrowserSlotOutcome("gates-of-olympus", serverResolution, bet);
         if (!outcome) {
           if (shuffleTimer.current) window.clearInterval(shuffleTimer.current);
           shuffleTimer.current = null;

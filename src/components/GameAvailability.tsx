@@ -19,9 +19,11 @@ export function GameAvailability({ slug, backHref, children }: { slug: string; b
       });
     return () => controller.abort();
   }, [slug, attempt]);
-  if (status === "ready") return children;
+  if (status === "ready" || status === "loading") {
+    return <div className="contents" aria-busy={status === "loading"} inert={status === "loading"}>{children}</div>;
+  }
   return <div className="flex min-h-64 flex-1 flex-col items-center justify-center gap-4 p-6 text-center text-white" role="status">
-    <h1 className="text-xl font-black">{status === "maintenance" ? "Under maintenance" : status === "disabled" ? "Game unavailable" : status === "error" ? "Unable to check game availability" : "Loading game..."}</h1>
+    <h1 className="text-xl font-black">{status === "maintenance" ? "Under maintenance" : status === "disabled" ? "Game unavailable" : "Unable to check game availability"}</h1>
     {status === "error" && <button type="button" className="btn-violet rounded-xl px-4 py-2" onClick={() => { setStatus("loading"); setAttempt(value => value + 1); }}>Retry</button>}
     <Link href={backHref} className="btn-gold rounded-xl px-4 py-2">Back to Games</Link>
   </div>;

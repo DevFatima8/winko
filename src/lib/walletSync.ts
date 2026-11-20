@@ -715,6 +715,7 @@ export function usePoolLifecycle(game: DailyPoolGame, slot = "main") {
       if (action === "card-action") credited.current = cumulativeReturn;
       outcome.current = reply.outcome;
       if (action === "resolve" || action === "card-action" && reply.status === "closed") resolvedWager.current = body.wagerId;
+      if (reply.forfeited === true) walletError("This non-live wager expired after 24 hours without activity. Its stake was not refunded.");
       if (action === "complete") notifyGameResult(game, body.wagerId,
         typeof reply.claim === "number" ? reply.claim : body.amount, reply.poolPending === true);
       return true;

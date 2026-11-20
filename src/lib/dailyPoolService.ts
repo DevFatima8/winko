@@ -1,4 +1,4 @@
-import { allRows, settleDailyPools, type PoolEntry } from "./dailyPool";
+import { allRows, forfeitExpiredNonLiveWagers, settleDailyPools, type PoolEntry } from "./dailyPool";
 import { mysqlMultiplayerStore } from "./multiplayer-store";
 import { dailyPoolLock, type DailyPoolGame } from "./dailyPoolRules";
 import { sharedFlightState, sharedCardState } from "./sharedLegacyTables";
@@ -25,7 +25,10 @@ export async function processDailyPool(game: DailyPoolGame) {
   }
   if (isMultiplayerGame(game)) await multiplayer.read(game);
   if (game === "dragon-tiger" || game === "andar-bahar") await sharedCardState(null, game);
-  await mysqlMultiplayerStore.transact(dailyPoolLock(game), tx => settleDailyPools(tx, game));
+  await mysqlMultiplayerStore.transact(dailyPoolLock(game), async tx => {
+    await forfeitExpiredNonLiveWagers(tx, game);
+    await settleDailyPools(tx, game);
+  });
 }
 
 export async function playerPoolStatus(userId: string, game: DailyPoolGame) {
