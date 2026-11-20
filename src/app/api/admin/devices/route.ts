@@ -56,6 +56,7 @@ export async function GET(request: Request) {
         }
         return {
           id: String(user._id), name: user.name, username: user.username, adminId: user.adminId, role: user.role,
+          lastLoginIp: user.lastLoginIp ?? null, registrationIp: user.registrationIp ?? null,
           deviceCount: latest.size,
           devices: [...latest.values()].map(row => ({
             deviceName: row.deviceName, ip: row.ip, lastSeenAt: row.lastSeenAt,
@@ -66,5 +67,31 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("[admin devices]", error);
     return NextResponse.json({ error: "Devices load nahi ho sakin. Dobara try karein." }, { status: 503 });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const me = await getServerSessionUser();
+    if (me?.dbRole !== "owner") return NextResponse.json({ error: "Agent access required." }, { status: 403 });
+    let body: { userId?: unknown };
+    try {
+      body = await request.json();
+    } catch (error) {
+      console.warn("[admin account logout] Invalid JSON", error);
+      return NextResponse.json({ error: "Invalid logout request." }, { status: 400 });
+    }
+    if (!body || typeof body.userId !== "string" || !body.userId.trim() || body.userId.length > 100) {
+      return NextResponse.json({ error: "Account ID required." }, { status: 400 });
+    }
+    const userId = body.userId;
+    const { mysqlMultiplayerStore } = await import("@/lib/multiplayer-store");
+    const { revokeAccountSessions } = await import("@/lib/deviceSessions");
+    const revoked = await mysqlMultiplayerStore.transact(`security:login:${userId}`, tx =>
+      revokeAccountSessions(tx, me.id, userId));
+    return NextResponse.json({ success: "All current logins have been logged out.", revoked }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    console.error("[admin account logout]", error);
+    return NextResponse.json({ error: "Account logout failed. Please retry." }, { status: 503 });
   }
 }

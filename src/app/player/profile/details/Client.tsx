@@ -49,7 +49,7 @@ export default function ProfilePageClient({ params, searchParams }: { params?: R
           <StatCard label={t("balance")} value={fmt(me.balance)} accent="text-[#ffb800]" />
           <StatCard label={t("totalDeposited")} value={fmt(me.totalDeposited)} accent="text-emerald-300" />
           <StatCard label="Total Withdrawn" value={fmt(me.totalWithdrawn)} accent="text-cyan-300" />
-          <StatCard label="Credit Score" value={Number(me.vipBetPoints ?? 0).toLocaleString()} accent="text-violet-300" />
+          <StatCard label="Credit Score" value={me.creditScore.toLocaleString()} accent="text-violet-300" />
           <StatCard label={t("dailyWithdrawLimit")} value={fmt(cur?.dailyWithdrawLimit ?? 0)} sub={`${t("maxPerWithdraw")} ${fmt(cur?.perWithdrawMax ?? 0)}`} />
           <StatCard label={t("commissionEarned")} value={fmt(me.commissionEarned)} sub={t("teamMembers", { n: team })} />
         </div>

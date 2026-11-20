@@ -34,7 +34,7 @@ test("active device sessions exclude revoked, expired and expired legacy rows, i
 });
 
 function loginStore(users) {
-  const committed = { users: new Map(users.map(user => [user._id, user])), devicesessions: new Map(), notifications: new Map() };
+  const committed = { users: new Map(users.map(user => [user._id, user])), devicesessions: new Map(), notifications: new Map(), adminlogs: new Map() };
   let queue = Promise.resolve();
   let failNotice = false;
   const transact = work => {
@@ -42,12 +42,16 @@ function loginStore(users) {
       const staged = structuredClone(committed);
       const tx = {
         now: async () => now,
-        get: async (table, id, lock) => { assert.equal(lock, true); return staged[table].get(id) ?? null; },
+        get: async (table, id, lock) => { if (lock !== undefined) assert.equal(lock, true); return staged[table].get(id) ?? null; },
         findWhere: async (table, filter) => [...staged[table].values()].filter(row => Object.entries(filter).every(([key, value]) => row[key] === value)),
         insert: async (table, id, row) => {
-          if (table === "notifications" && failNotice) throw new Error("Notice insert failed");
+          if (["notifications", "adminlogs"].includes(table) && failNotice) throw new Error("Notice insert failed");
           staged[table].set(id, row);
         },
+        put: async (table, id, row) => staged[table].set(id, row),
+        page: async (table, filter, after = "") => [...staged[table].values()]
+          .filter(row => row._id > after && Object.entries(filter).every(([key, value]) => row[key] === value))
+          .sort((a, b) => a._id < b._id ? -1 : 1).slice(0, 500),
       };
       await work(tx);
       Object.assign(committed, staged);
@@ -57,6 +61,35 @@ function loginStore(users) {
   };
   return { committed, transact, fail: () => { failNotice = true; } };
 }
+
+test("Agent logout revokes every target device atomically, not other accounts, and allows fresh logins", async () => {
+  const store = loginStore([
+    { _id: "owner", role: "owner", name: "Agent", isActive: true },
+    { _id: "player", role: "client", name: "Player", isActive: true },
+    { _id: "other", role: "client", name: "Other", isActive: true },
+  ]);
+  for (let i = 0; i < 501; i++) {
+    const row = session({ _id: `target-${String(i).padStart(4, "0")}` });
+    store.committed.devicesessions.set(row._id, row);
+  }
+  const other = session({ userId: "other" });
+  store.committed.devicesessions.set(other._id, other);
+  await assert.rejects(store.transact(tx => devices.revokeAccountSessions(tx, "player", "other")), /Agent access/);
+  await assert.rejects(store.transact(tx => devices.revokeAccountSessions(tx, "owner", "missing")), /not found/);
+  await store.transact(async tx => assert.equal(await devices.revokeAccountSessions(tx, "owner", "player"), 501));
+  const target = [...store.committed.devicesessions.values()].filter(row => row.userId === "player");
+  assert.equal(devices.activeDeviceSessions(target, now).length, 0);
+  assert.equal(store.committed.devicesessions.get(other._id).revokedAt, null);
+  assert.equal(store.committed.users.get("player").sessionsRevokedAt.getTime(), now);
+  assert.equal(store.committed.adminlogs.size, 1);
+  await store.transact(tx => devices.recordDeviceLogin(tx, {
+    userId: "player", sessionId: "new-session", deviceId: "new-browser", deviceName: "Browser", userAgent: "", ip: null,
+  }));
+  assert.equal(devices.activeDeviceSessions([...store.committed.devicesessions.values()].filter(row => row.userId === "player"), now).length, 1);
+  store.fail();
+  await assert.rejects(store.transact(tx => devices.revokeAccountSessions(tx, "owner", "player")), /Notice insert failed/);
+  assert.equal(devices.activeDeviceSessions([...store.committed.devicesessions.values()].filter(row => row.userId === "player"), now).length, 1);
+});
 
 test("Super Admin new browsers warn only owners; repeat/concurrent logins and IP changes do not repeat warnings", async () => {
   const store = loginStore([{ _id: "super", role: "admin", name: "Fixture Super", isActive: true }]);
@@ -159,10 +192,40 @@ test("device overview is owner-only, deduplicates browsers, excludes inactive se
   assert.equal((await overview("owner", [], [], true).GET(new Request("http://localhost/api/admin/devices"))).status, 503);
 });
 
+test("logout endpoint is Agent-only, validates requests and commits revocation through the login lock", async () => {
+  const store = loginStore([
+    { _id: "owner", role: "owner", isActive: true, name: "Agent" },
+    { _id: "player", role: "client", isActive: true, name: "Player" },
+  ]);
+  let locks = 0;
+  const route = role => load("src\\app\\api\\admin\\devices\\route.ts", {
+    "next/server": { NextResponse: { json: Response.json } },
+    "@/models": {},
+    "@/lib/serverAuth": { getServerSessionUser: async () => role ? { id: "owner", dbRole: role } : null },
+    "@/lib/deviceSessions": devices,
+    "@/lib/mysql": {},
+    "@/lib/multiplayer-store": { mysqlMultiplayerStore: { transact: async (lock, work) => {
+      assert.equal(lock, "security:login:player"); locks++; return store.transact(work);
+    } } },
+  });
+  const request = body => new Request("http://localhost", { method: "POST", body: JSON.stringify(body) });
+  for (const role of [null, "client", "agent", "subadmin", "admin"]) {
+    assert.equal((await route(role).POST(request({ userId: "player" }))).status, 403);
+  }
+  for (const body of [null, {}, { userId: 1 }, { userId: "" }]) {
+    assert.equal((await route("owner").POST(request(body))).status, 400);
+  }
+  assert.equal(locks, 0);
+  const response = await route("owner").POST(request({ userId: "player" }));
+  assert.equal(response.status, 200);
+  assert.ok((await response.json()).success);
+  assert.equal(locks, 1);
+});
+
 test("signed remembered-browser cookie survives logouts/IP changes but rejects tampering; expired sessions cannot authenticate", async () => {
   const previousSecret = process.env.NEXTAUTH_SECRET;
   process.env.NEXTAUTH_SECRET = "fixture-device-signing-secret";
-  let requestCookie = "", authCookie = "", expired = false;
+  let requestCookie = "", authCookie = "", expired = false, revoked = false, sessionsRevokedAt = null;
   const writes = [];
   const auth = load("src\\lib\\serverAuth.ts", {
     "node:crypto": crypto, "./mongo": { dbConnect: async () => {} },
@@ -172,8 +235,8 @@ test("signed remembered-browser cookie survives logouts/IP changes but rejects t
     "./multiplayer-store": { mysqlMultiplayerStore: { transact: async (key, work) => work({}) } },
     "./deviceSessions": { ...devices, recordDeviceLogin: async (_tx, input) => writes.push(input) },
     "@/models": {
-      DeviceSession: { findOne: () => ({ lean: async () => session({ expiresAt: new Date(Date.now() + (expired ? -1000 : 60000)) }) }) },
-      User: { findById: () => ({ lean: async () => ({ _id: "staff", role: "admin", isActive: true }) }) },
+      DeviceSession: { findOne: () => ({ lean: async () => revoked ? null : session({ expiresAt: new Date(Date.now() + (expired ? -1000 : 60000)) }) }) },
+      User: { findById: () => ({ lean: async () => ({ _id: "staff", role: "admin", isActive: true, sessionsRevokedAt }) }) },
     },
   });
   try {
@@ -192,6 +255,17 @@ test("signed remembered-browser cookie survives logouts/IP changes but rejects t
     assert.equal((await auth.getServerSessionUser()).dbRole, "admin");
     expired = true;
     assert.equal(await auth.getServerSessionUser(), null);
+    expired = false;
+    revoked = true;
+    assert.equal(await auth.getServerSessionUser(), null);
+    revoked = false;
+    const legacyPayload = Buffer.from(JSON.stringify({ sub: "staff", exp: Date.now() + devices.DEVICE_SESSION_TTL_MS - 1000 })).toString("base64url");
+    authCookie = `${legacyPayload}.${crypto.createHmac("sha256", process.env.NEXTAUTH_SECRET).update(legacyPayload).digest("base64url")}`;
+    assert.equal((await auth.getServerSessionUser()).dbRole, "admin");
+    sessionsRevokedAt = new Date();
+    assert.equal(await auth.getServerSessionUser(), null);
+    auth.setAuthCookie(response, "staff", second, secondRequest);
+    assert.equal((await auth.getServerSessionUser()).dbRole, "admin");
     await auth.createDeviceSession("staff", new Request("http://localhost", { headers: { cookie: requestCookie + "tampered" } }), null);
     assert.notEqual(writes[2].deviceId, writes[0].deviceId);
   } finally {

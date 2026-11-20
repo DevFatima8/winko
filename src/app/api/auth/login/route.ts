@@ -6,6 +6,7 @@ import { verifyPassword, isStaff } from "@/lib/auth";
 import { assignPaymentAccounts, genReferralCode, genUsername } from "@/lib/platform";
 import { ensureAdmin } from "@/lib/seed";
 import { createDeviceSession, setAuthCookie } from "@/lib/serverAuth";
+import { requestIp } from "@/lib/requestIp";
 
 async function retryTransientDbError<T>(operation: () => T | PromiseLike<T>): Promise<Awaited<T>> {
     try {
@@ -24,7 +25,7 @@ export async function POST(req: Request) {
         const form = await req.formData();
         const rawLogin = String(form.get("phone") ?? "").trim();
         const password = String(form.get("password") ?? "");
-        const loginIp = String(form.get("loginIp") ?? "").trim() || null;
+        const loginIp = requestIp(req);
 
         try { await ensureMysqlReady(); } catch { await dbConnect(); }
 

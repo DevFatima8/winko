@@ -460,6 +460,9 @@ export default function HiLoGame() {
 
           <div>
             <p className="hilo-label">2 · Place bet</p>
+            <p className="mb-2 text-xs text-amber-100">
+              One paid bet per account per cycle. The server assigns 30 wins per completed cycle of 100 different accounts.
+            </p>
             <div className="hilo-board">
               {BET_OPTIONS.map((option) => {
                 const meta = BET_META[option.id];

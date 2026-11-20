@@ -171,7 +171,7 @@
   padding: 4px clamp(6px, 1.5vw, 14px);
   display: grid;
   gap: 8px;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   flex: 1 1 0%;
   min-height: 0;
   overflow-y: auto;
@@ -181,11 +181,15 @@
 
 @media (min-width: 1024px) {
   .hilo-layout {
-    grid-template-columns: 1.35fr 1fr;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
     gap: 12px;
     overflow-y: auto;
     align-items: start;
   }
+}
+
+.hilo-table {
+  min-width: 0;
 }
 
 /* ---------- stage ---------- */

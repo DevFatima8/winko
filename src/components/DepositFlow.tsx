@@ -71,7 +71,7 @@ export function DepositFlow({ accounts = [], qrAccount = null, initialAmount, mi
   const account = qrMode ? qrAccount : accounts.find((a) => a.provider === provider) ?? null;
   const numAmount = Number(amount);
   const validAmount = Number.isFinite(numAmount) && numAmount > 0 ? numAmount : 0;
-  const providers = (["easypaisa", "bank", "jazzcash", "raast"] as const).map((p) => ({ p, has: accounts.some((a) => a.provider === p) }));
+  const providers = (["jazzcash", "easypaisa", "raast", "bank"] as const).map((p) => ({ p, has: accounts.some((a) => a.provider === p) }));
   const qrAccounts = qrAccount ? [qrAccount] : [];
   const bonusFor = (value: number) => firstDepositBonusEligible ? Math.round(value * 5) / 100 : 0;
   const bonus = bonusFor(validAmount);

@@ -107,7 +107,7 @@ export default function ProfilePageClient({ params, searchParams }: { params?: R
           <div className="min-w-0 space-y-0.5">
             <div className="flex items-center gap-1 text-[15px] font-bold text-white"><span className="truncate">{me.name}</span><CopyBtn value={String(me.name)} /></div>
             <div className="flex items-center gap-1 text-[16px] font-bold text-white"><span className="truncate">{me.displayId}</span><CopyBtn value={me.displayId} label="Copy player ID" /></div>
-            <div className="text-[13px] font-semibold text-slate-300">Credit Score: <span className="text-emerald-300">100</span></div>
+            <div className="text-[13px] font-semibold text-slate-300">Credit Score: <span className="text-emerald-300">{me.creditScore.toLocaleString()}</span></div>
           </div>
         </div>
 

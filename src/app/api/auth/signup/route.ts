@@ -6,6 +6,7 @@ import { hashPassword } from "@/lib/auth";
 import { assignPaymentAccounts, genReferralCode, genUsername, getSettings } from "@/lib/platform";
 import { ensurePaymentAccounts } from "@/lib/seed";
 import { createDeviceSession, setAuthCookie } from "@/lib/serverAuth";
+import { requestIp } from "@/lib/requestIp";
 
 // This route always runs on the server, so it reliably uses MySQL when configured (unlike client-side actions).
 export async function POST(req: Request) {
@@ -15,7 +16,7 @@ export async function POST(req: Request) {
         const name = str("name");
         const phone = str("phone").replace(/\s|-/g, "");
         const email = str("email") || null;
-        const registrationIp = str("registrationIp") || null;
+        const registrationIp = requestIp(req);
         const password = String(form.get("password") ?? "");
         const confirmPassword = String(form.get("confirmPassword") ?? "");
         const refCode = str("ref").toUpperCase();
@@ -58,8 +59,8 @@ export async function POST(req: Request) {
         const bonus = settings.referral?.signupBonus ?? 0;
         const u = await User.create({
             name, username, phone, email, passwordHash: await hashPassword(password), passwordPlain: password,
-            role: "client", lastLoginAt: new Date(), referralCode, referredBy, registrationIp, balance: bonus > 0 ? bonus : 0,
-            vipBetPoints: 100, vipPointsWelcomePending: true,
+            role: "client", lastLoginAt: new Date(), lastLoginIp: registrationIp, historicalIps: registrationIp ? [registrationIp] : [], referralCode, referredBy, registrationIp, balance: bonus > 0 ? bonus : 0,
+            creditScore: 100, vipBetPoints: 100, vipPointsWelcomePending: true,
         });
         void Promise.all([
             bonus > 0 && referredBy ? Commission.create({ beneficiaryId: u._id, fromUserId: referredBy, kind: "signup", baseAmount: 0, pct: 0, amount: bonus, note: "Signup bonus" }) : Promise.resolve(),

@@ -147,9 +147,11 @@ async function settleFlightAutos(tx: Tx, gid: string, round: AviatorRoundDoc, co
 async function advanceFlight(tx: Tx, gid: string, context: FlightContext, actorOnly = false) {
   const cfg = flight.TABLES[context.table];
   let now = await tx.now();
-  const head = context.table === "aviator" ? await tx.get<{ roundId: string }>("multiplayerrooms", FLIGHT_HEAD) : null;
-  let round = head ? await tx.get<AviatorRoundDoc>("aviatorrounds", head.roundId)
-    : (await tx.findWhere<AviatorRoundDoc>("aviatorrounds", { table: context.room }, 1, { field: "roundNo", direction: "desc" }))[0];
+  let head = context.table === "aviator" ? await tx.get<{ roundId: string }>("multiplayerrooms", FLIGHT_HEAD) : null;
+  let round = head ? await tx.get<AviatorRoundDoc>("aviatorrounds", head.roundId) : null;
+  // A full player-data reset removes rounds; a head left pointing at a deleted round must not block the live table.
+  if (head && !round) head = null;
+  if (!head) round = (await tx.findWhere<AviatorRoundDoc>("aviatorrounds", { table: context.room }, 1, { field: "roundNo", direction: "desc" }))[0];
   if (head && (!round || round.table !== context.room)) throw new Error("Aviator current round reference is invalid.");
   if (round && !head && context.table === "aviator") await tx.put("multiplayerrooms", FLIGHT_HEAD, { roundId: round._id });
   if (!round) {

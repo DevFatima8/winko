@@ -395,6 +395,24 @@ export async function adjustVipBetPointsAction(userId: string, _: ActionState, f
   return { success: `VIP bet points ${direction === "add" ? "add" : "remove"} ho gaye.` };
 }
 
+export async function adjustCreditScoreAction(userId: string, _: ActionState, form: FormData): Promise<ActionState> {
+  const me = await getServerSessionUser();
+  if (!me || me.role !== "admin" || me.level < 1) return { error: "Admin access required." };
+  try {
+    const { adjustCreditScore } = await import("./creditScore");
+    const { mysqlMultiplayerStore } = await import("./multiplayer-store");
+    const score = await mysqlMultiplayerStore.transact(`credit-score:${userId}`, tx =>
+      adjustCreditScore(tx, me, userId, num(form, "amount"), str(form, "direction")));
+    revalidatePath("/admin/credit-scores");
+    revalidatePath(`/admin/users/${userId}`);
+    revalidatePath("/player");
+    return { success: `Credit score updated: ${score}.` };
+  } catch (error) {
+    console.error("[admin credit score]", error);
+    return { error: error instanceof Error ? error.message : "Credit score update failed. Please retry." };
+  }
+}
+
 // games on/off
 export async function toggleGameAction(slug: string, isActive: boolean) {
   await requireSuper();

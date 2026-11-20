@@ -534,7 +534,7 @@ async function loadData(request: Request) {
             if (me.level < 2) {
                 return NextResponse.json({ users: users.map(({ passwordPlain, withdrawPin, registrationIp, ...user }) => user), canSee: false, canOperate: true }, { headers: { "Cache-Control": "no-store" } });
             }
-            return NextResponse.json({ users, canSee: true, canOperate: true }, { headers: { "Cache-Control": "no-store" } });
+            return NextResponse.json({ users, canSee: true, canOperate: true, canLogout: me.dbRole === "owner" }, { headers: { "Cache-Control": "no-store" } });
         }
         if (view === "user") {
             const id = params.get("id");
@@ -698,8 +698,8 @@ async function loadData(request: Request) {
             const logs = await AdminLog.find(filter).sort({ createdAt: direction }).limit(500).lean();
             return NextResponse.json({ logs }, { headers: { "Cache-Control": "no-store" } });
         }
-        if (view === "vipBetPoints") {
-            const filter: Record<string, unknown> = { role: "client" };
+        if (view === "vipBetPoints" || view === "creditScores") {
+            const filter: Record<string, unknown> = { role: view === "creditScores" ? { $in: ["client", "agent"] } : "client" };
             if (me.level < 2) filter.referredBy = me.id;
             const q = params.get("q")?.trim();
             if (q) {
@@ -707,7 +707,7 @@ async function loadData(request: Request) {
                 filter.$or = [{ name: pattern }, { phone: pattern }, { username: pattern }];
             }
             const direction = params.get("order") === "asc" ? 1 : -1;
-            const users = await User.find(filter, "name phone username vipBetPoints createdAt").sort({ name: direction, createdAt: direction === 1 ? -1 : 1 }).limit(500).lean();
+            const users = await User.find(filter, view === "creditScores" ? "name phone username creditScore createdAt" : "name phone username vipBetPoints createdAt").sort({ name: direction, createdAt: direction === 1 ? -1 : 1 }).limit(500).lean();
             return NextResponse.json({ users }, { headers: { "Cache-Control": "no-store" } });
         }
         if (view === "notifications") {

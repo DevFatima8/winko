@@ -97,6 +97,7 @@ export async function resetPlayerData({ userId, deleteAccount = false, actorId, 
       await remove("aviatorrounds", "JSON_UNQUOTE(JSON_EXTRACT(data, '$.table')) IN (?, ?)", [`aviator:${userId}`, `aviator-x:${userId}`]);
     } else {
       await remove("aviatorrounds", "1 = 1", []);
+      await remove("multiplayerrooms", "id = ?", ["aviator:shared:v2:head"]);
       await remove("cardrounds", "1 = 1", []);
     }
     if (deleteAccount) {

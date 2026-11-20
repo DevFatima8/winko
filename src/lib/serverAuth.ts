@@ -63,7 +63,7 @@ function readSession(token: string | undefined) {
         if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) return null;
         const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { sub?: string; sid?: string; exp?: number };
         return typeof session.sub === "string" && typeof session.exp === "number" && session.exp > Date.now()
-            ? { userId: session.sub, sessionId: typeof session.sid === "string" ? session.sid : null }
+            ? { userId: session.sub, sessionId: typeof session.sid === "string" ? session.sid : null, issuedAt: session.exp - SESSION_TTL_SECONDS * 1000 }
             : null;
     } catch {
         return null;
@@ -139,6 +139,7 @@ export async function getServerSessionUser(): Promise<CurrentUser | null> {
     }
     let user = await User.findById(session.userId).lean();
     if (!user || user.isActive === false) return null;
+    if (!session.sessionId && user.sessionsRevokedAt && session.issuedAt <= new Date(user.sessionsRevokedAt).getTime()) return null;
     if ((user.role === "client" || user.role === "agent") && await WinHold.findOne({ userId: session.userId, claimed: false }, "_id").lean()) {
         await claimWinHolds(session.userId);
         user = await User.findById(session.userId).lean();

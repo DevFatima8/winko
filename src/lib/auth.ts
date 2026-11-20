@@ -33,12 +33,13 @@ export type CurrentUser = {
   displayId: string | null;
   id: string; name: string; avatar: string | null; username: string | null; phone: string; email: string | null; role: Role; dbRole: DbRole; balance: number; isActive: boolean; vipPointsWelcomePending: boolean;
   level: number; adminId: string | null; vipLevel: number; totalDeposited: number; totalWithdrawn: number; vipBetPoints: number; blockedGames: string[]; referralCode: string | null; hasPin: boolean; commissionEarned: number; adminNote: string;
-  betPresets: number[];
+  betPresets: number[]; creditScore: number;
 };
 export function toCurrentUser(u: UserDoc): CurrentUser {
   const dbRole = (u.role as DbRole) ?? "client";
   return {
     displayId: null,
+    creditScore: u.creditScore ?? 100,
     id: String(u._id), name: u.name, avatar: u.avatar ?? null, username: u.username ?? null, phone: u.phone, email: u.email ?? null,
     role: isStaff(dbRole) ? "admin" : "client", dbRole, balance: u.balance ?? 0, isActive: u.isActive !== false, level: staffLevel(dbRole), adminId: u.adminId ?? null,
     vipLevel: u.vipLevel ?? 0, vipBetPoints: u.vipBetPoints ?? 0, vipPointsWelcomePending: u.vipPointsWelcomePending ?? false, totalDeposited: u.totalDeposited ?? 0, totalWithdrawn: u.totalWithdrawn ?? 0, blockedGames: u.blockedGames ?? [], referralCode: u.referralCode ?? null, hasPin: !!u.withdrawPin, commissionEarned: u.commissionEarned ?? 0, adminNote: u.adminNote ?? "", betPresets: u.betPresets ?? [...DEFAULT_BET_PRESETS],

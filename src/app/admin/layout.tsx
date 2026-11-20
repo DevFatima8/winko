@@ -30,6 +30,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     { href: "/admin/support", label: t("liveSupportAdmin"), icon: "💬", badge: <AdminCountBadge label={t("liveSupportAdmin")} description="unread messages" count={support.counts?.unread} error={support.error} /> },
     ...(superNav ? [{ href: "/admin/forgot-password", label: "Forgot Password", icon: "🔐", badge: <AdminCountBadge label="Forgot Password" description="unanswered requests" count={forgotPassword.counts?.unread} error={forgotPassword.error} /> }] : []),
     { href: "/admin/users", label: t("usersAdmin"), icon: "👥" },
+    { href: "/admin/credit-scores", label: "Credit Scores", icon: "⭐" },
     ...(user.level >= 3 ? [{ href: "/admin/devices", label: "Login devices", icon: "🛡️" }] : []),
     { href: "/admin/deposits", label: t("depositsAdmin"), icon: "💳", badge: <AdminCountBadge label={t("depositsAdmin")} count={payments.counts?.deposits} error={payments.error} /> },
     ...(superNav ? [{ href: "/admin/payments", label: t("paymentAccountsAdmin"), icon: "🏦" }] : []),

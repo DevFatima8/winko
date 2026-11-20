@@ -76,11 +76,18 @@ export function useSession() {
   }, [tick, retry]);
   useEffect(() => {
     const bump = () => setTick((t) => t + 1);
+    const checkSession = () => { if (!document.hidden) bump(); };
+    const timer = window.setInterval(checkSession, 15000);
     window.addEventListener("wx:session", bump);
     window.addEventListener("wx:balance-update", bump);
+    window.addEventListener("focus", checkSession);
+    document.addEventListener("visibilitychange", checkSession);
     return () => {
+      window.clearInterval(timer);
       window.removeEventListener("wx:session", bump);
       window.removeEventListener("wx:balance-update", bump);
+      window.removeEventListener("focus", checkSession);
+      document.removeEventListener("visibilitychange", checkSession);
     };
   }, []);
   return { user, loading: user === undefined, error, refresh: () => setTick((t) => t + 1) };

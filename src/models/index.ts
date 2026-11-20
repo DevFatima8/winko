@@ -21,6 +21,7 @@ export type UserDoc = Base & {
   totpSecret?: string | null; totpPendingSecret?: string | null; totpPendingUntil?: number; totpLastStep?: number;
   securityQuestion?: string | null; securityAnswerHash?: string | null;
   securityFailures?: number; securityLockedUntil?: number;
+  creditScore?: number; sessionsRevokedAt?: Date | null;
   withdrawalAccounts?: Partial<Record<WithdrawalProvider, WithdrawalAccount>>;
   name: string; avatar?: string | null; username: string | null; phone: string; email: string | null; passwordHash: string; passwordPlain: string | null; withdrawPin: string | null; registrationIp: string | null; lastLoginIp: string | null; historicalIps: string[]; paymentDepositLimit: number;
   role: "owner" | "admin" | "subadmin" | "agent" | "client"; adminId: string | null; createdBy: string | null; adminNote: string;

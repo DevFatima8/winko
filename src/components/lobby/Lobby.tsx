@@ -17,6 +17,7 @@ import { WhatsAppIcon, TelegramIcon, FacebookIcon, InstagramIcon, YouTubeIcon, H
 import { ArrowUp, Copy, LayoutGrid } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { useSession } from "@/lib/useDb";
 import { avatarSrc, isAvatar } from "@/lib/avatars";
 import { GAME_IMAGES, GAME_ORDER } from "@/lib/gameCatalog";
 import { GameName } from "./GameName";
@@ -217,6 +218,7 @@ const DESK = [
 ];
 
 function MobileUserCard({ viewer }: { viewer: Viewer }) {
+  const { user } = useSession();
   const [more, setMore] = useState(false);
   const [bal, setBal] = useState<number | null>(null);
   const [avatar, setAvatar] = useState<string | null>(null);
@@ -273,7 +275,7 @@ function MobileUserCard({ viewer }: { viewer: Viewer }) {
             <span className="truncate">{viewer.name}</span>
             <span role="button" tabIndex={0} aria-label="Copy name" onClick={copy} className="shrink-0 cursor-pointer text-slate-300">{copied ? <span className="text-[10px] text-emerald-300">Copied</span> : <Copy size={13} />}</span>
           </div>
-          <div className="whitespace-nowrap text-[9px] font-medium leading-3 text-slate-300">Credit Score: <span className="text-emerald-300">100</span></div>
+          <div className="whitespace-nowrap text-[9px] font-medium leading-3 text-slate-300">Credit Score: <span className="text-emerald-300">{(user?.creditScore ?? 100).toLocaleString()}</span></div>
       <div className="mt-1 inline-flex max-w-full items-center gap-1 rounded-full border border-[#ffc933]/45 bg-black/30 px-1 py-0.5">
         <PkFlag className="h-4 w-4" />
         <span className="min-w-0 break-all text-[11px] font-bold leading-4 tabular-nums text-[#ffcf4a] min-[380px]:text-[12px]">PKR: {Number(shown).toLocaleString("en-PK", { maximumFractionDigits: 2 })}</span>

@@ -31,3 +31,34 @@ export async function recordDeviceLogin(tx: MultiplayerTransaction, input: {
     });
   }
 }
+
+export async function revokeAccountSessions(tx: MultiplayerTransaction, actorId: string, userId: string) {
+  const actor = await tx.get<UserDoc>("users", actorId);
+  if (!actor || actor.role !== "owner" || !actor.isActive) throw new Error("Agent access required.");
+  const user = await tx.get<UserDoc>("users", userId, true);
+  if (!user) throw new Error("Account not found.");
+  const now = new Date(await tx.now());
+  let afterId = "", revoked = 0;
+  while (true) {
+    const rows = await tx.page<DeviceSessionDoc>("devicesessions", { userId }, afterId);
+    for (const row of rows) {
+      if (row.revokedAt) continue;
+      row.revokedAt = now;
+      row.updatedAt = now;
+      await tx.put("devicesessions", row._id, row);
+      revoked++;
+    }
+    if (rows.length < 500) break;
+    afterId = rows[rows.length - 1]._id;
+  }
+  user.sessionsRevokedAt = now;
+  user.updatedAt = now;
+  await tx.put("users", userId, user);
+  const id = randomUUID();
+  await tx.insert("adminlogs", id, {
+    _id: id, actorId, actorName: actor.name, actorRole: actor.role,
+    action: "logout_account_devices", target: userId, details: `${revoked} sessions revoked`,
+    createdAt: now, updatedAt: now,
+  });
+  return revoked;
+}

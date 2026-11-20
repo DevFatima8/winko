@@ -1,8 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
+import { AccountLogoutButton } from "@/components/admin/AccountLogoutButton";
 
 type Account = {
   id: string; name: string; username: string | null; adminId: string | null; role: string; deviceCount: number;
+  registrationIp: string | null; lastLoginIp: string | null;
   devices: { deviceName: string; ip: string | null; lastSeenAt: string }[];
 };
 const roles: Record<string, string> = { owner: "Agent", admin: "Super Admin", subadmin: "Admin", agent: "Referral player", client: "Player" };
@@ -41,6 +43,8 @@ export default function DevicesPage() {
     {error && <p role="alert" className="text-red-300">{error}</p>}
     {!error && data && <div className="space-y-3">{data.users.map(user => <details key={user.id} className="rounded-xl bg-[#241246] p-4">
       <summary className="cursor-pointer">{user.name} {user.adminId ?? user.username ?? ""} - {roles[user.role] ?? user.role} - <b>{user.deviceCount} active device(s)</b></summary>
+      <p className="my-3 break-all text-sm text-cyan-300">Last login IP: {user.lastLoginIp ?? "Unknown"} | Registration IP: {user.registrationIp ?? "Unknown"}</p>
+      <AccountLogoutButton userId={user.id} name={user.name} onLogout={() => setRefresh(value => value + 1)} />
       <ul className="mt-3 space-y-2 text-sm text-[#b8a7e6]">{user.devices.map((device, index) => <li key={index}>{device.deviceName} | IP: {device.ip ?? "Unknown"} | Login: {new Date(device.lastSeenAt).toLocaleString()}</li>)}</ul>
     </details>)}{!data.users.length && <p>No accounts found.</p>}</div>}
     <div className="flex items-center gap-4">

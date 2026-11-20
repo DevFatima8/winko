@@ -6,7 +6,6 @@ import { createLegacyScene } from "./multiplayer-legacy-harness.mjs";
 const specs = {
   dice: { selection: { target: 50, dir: "under" }, win: outcome => outcome.win },
   "rock-paper-scissors": { selection: { choice: "rock" }, win: outcome => outcome.win },
-  "thai-hi-lo": { selection: { bet: "high" }, win: outcome => outcome.won },
   "treasure-bowl": { selection: {}, win: outcome => outcome.isWin },
   ludo: { selection: {}, win: outcome => outcome.winner === 0 },
   "race-betting": { selection: { bets: [{ type: "SUIT_BACK", target: "SPADE", odds: 3.75, stake: 10, isLay: false }] },

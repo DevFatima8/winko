@@ -25,10 +25,48 @@ type LifecycleResult = GameResultDoc & PoolFields & {
   browserParts?: string[];
   browserServerInput?: string; browserOutcome?: unknown;
   browserServerRequired?: boolean;
+  thaiHiLoDistinctCycle?: true;
   browserCardState?: unknown;
   browserShotWin?: boolean;
   browserOperations: Record<string, { action: string; amount: number }>;
 };
+
+const THAI_HI_LO_CYCLE_ID = "thai-hi-lo:distinct-player-wins:v1";
+type ThaiHiLoCycle = { _id: string; players: string[]; remaining: boolean[] };
+
+async function thaiHiLoCycle(tx: MultiplayerTransaction, userId: string) {
+  const cycle = await tx.get<ThaiHiLoCycle>("multiplayerrooms", THAI_HI_LO_CYCLE_ID);
+  if (cycle?.players.includes(userId)) {
+    throw new BrowserWagerError("You already played in this Thai Hi-Lo cycle. Try again after 100 different accounts finish their bets.");
+  }
+  return cycle;
+}
+
+async function checkThaiHiLoAdmission(tx: MultiplayerTransaction, userId: string) {
+  await thaiHiLoCycle(tx, userId);
+  const active = await tx.findWhere<LifecycleResult>("gameresults", {
+    userId, browserGame: "thai-hi-lo", browserStatus: "active", outcome: "pending",
+  });
+  for (const wager of active) {
+    if (!await forfeitExpiredNonLiveWagers(tx, "thai-hi-lo", wager._id)) {
+      throw new BrowserWagerError("Finish your active Thai Hi-Lo bet before placing another.");
+    }
+  }
+}
+
+async function nextThaiHiLoWin(tx: MultiplayerTransaction, userId: string) {
+  const cycle = await thaiHiLoCycle(tx, userId);
+  const players = [...cycle?.players ?? [], userId];
+  const fresh = () => [true, true, true, false, false, false, false, false, false, false];
+  const remaining = cycle ? [...cycle.remaining] : fresh();
+  const [won] = remaining.splice(randomInt(remaining.length), 1);
+  await tx.put<ThaiHiLoCycle>("multiplayerrooms", THAI_HI_LO_CYCLE_ID, {
+    _id: THAI_HI_LO_CYCLE_ID,
+    players: players.length === 100 ? [] : players,
+    remaining: remaining.length ? remaining : fresh(),
+  });
+  return won;
+}
 
 export async function browserPoolLifecycle(tx: MultiplayerTransaction, userId: string, input: {
   game: string; wagerId: string; operationId: string; action: "accept" | "increment" | "complete" | "refund" | "award" | "reduce";
@@ -87,10 +125,12 @@ export async function browserPoolLifecycle(tx: MultiplayerTransaction, userId: s
     if (!game?.isActive) throw new BrowserWagerError("This game is not available for betting.");
     if (game.underMaintenance) throw new BrowserWagerError("Under maintenance. Please try again later.");
     if (cents(user.balance) < cents(amount)) throw new BrowserWagerError("Insufficient balance.");
+    if (input.game === "thai-hi-lo") await checkThaiHiLoAdmission(tx, userId);
     result = {
       _id: id, gameId: game._id, userId, roundNo: null, betSlot: 0,
       betAmount: amount, winAmount: 0, outcome: "pending", resultData: enabled ? "Browser wager active | Daily pool" : "Browser wager active",
       browserGame: input.game, browserStatus: "active", browserOperations: {}, browserTotalStake: amount,
+      ...(input.game === "thai-hi-lo" ? { thaiHiLoDistinctCycle: true as const } : {}),
       ...(input.game === "dice" || input.game === "rock-paper-scissors" || input.game === "race-betting" || input.game === "tower-betting" || input.game === "derby-race" || input.game === "thai-hi-lo" || isSlotGame(input.game) || isServerBrowserCardGame(input.game) || isBrowserRouletteGame(input.game) ? { browserServerRequired: true } : {}),
       createdAt: now, updatedAt: now,
     };
@@ -107,6 +147,7 @@ export async function browserPoolLifecycle(tx: MultiplayerTransaction, userId: s
     if (input.action === "refund" && (result.browserGrossClaim ?? 0) > 0) throw new BrowserWagerError("A wager with awarded results must finish before settlement.");
     const pooled = result.poolVersion === DAILY_POOL_VERSION;
     if (input.action === "increment") {
+      if (result.thaiHiLoDistinctCycle) throw new BrowserWagerError("Thai Hi-Lo allows one paid bet per cycle. Set your full stake before betting.");
       if (amount < 10 && !verified) throw new BrowserWagerError("Minimum added stake is Rs. 10.");
       if (cents(result.browserTotalStake) + cents(amount) > MAX_GAME_BET * 100) {
         throw new BrowserWagerError("Maximum bet per player per round is Rs. 100,000.");
@@ -261,7 +302,7 @@ export async function resolveServerBrowserWager(tx: MultiplayerTransaction, user
       poolPending: result.poolPending === true, claim: result.browserCompletedClaim ?? result.poolClaim ?? 0, status: result.browserStatus, replay: true };
   }
   if (result.browserStatus !== "active") throw new BrowserWagerError("This wager already finished.");
-  const resolved = await serverOutcome(tx, userId, input.game, result.browserTotalStake, input.selection);
+  const resolved = await serverOutcome(tx, userId, input.game, result.browserTotalStake, input.selection, result.thaiHiLoDistinctCycle === true);
   validateSlotClaim(input.game, result.browserTotalStake, resolved.claim);
   const reply = await browserPoolLifecycle(tx, userId, { ...input, action: "complete", amount: resolved.claim }, enabled, true);
   const completed = await tx.get<LifecycleResult>("gameresults", id);
@@ -272,7 +313,7 @@ export async function resolveServerBrowserWager(tx: MultiplayerTransaction, user
   return { ...reply, outcome: resolved.outcome };
 }
 
-async function serverOutcome(tx: MultiplayerTransaction, userId: string, game: string, stake: number, selection: unknown) {
+async function serverOutcome(tx: MultiplayerTransaction, userId: string, game: string, stake: number, selection: unknown, thaiHiLoDistinctCycle = true) {
   const input = (selection && typeof selection === "object" ? selection : {}) as Record<string, unknown>;
   if (game === "tower-betting") throw new BrowserWagerError("Tower requires an accepted wager and table actions.");
   if (game === "dice") {
@@ -329,7 +370,7 @@ async function serverOutcome(tx: MultiplayerTransaction, userId: string, game: s
     const option = rules.BET_OPTIONS.find(option => option.id === input.bet);
     if (!option) throw new BrowserWagerError("Select a valid Thai Hi-Lo betting side.");
     if (!Number.isSafeInteger(cents(stake) * 2)) throw new BrowserWagerError("Thai Hi-Lo stake exceeds the supported wallet precision.");
-    const won = await nextPlayerWin(tx, game, userId);
+    const won = thaiHiLoDistinctCycle ? await nextThaiHiLoWin(tx, userId) : await nextBetWin(tx, game, 3, 10);
     const choices = rules.ALL_COMBOS.filter(dice => rules.isWin(option.id, dice) === won);
     const dice = choices[randomInt(choices.length)];
     const payout = won ? cents(stake * 2) / 100 : 0;
@@ -453,6 +494,7 @@ export async function playServerBrowserWager(tx: MultiplayerTransaction, userId:
   const selection = JSON.stringify(input.selection ?? {});
   if (selection.length > 8000) throw new BrowserWagerError("Invalid outcome selection.");
   if (existing && existing.browserServerInput !== selection) throw new BrowserWagerError("Wager identity was already used with a different selection.");
+  if (!existing && input.game === "thai-hi-lo") await checkThaiHiLoAdmission(tx, userId);
   const resolved = existing ? { claim: existing.browserClaim, outcome: existing.browserOutcome }
     : await serverOutcome(tx, userId, input.game, input.stake, input.selection);
   if (!existing) validateSlotClaim(input.game, input.stake, resolved.claim);

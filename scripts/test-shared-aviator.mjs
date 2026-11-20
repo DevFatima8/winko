@@ -76,6 +76,10 @@ test("Aviator current round lookup stays on primary keys after initialization an
   const head = s.data.multiplayerrooms.find(row => row._id.endsWith(":head"));
   assert.equal(head.roundId, s.data.aviatorrounds.at(-1)._id);
   head.roundId = "missing";
+  const recovered = await s.flight.getState("alice", "aviator");
+  assert.equal(recovered.round.id, next.round.id);
+  assert.equal(s.data.multiplayerrooms.find(row => row._id.endsWith(":head")).roundId, s.data.aviatorrounds.at(-1)._id);
+  s.data.aviatorrounds.at(-1).table = "other-room";
   await assert.rejects(s.flight.placeBet("alice", "aviator", 50, 0), /round reference is invalid/);
 });
 
