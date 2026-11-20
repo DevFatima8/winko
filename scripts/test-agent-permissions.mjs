@@ -16,7 +16,9 @@ function load(path, imports) {
   return loaded.exports;
 }
 
-const auth = load(join("src", "lib", "auth.ts"), { "@/lib/betPresets": load(join("src", "lib", "betPresets.ts"), {}) });
+const auth = load(join("src", "lib", "auth.ts"), {
+  "@/lib/betPresets": load(join("src", "lib", "betPresets.ts"), { "./gameBetLimits": load(join("src", "lib", "gameBetLimits.ts"), {}) }),
+});
 
 function pendingPaymentRoute({ level = 3, signedIn = true, fail = false, rows = [] } = {}) {
   const queries = [];
@@ -174,7 +176,7 @@ function actionFixture(level = 3) {
     "@/models": models,
     "./auth": auth,
     "./serverAuth": { getServerSessionUser: async () => ({ id: "staff", name: "Agent", dbRole: user.role, role: "admin", level }) },
-    "./platform": {}, "./notifications": {}, "./cloudinary": {}, "./gameCatalog": {},
+    "./platform": {}, "./notifications": {}, "./cloudinary": {}, "./gameCatalog": {}, "./siteGameCatalog": {},
     "./playerDataReset": { resetPlayerData: async () => { resets++; return { players: 1, deleted: 5 }; } },
     "./historySelection": { parseHistorySelection: (...args) => history.parseHistorySelection(...args) },
     "./selectedHistoryCleanup": { deleteSelectedHistory: async (options) => { cleanups.push(options); return { deleted: 2 }; } },
@@ -510,7 +512,7 @@ test("Block control updates local badge before refreshing; failure preserves exi
   } finally { globalThis.window = originalWindow; }
 });
 
-function resetFixture({ active = false, fail = false, missing = false, unsettled = false } = {}) {
+function resetFixture({ active = false, fail = false, missing = false, entries = [], ledger = { status: "open", stakeCents: 50000, outstanding: 3 }, failPool = false } = {}) {
   const queries = [];
   let committed = false, rolledBack = false, released = false;
   const connection = {
@@ -518,7 +520,11 @@ function resetFixture({ active = false, fail = false, missing = false, unsettled
     async execute(sql, values) {
       queries.push({ sql, values });
       if (sql.startsWith("SELECT id, data FROM users")) return [missing ? [] : [{ id: "player-1", data: { isActive: active } }]];
-      if (sql.startsWith("SELECT id FROM dailypoolentries")) return [unsettled ? [{ id: "pending-pool-wager" }] : []];
+      if (sql.startsWith("SELECT id, data FROM dailypoolentries")) {
+        return [entries.filter(entry => values.includes(entry.userId) && ["active", "closed"].includes(entry.status)).map(entry => ({ id: entry._id, data: JSON.stringify(entry) }))];
+      }
+      if (sql.startsWith("SELECT id, data FROM dailypools")) return [ledger ? [{ id: values[0], data: JSON.stringify(ledger) }] : []];
+      if (failPool && sql.startsWith("UPDATE dailypools")) throw new Error("simulated pool write failure");
       if (sql.startsWith("SELECT id FROM supportthreads")) return [[{ id: "thread-1" }]];
       if (sql.startsWith("SELECT JSON_UNQUOTE")) return [[{ beneficiaryId: "other-player", amount: 15 }]];
       if (fail && sql.startsWith("DELETE FROM `transactions`")) throw new Error("simulated write failure");
@@ -536,12 +542,41 @@ function resetFixture({ active = false, fail = false, missing = false, unsettled
   return { ...reset, queries, state: () => ({ committed, rolledBack, released }) };
 }
 
-test("Player reset/deletion cannot remove unresolved daily-pool obligations", async () => {
+test("Player reset/deletion removes pending pool claims and reconciles only the selected player's open stakes", async () => {
+  const entries = [
+    { _id: "active", userId: "player-1", poolId: "pool", stakeCents: 10000, status: "active" },
+    { _id: "closed", userId: "player-1", poolId: "pool", stakeCents: 5000, status: "closed" },
+    { _id: "cancelled", userId: "player-1", poolId: "pool", stakeCents: 2000, status: "cancelled" },
+    { _id: "paid", userId: "player-1", poolId: "old-pool", stakeCents: 3000, status: "settled" },
+    { _id: "other", userId: "other-player", poolId: "pool", stakeCents: 35000, status: "active" },
+  ];
   for (const deleteAccount of [false, true]) {
-    const fixture = resetFixture({ unsettled: true });
-    await assert.rejects(fixture.resetPlayerData({ userId: "player-1", deleteAccount, actorId: "owner", actorName: "Agent" }), /Daily-pool wagers/);
+    const fixture = resetFixture({ entries });
+    await fixture.resetPlayerData({ userId: "player-1", deleteAccount, actorId: "owner", actorName: "Agent" });
+    assert.deepEqual(fixture.state(), { committed: true, rolledBack: false, released: true });
+    const updates = fixture.queries.filter(query => query.sql.startsWith("UPDATE dailypools"));
+    assert.equal(updates.length, 1);
+    assert.equal(updates[0].values[1], "pool");
+    const remaining = JSON.parse(updates[0].values[0]);
+    assert.equal(remaining.stakeCents, 35000);
+    assert.equal(remaining.outstanding, 2);
+    const deletion = fixture.queries.find(query => query.sql.startsWith("DELETE FROM `dailypoolentries`"));
+    assert.match(deletion.sql, /\$\.userId/);
+    assert.deepEqual(deletion.values, ["player-1"]);
+    assert.ok(!fixture.queries.some(query => query.sql.startsWith("DELETE FROM `dailypools`")));
+    assert.ok(!fixture.queries.some(query => query.sql.includes("'$.balance'") && !query.sql.includes("'$.balance', 0")));
+    const audit = JSON.parse(fixture.queries.find(query => query.sql.startsWith("INSERT INTO adminlogs")).values[1]);
+    assert.match(audit.details, /without refund or payout/);
+  }
+});
+
+test("Pool reconciliation failure rolls back reset without reporting success", async () => {
+  const entries = [{ _id: "active", userId: "player-1", poolId: "pool", stakeCents: 10000, status: "active" }];
+  for (const options of [{ ledger: null }, { ledger: { status: "open", stakeCents: 5000, outstanding: 1 } },
+    { ledger: { status: "open", stakeCents: 10000, outstanding: 0 } }, { failPool: true }]) {
+    const fixture = resetFixture({ entries, ...options });
+    await assert.rejects(fixture.resetPlayerData({ userId: "player-1", actorId: "owner", actorName: "Agent" }), /pool.*(inconsistent|write failure)/i);
     assert.deepEqual(fixture.state(), { committed: false, rolledBack: true, released: true });
-    assert.ok(!fixture.queries.some(query => query.sql.startsWith("DELETE")));
   }
 });
 
@@ -582,7 +617,7 @@ test("Account deletion detaches referrals; all-player reset also clears shared r
   assert.ok(deletion.queries.some(({ sql }) => sql.includes("'$.referredBy', NULL")));
   const all = resetFixture();
   await all.resetPlayerData({ actorId: "owner-1", actorName: "Agent" });
-  for (const table of ["aviatorrounds", "cardrounds"]) {
+  for (const table of ["aviatorrounds", "cardrounds", "dailypoolentries", "dailypools"]) {
     assert.ok(all.queries.some(({ sql }) => sql === `DELETE FROM \`${table}\` WHERE 1 = 1`));
   }
 });

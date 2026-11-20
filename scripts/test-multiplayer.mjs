@@ -1142,7 +1142,8 @@ test("Production store uses one transaction/connection and InnoDB row locks, bou
             for (const [id, receipt] of Object.entries(state.requests)) if (!values.length || values.includes(receipt.userId)) { delete state.requests[id]; count++; }
             return [{ affectedRows: count }];
           }
-          if (sql.startsWith("SELECT id FROM supportthreads") || sql.startsWith("SELECT JSON_UNQUOTE")) return [[]];
+          if (sql.startsWith("SELECT id FROM supportthreads") || sql.startsWith("SELECT JSON_UNQUOTE") ||
+              sql.startsWith("SELECT id, data FROM dailypoolentries")) return [[]];
           if (sql.startsWith("DELETE FROM `users`")) { delete state.users[values[0]]; return [{ affectedRows: 1 }]; }
           if (sql.startsWith("UPDATE users SET data = JSON_REMOVE")) {
             for (const id of values.slice(1)) if (state.users[id]) state.users[id].balance = 0;

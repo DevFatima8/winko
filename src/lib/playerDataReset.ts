@@ -2,6 +2,7 @@ import type { ResultSetHeader, RowDataPacket } from "mysql2";
 import { ensureMysqlReady, getMysqlPool } from "./mysql";
 import { cleanupMultiplayerPlayerData, ensureMultiplayerCleanupTables, lockMultiplayerCleanupRooms } from "./multiplayer-cleanup";
 import { cleanupPersonalLegacyCardRooms } from "./sharedLegacyCardCleanup";
+import type { PoolEntry } from "./dailyPool";
 
 type ResetOptions = { userId?: string; deleteAccount?: boolean; actorId: string; actorName: string };
 
@@ -29,11 +30,6 @@ export async function resetPlayerData({ userId, deleteAccount = false, actorId, 
     if (activeCount) throw new Error(`${activeCount} selected player account(s) are still active. Block ${userId ? "this player" : "all player/referral-agent accounts under All Users"} first, wait for ongoing requests to finish, then retry. No data was deleted.`);
     const ids = accounts.map((account) => account.id);
     const slots = ids.map(() => "?").join(", ");
-    const [unsettled] = await connection.execute<RowDataPacket[]>(
-      `SELECT id FROM dailypoolentries WHERE JSON_UNQUOTE(JSON_EXTRACT(data, '$.userId')) IN (${slots}) AND JSON_UNQUOTE(JSON_EXTRACT(data, '$.status')) IN ('active', 'closed') LIMIT 1`,
-      ids,
-    );
-    if (unsettled.length) throw new Error("Daily-pool wagers are awaiting completion or settlement. Finish and settle them before resetting or deleting this player. No data was deleted.");
     let deleted = 0;
     deleted += await cleanupMultiplayerPlayerData(connection, { userIds: ids, fullReset: !userId });
     deleted += await cleanupPersonalLegacyCardRooms(connection, ids);
@@ -42,6 +38,36 @@ export async function resetPlayerData({ userId, deleteAccount = false, actorId, 
       deleted += result.affectedRows;
     };
     const userField = "JSON_UNQUOTE(JSON_EXTRACT(data, '$.userId'))";
+    if (userId) {
+      const [entries] = await connection.execute<RowDataPacket[]>(
+        `SELECT id, data FROM dailypoolentries WHERE ${userField} IN (${slots}) AND JSON_UNQUOTE(JSON_EXTRACT(data, '$.status')) IN ('active', 'closed') ORDER BY id FOR UPDATE`,
+        ids,
+      );
+      const removals = new Map<string, { stakeCents: number; outstanding: number }>();
+      for (const row of entries) {
+        const entry: PoolEntry = typeof row.data === "string" ? JSON.parse(row.data) : row.data;
+        const totals = removals.get(entry.poolId) ?? { stakeCents: 0, outstanding: 0 };
+        totals.stakeCents += entry.stakeCents;
+        if (entry.status === "active") totals.outstanding++;
+        if (!Number.isSafeInteger(totals.stakeCents) || totals.stakeCents < 0) throw new Error("Daily-pool stake ledger is inconsistent. Nothing was deleted.");
+        removals.set(entry.poolId, totals);
+      }
+      for (const [poolId, totals] of [...removals].sort(([a], [b]) => a.localeCompare(b))) {
+        const [rows] = await connection.execute<RowDataPacket[]>("SELECT id, data FROM dailypools WHERE id = ? FOR UPDATE", [poolId]);
+        const ledger: { status: string; stakeCents: number; outstanding: number; updatedAt?: string } | undefined =
+          rows[0] && (typeof rows[0].data === "string" ? JSON.parse(rows[0].data) : rows[0].data);
+        if (!ledger || ledger.status !== "open" || !Number.isSafeInteger(ledger.stakeCents) ||
+            !Number.isSafeInteger(ledger.outstanding) || ledger.stakeCents < totals.stakeCents || ledger.outstanding < totals.outstanding) {
+          throw new Error("Daily-pool ledger is inconsistent. Nothing was deleted.");
+        }
+        ledger.stakeCents -= totals.stakeCents;
+        ledger.outstanding -= totals.outstanding;
+        ledger.updatedAt = new Date().toISOString();
+        await connection.execute("UPDATE dailypools SET data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", [JSON.stringify(ledger), poolId]);
+      }
+    }
+    await remove("dailypoolentries", userId ? `${userField} IN (${slots})` : "1 = 1", userId ? ids : []);
+    if (!userId) await remove("dailypools", "1 = 1", []);
     const [threads] = await connection.execute<RowDataPacket[]>(`SELECT id FROM supportthreads WHERE ${userField} IN (${slots}) FOR UPDATE`, ids);
     if (threads.length) {
       const threadIds = threads.map((thread) => String(thread.id));
@@ -89,7 +115,7 @@ export async function resetPlayerData({ userId, deleteAccount = false, actorId, 
     const id = crypto.randomUUID();
     await connection.execute(
       "INSERT INTO adminlogs (id, data) VALUES (?, ?)",
-      [id, JSON.stringify({ _id: id, actorId, actorName, actorRole: "owner", action: deleteAccount ? "delete_player_and_history" : "reset_player_history", target: userId ?? "all-players", details: `${ids.length} player(s); ${deleted} records deleted; wallet and totals reset`, createdAt: now, updatedAt: now })],
+      [id, JSON.stringify({ _id: id, actorId, actorName, actorRole: "owner", action: deleteAccount ? "delete_player_and_history" : "reset_player_history", target: userId ?? "all-players", details: `${ids.length} player(s); ${deleted} records deleted; wallet and totals reset; pending wagers and unpaid pool claims removed without refund or payout`, createdAt: now, updatedAt: now })],
     );
     await connection.commit();
     return { players: ids.length, deleted };
