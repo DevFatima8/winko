@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ArrowLeft, ChevronRight, Headphones, RefreshCw, WalletCards, X } from "lucide-react";
@@ -19,6 +20,11 @@ const TABS: Tab[] = ["Request withdrawal", "Receiving account", "Withdrawal reco
 const money = (n: number) => `Rs. ${n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const input = "w-full min-w-0 rounded-lg border border-white/25 bg-black/20 px-3 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-[#ffc933] disabled:opacity-60";
 const name = (p: Provider) => PAYMENT_LABELS[p];
+const RECEIVING_ICONS = {
+  bank: "/bank-icons/Bank_Transfer.ico",
+  crypto: "/bank-icons/crypto.jpg",
+  other: "/bank-icons/other%20bank.jpg",
+};
 
 function Records() {
   return usePage(async () => {
@@ -203,7 +209,14 @@ export function WithdrawRequest({ balance, hasPin, limits, initialAccounts = {} 
       {tab === "Receiving account" && <div className="space-y-3 py-3">
         <div className="flex items-center gap-2 rounded-lg bg-black/25 p-3 text-sm">Receiving account <span className="text-slate-400">({Object.keys(accounts).length})</span><button type="button" disabled={refreshing || busy} onClick={refresh} aria-label="Refresh receiving accounts" className="text-[#ffc933]"><RefreshCw size={18} className={refreshing ? "animate-spin" : ""} /></button></div>
         {WITHDRAWAL_PROVIDERS.map((p) => <div key={p} className="rounded-lg border border-white/25 bg-black/15">
-          <button type="button" onClick={() => edit(p)} className="flex w-full items-center gap-3 px-3 py-3 text-left"><span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white">{p === "jazzcash" || p === "easypaisa" ? <PaymentLogo provider={p} height={30} /> : <WalletCards size={24} className="text-slate-800" />}</span><span className="min-w-0 flex-1 text-sm">{name(p)}{accounts[p] && <span className="block truncate text-xs text-slate-400">{accounts[p]?.institution} {accounts[p]?.accountNumber}</span>}</span><span className="text-sm text-[#ffc933]">{accounts[p] ? "Edit" : "Add"}</span><ChevronRight size={18} className="text-slate-500" /></button>
+          <button type="button" onClick={() => edit(p)} className="flex w-full items-center gap-3 px-3 py-3 text-left">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white">
+              {p === "jazzcash" || p === "easypaisa"
+                ? <PaymentLogo provider={p} height={30} />
+                : <Image src={RECEIVING_ICONS[p]} unoptimized={p === "bank"} alt="" width={30} height={30} className="h-[30px] w-[30px] object-contain" />}
+            </span>
+            <span className="min-w-0 flex-1 text-sm">{name(p)}{accounts[p] && <span className="block truncate text-xs text-slate-400">{accounts[p]?.institution} {accounts[p]?.accountNumber}</span>}</span><span className="text-sm text-[#ffc933]">{accounts[p] ? "Edit" : "Add"}</span><ChevronRight size={18} className="text-slate-500" />
+          </button>
           {accounts[p] && <button type="button" onClick={() => { setSelected(p); setTab("Request withdrawal"); }} className="w-full border-t border-white/10 py-2 text-xs text-[#ffc933]">Use this account</button>}
         </div>)}
       </div>}
